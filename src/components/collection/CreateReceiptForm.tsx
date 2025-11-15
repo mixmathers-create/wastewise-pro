@@ -14,6 +14,7 @@ import { Capacitor } from "@capacitor/core";
 import { Camera as CapCamera, CameraResultType } from "@capacitor/camera";
 import { MobileInput } from "@/components/mobile/MobileInput";
 import { printerService } from "@/lib/printerService";
+import { Card } from "@/components/ui/card";
 
 const wasteTypes = ["Municipal Solid Waste", "Food Waste", "Construction Waste", "Special Hauling"];
 const units = ["kg", "cbm", "truck load"];
@@ -153,10 +154,10 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       await printerService.printReceipt({
         header: "WasteWise Collection Receipt",
         items: [
-          { label: "Client", value: clientName },
+          { label: "Client", value: clientData.name },
           { label: "Date", value: new Date().toLocaleDateString() },
-          { label: "QR Code", value: qrCode },
-          { label: "Weight", value: `${weight} kg` }
+          { label: "QR Code", value: clientData.qr_code },
+          { label: "Weight", value: `${items.reduce((acc, i) => acc + i.quantity, 0)} kg` }
         ],
         footer: "Thank you for using WasteWise!"
       });
@@ -467,7 +468,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
         </>
       )}
     </div>
-  );
+  )
 };
 
 export default CreateReceiptForm;
