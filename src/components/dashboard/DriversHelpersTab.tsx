@@ -23,8 +23,8 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
   const fetchAll = async () => {
     setLoading(true);
     const [{ data: d, error: de }, { data: h, error: he }] = await Promise.all([
-      supabase.from("drivers").select("id,name,license_number").order("name"),
-      supabase.from("helpers").select("id,name").order("name"),
+      supabase.from("drivers").select("id,name,license_number,id_number,birthdate,contact_number").order("name"),
+      supabase.from("helpers").select("id,name,id_number,birthdate,contact_number").order("name"),
     ]);
     if (de) setError(de.message);
     else if (he) setError(he.message);
@@ -34,12 +34,12 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
   };
 
   const downloadDriverTemplate = () => {
-    const csv = generateCSV([], ['name', 'license_number']);
+    const csv = generateCSV([], ['name', 'license_number', 'id_number', 'birthdate', 'contact_number']);
     downloadCSV(csv, 'drivers-template.csv');
   };
 
   const downloadHelperTemplate = () => {
-    const csv = generateCSV([], ['name']);
+    const csv = generateCSV([], ['name', 'id_number', 'birthdate', 'contact_number']);
     downloadCSV(csv, 'helpers-template.csv');
   };
 
@@ -54,7 +54,10 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
       const driversToInsert = rows.map(row => ({
         name: row.name,
         license_number: row.license_number || null,
-        team_id: profile?.team_id || ''
+        id_number: row.id_number || `DRV-${Date.now().toString().slice(-6)}`,
+        birthdate: row.birthdate || null,
+        contact_number: row.contact_number || null,
+        team_id: profile?.team_id || '00000000-0000-0000-0000-000000000001'
       }));
 
       const { error } = await supabase.from("drivers").insert(driversToInsert);
@@ -79,7 +82,10 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
     try {
       const helpersToInsert = rows.map(row => ({
         name: row.name,
-        team_id: profile?.team_id || ''
+        id_number: row.id_number || `HLP-${Date.now().toString().slice(-6)}`,
+        birthdate: row.birthdate || null,
+        contact_number: row.contact_number || null,
+        team_id: profile?.team_id || '00000000-0000-0000-0000-000000000001'
       }));
 
       const { error } = await supabase.from("helpers").insert(helpersToInsert);
@@ -93,6 +99,10 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
 
     if (helperFileRef.current) helperFileRef.current.value = '';
   };
+
+  useEffect(() => {
+    fetchAll();
+  }, []);
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -134,15 +144,21 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>License</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>License</TableHead>
+              <TableHead>ID Number</TableHead>
+              <TableHead>Birth Date</TableHead>
+              <TableHead>Contact</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {drivers.map((d) => (
                   <TableRow key={d.id}>
                     <TableCell className="font-medium">{d.name}</TableCell>
-                    <TableCell>{d.license_number}</TableCell>
+                    <TableCell>{d.license_number || "N/A"}</TableCell>
+                    <TableCell>{d.id_number || "N/A"}</TableCell>
+                    <TableCell>{d.birthdate ? new Date(d.birthdate).toLocaleDateString() : "N/A"}</TableCell>
+                    <TableCell>{d.contact_number || "N/A"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -189,13 +205,19 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>ID Number</TableHead>
+              <TableHead>Birth Date</TableHead>
+              <TableHead>Contact</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {helpers.map((h) => (
                   <TableRow key={h.id}>
                     <TableCell className="font-medium">{h.name}</TableCell>
+                    <TableCell>{h.id_number || "N/A"}</TableCell>
+                    <TableCell>{h.birthdate ? new Date(h.birthdate).toLocaleDateString() : "N/A"}</TableCell>
+                    <TableCell>{h.contact_number || "N/A"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

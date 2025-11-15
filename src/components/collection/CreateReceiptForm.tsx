@@ -61,15 +61,27 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
   const handleCamera = async () => {
     try {
-      const image = await CapCamera.getPhoto({
-        quality: 90,
-        allowEditing: false,
-        resultType: CameraResultType.Uri
-      });
-      toast({ title: "Camera", description: "QR scanning from camera coming soon. Please select client or enter QR manually." });
+      if (Capacitor.isNativePlatform()) {
+        const image = await CapCamera.getPhoto({
+          quality: 90,
+          allowEditing: false,
+          resultType: CameraResultType.Uri
+        });
+        toast({ title: "Photo captured", description: "QR code scanning from camera coming soon. For now, please enter QR manually or select client." });
+      } else {
+        toast({ title: "Camera not available", description: "Camera is only available on mobile devices. Use file upload instead.", variant: "destructive" });
+      }
     } catch (error: any) {
       toast({ title: "Camera Error", description: error.message, variant: "destructive" });
     }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // For now, just show a message. In the future, implement QR scanning from image
+    toast({ title: "File uploaded", description: "QR code scanning from image coming soon. For now, please enter QR manually or select client." });
   };
 
   const handleClientSelect = async (clientId: string) => {
@@ -326,7 +338,15 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
         <Label>Scan/Enter QR Code</Label>
         <div className="flex gap-2">
           <Input value={qrInput} onChange={(e) => setQrInput(e.target.value)} placeholder="Enter or scan QR" />
-          <Button type="button" variant="outline" onClick={handleCamera}><Camera className="h-4 w-4" /></Button>
+          <Button type="button" variant="outline" onClick={handleCamera} title="Use Camera">
+            <Camera className="h-4 w-4" />
+          </Button>
+          <Button type="button" variant="outline" asChild title="Upload QR Image">
+            <label className="cursor-pointer">
+              <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+              📁
+            </label>
+          </Button>
           <Button type="button" onClick={lookupClient} disabled={loading}>Lookup</Button>
         </div>
       </div>
