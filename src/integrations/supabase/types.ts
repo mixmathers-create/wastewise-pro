@@ -216,6 +216,7 @@ export type Database = {
           approved_by: string | null
           created_at: string | null
           date: string
+          device_fingerprint: string | null
           driver_id: string | null
           helper_ids: string[]
           id: string
@@ -232,6 +233,7 @@ export type Database = {
           approved_by?: string | null
           created_at?: string | null
           date: string
+          device_fingerprint?: string | null
           driver_id?: string | null
           helper_ids?: string[]
           id?: string
@@ -248,6 +250,7 @@ export type Database = {
           approved_by?: string | null
           created_at?: string | null
           date?: string
+          device_fingerprint?: string | null
           driver_id?: string | null
           helper_ids?: string[]
           id?: string

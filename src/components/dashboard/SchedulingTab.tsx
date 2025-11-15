@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar as CalendarIcon, FileDown, Edit2, Check, Wrench, Trash2, FileSignature, Lock } from "lucide-react";
+import { Calendar as CalendarIcon, Edit2, Check, Wrench, Trash2, X, ChevronDown, ChevronUp } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,11 +14,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
-import jsPDF from "jspdf";
-import SignatureCanvas from "react-signature-canvas";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Badge } from "@/components/ui/badge";
+import FingerprintJS from "@fingerprintjs/fingerprintjs";
 import { VisualScheduleChart } from "./VisualScheduleChart";
-import { LiveScheduleView } from "./LiveScheduleView";
 
 interface Driver {
   id: string;
@@ -52,7 +51,7 @@ interface Schedule {
   mt_requirement?: number;
   approved_by?: string;
   approved_at?: string;
-  signature_data?: string;
+  device_fingerprint?: string;
 }
 
 interface TruckDeployment {
@@ -93,20 +92,27 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
     reason: ''
   });
   
-const [pendingSchedules, setPendingSchedules] = useState<Schedule[]>([]);
-const [showApprovalDialog, setShowApprovalDialog] = useState(false);
-const [selectedScheduleGroup, setSelectedScheduleGroup] = useState<Schedule[]>([]);
-const [showDraftsDialog, setShowDraftsDialog] = useState(false);
-const [draftsInDialog, setDraftsInDialog] = useState<Schedule[]>([]);
-const [draftsDialogTitle, setDraftsDialogTitle] = useState<string>("");
-const signatureRef = useRef<SignatureCanvas>(null);
+  const [pendingSchedules, setPendingSchedules] = useState<Schedule[]>([]);
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
+  const [selectedScheduleGroup, setSelectedScheduleGroup] = useState<Schedule[]>([]);
+  const [deviceFingerprint, setDeviceFingerprint] = useState<string>("");
+
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [maintenanceExpanded, setMaintenanceExpanded] = useState(false);
 
   const shifts = ["AM", "PM"];
   const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   useEffect(() => {
     loadData();
+    initFingerprint();
   }, []);
+
+  const initFingerprint = async () => {
+    const fp = await FingerprintJS.load();
+    const result = await fp.get();
+    setDeviceFingerprint(result.visitorId);
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -120,9 +126,9 @@ const signatureRef = useRef<SignatureCanvas>(null);
         supabase.from("schedules").select("*").eq("status", "draft")
       ]);
 
-      if (driversRes.data) setDrivers(driversRes.data);
-      if (helpersRes.data) setHelpers(helpersRes.data);
-      if (trucksRes.data) setTrucks(trucksRes.data);
+      if (driversRes.data) setDrivers(driversRes.data as any);
+      if (helpersRes.data) setHelpers(helpersRes.data as any);
+      if (trucksRes.data) setTrucks(trucksRes.data as any);
       if (schedulesRes.data) setSchedules(schedulesRes.data);
       if (maintenanceRes.data) setMaintenanceBlocks(maintenanceRes.data);
       if (pendingRes.data) setPendingSchedules(pendingRes.data);
@@ -169,7 +175,6 @@ const signatureRef = useRef<SignatureCanvas>(null);
     }
 
     const newSchedules: Schedule[] = [];
-    const dayIndexMap = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
 
     for (const dateStr of dates) {
       const dayIndex = new Date(dateStr).getDay();
@@ -188,10 +193,9 @@ const signatureRef = useRef<SignatureCanvas>(null);
         const usedDriversInPreviousShift = shift === "PM" ? usedDriversAM : new Set<string>();
         const usedHelpersInPreviousShift = shift === "PM" ? usedHelpersAM : new Set<string>();
 
-        const needsBackup = trucksNeeded > 5;
-        const driversNeeded = trucksNeeded + (needsBackup ? 1 : 0);
+        const driversNeeded = trucksNeeded;
         const helpersPerTruck = 3;
-        const helpersNeeded = trucksNeeded * helpersPerTruck + (needsBackup ? 1 : 0);
+        const helpersNeeded = trucksNeeded * helpersPerTruck;
 
         const availableDrivers = drivers.filter((d) => {
           const avail = d.availability as any;
@@ -271,51 +275,17 @@ const signatureRef = useRef<SignatureCanvas>(null);
     }
   };
 
-const openApprovalDialog = (date: string, shift: string) => {
-  const schedulesToApprove = pendingSchedules.filter(
-    s => s.date === date && s.shift === shift
-  );
-  setSelectedScheduleGroup(schedulesToApprove);
-  setShowApprovalDialog(true);
-};
-
-const openDraftsDialog = (date: string, shift: string) => {
-  const groupDrafts = pendingSchedules.filter(s => s.date === date && s.shift === shift);
-  setDraftsInDialog(groupDrafts);
-  setDraftsDialogTitle(`${format(new Date(date), "EEE, MMM dd, yyyy")} • ${shift} Shift`);
-  setShowDraftsDialog(true);
-};
-
-const declineDraftGroup = async (date: string, shift: string) => {
-  const confirmed = window.confirm(`Decline all drafts for ${date} ${shift}?`);
-  if (!confirmed) return;
-  setLoading(true);
-  try {
-    const { error } = await supabase
-      .from("schedules")
-      .update({ status: "cancelled" })
-      .eq("status", "draft")
-      .eq("date", date)
-      .eq("shift", shift);
-    if (error) throw error;
-    toast({ title: "Drafts declined", description: `Draft assignments for ${date} ${shift} have been declined.` });
-    loadData();
-  } catch (error: any) {
-    toast({ title: "Error", description: error.message, variant: "destructive" });
-  } finally {
-    setLoading(false);
-  }
-};
+  const openApprovalDialog = (date: string, shift: string) => {
+    const schedulesToApprove = pendingSchedules.filter(
+      s => s.date === date && s.shift === shift
+    );
+    setSelectedScheduleGroup(schedulesToApprove);
+    setShowApprovalDialog(true);
+  };
 
   const approveSchedules = async () => {
-    if (!signatureRef.current || signatureRef.current.isEmpty()) {
-      toast({ title: "Signature required", variant: "destructive" });
-      return;
-    }
-
     setLoading(true);
     try {
-      const signatureData = signatureRef.current.toDataURL();
       const approvedBy = profile.full_name || profile.email;
 
       for (const schedule of selectedScheduleGroup) {
@@ -325,7 +295,7 @@ const declineDraftGroup = async (date: string, shift: string) => {
             status: "approved",
             approved_by: approvedBy,
             approved_at: new Date().toISOString(),
-            signature_data: signatureData
+            device_fingerprint: deviceFingerprint
           })
           .eq("id", schedule.id);
         
@@ -335,7 +305,27 @@ const declineDraftGroup = async (date: string, shift: string) => {
       toast({ title: "Success", description: `${selectedScheduleGroup.length} schedules approved` });
       setShowApprovalDialog(false);
       setSelectedScheduleGroup([]);
-      signatureRef.current?.clear();
+      loadData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const declineDraftGroup = async (date: string, shift: string) => {
+    const confirmed = window.confirm(`Decline all drafts for ${format(new Date(date), "MMM dd")} ${shift}?`);
+    if (!confirmed) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from("schedules")
+        .update({ status: "cancelled" })
+        .eq("status", "draft")
+        .eq("date", date)
+        .eq("shift", shift);
+      if (error) throw error;
+      toast({ title: "Drafts declined" });
       loadData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -374,7 +364,7 @@ const declineDraftGroup = async (date: string, shift: string) => {
     try {
       const { error } = await supabase.from("truck_maintenance_blocks").insert(newMaintenance);
       if (error) throw error;
-      toast({ title: "Maintenance block added" });
+      toast({ title: "Maintenance scheduled" });
       setNewMaintenance({ truck_id: '', start_date: '', end_date: '', reason: '' });
       setShowMaintenanceDialog(false);
       loadData();
@@ -390,7 +380,7 @@ const declineDraftGroup = async (date: string, shift: string) => {
     try {
       const { error } = await supabase.from("truck_maintenance_blocks").delete().eq("id", id);
       if (error) throw error;
-      toast({ title: "Maintenance block removed" });
+      toast({ title: "Maintenance removed" });
       loadData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -399,35 +389,46 @@ const declineDraftGroup = async (date: string, shift: string) => {
     }
   };
 
+  const toggleGroup = (key: string) => {
+    setExpandedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  };
+
+  const groupedSchedules = schedules.reduce((acc, s) => {
+    if (!acc[s.date]) acc[s.date] = { AM: [], PM: [] };
+    acc[s.date][s.shift as 'AM' | 'PM'].push(s);
+    return acc;
+  }, {} as Record<string, { AM: Schedule[]; PM: Schedule[] }>);
+
+  const sortedDates = Object.keys(groupedSchedules).sort();
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Tabs defaultValue="live" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="live">Live Schedule</TabsTrigger>
-          <TabsTrigger value="manage">Manage</TabsTrigger>
+          <TabsTrigger value="live">Active Schedule</TabsTrigger>
+          <TabsTrigger value="manage">Generate</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="live" className="space-y-4 mt-4">
-          <LiveScheduleView 
-            schedules={schedules}
-            drivers={drivers}
-            helpers={helpers}
-            trucks={trucks}
-          />
-        </TabsContent>
-
-        <TabsContent value="manage" className="space-y-4 mt-4">
+        <TabsContent value="live" className="space-y-3">
           {pendingSchedules.length > 0 && (
-            <Card className="border-amber-500/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileSignature className="h-5 w-5" />
-                  Pending Approval ({pendingSchedules.length})
+            <Card className="border-amber-500">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span>Pending Approval</span>
+                  <Badge variant="secondary">{pendingSchedules.length}</Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {Object.entries(
                     pendingSchedules.reduce((acc, s) => {
                       const key = `${s.date}||${s.shift}`;
@@ -438,23 +439,19 @@ const declineDraftGroup = async (date: string, shift: string) => {
                   ).map(([key, group]) => {
                     const [date, shift] = key.split('||');
                     return (
-                      <div key={key} className="flex justify-between items-center p-3 border rounded">
+                      <div key={key} className="flex items-center justify-between p-2 border rounded text-sm">
                         <div>
-                          <p className="font-medium">{format(new Date(date), "MMM dd, yyyy")}</p>
-                          <p className="text-sm text-muted-foreground">{shift} Shift • {group.length} assignments</p>
+                          <span className="font-medium">{format(new Date(date), "MMM dd")}</span>
+                          <span className="text-muted-foreground ml-2">{shift} • {group.length} trucks</span>
                         </div>
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={() => openDraftsDialog(date, shift)}>
-                          Review
-                        </Button>
-                        <Button variant="destructive" size="sm" onClick={() => declineDraftGroup(date, shift)}>
-                          Decline
-                        </Button>
-                        <Button size="sm" onClick={() => openApprovalDialog(date, shift)}>
-                          <Check className="h-4 w-4 mr-2" />
-                          Approve
-                        </Button>
-                      </div>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => declineDraftGroup(date, shift)}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                          <Button size="sm" onClick={() => openApprovalDialog(date, shift)}>
+                            <Check className="h-3 w-3 mr-1" /> Approve
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}
@@ -464,26 +461,85 @@ const declineDraftGroup = async (date: string, shift: string) => {
           )}
 
           <Card>
-            <CardHeader>
-              <CardTitle>Generate Schedule</CardTitle>
-              <CardDescription>Configure MT requirements - trucks auto-assigned</CardDescription>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Live Schedule</CardTitle>
+              <CardDescription className="text-xs">All approved assignments</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <CardContent>
+              <div className="space-y-2">
+                {sortedDates.map(date => {
+                  const dateKey = date;
+                  const isExpanded = expandedGroups.has(dateKey);
+                  const dayData = groupedSchedules[date];
+                  const totalTrucks = dayData.AM.length + dayData.PM.length;
+
+                  return (
+                    <Collapsible key={date} open={isExpanded} onOpenChange={() => toggleGroup(dateKey)}>
+                      <CollapsibleTrigger className="w-full">
+                        <div className="flex items-center justify-between p-2 border rounded hover:bg-muted/50">
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            <span className="font-medium text-sm">{format(new Date(date), "EEE, MMM dd")}</span>
+                          </div>
+                          <Badge variant="outline" className="text-xs">{totalTrucks} trucks</Badge>
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="pl-6 pr-2 pt-2 space-y-2">
+                          {(['AM', 'PM'] as const).map(shift => {
+                            const shiftSchedules = dayData[shift];
+                            if (shiftSchedules.length === 0) return null;
+                            return (
+                              <div key={shift} className="border-l-2 border-primary/30 pl-3">
+                                <div className="text-xs font-medium text-muted-foreground mb-1">
+                                  {shift === 'AM' ? '8AM-8PM' : '8PM-8AM'}
+                                </div>
+                                <div className="space-y-1">
+                                  {shiftSchedules.map((s, i) => {
+                                    const driver = drivers.find(d => d.id === s.driver_id);
+                                    const truck = trucks.find(t => t.id === s.truck_id);
+                                    return (
+                                      <div key={i} className="text-xs p-1.5 bg-muted/30 rounded">
+                                        <span className="font-medium">{truck?.code}</span> • {driver?.name}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="manage" className="space-y-3">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Generate Schedule</CardTitle>
+              <CardDescription className="text-xs">Configure MT requirements</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline">
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {startDate ? format(startDate, "PPP") : "Start Date"}
+                    <Button variant="outline" size="sm" className="text-xs">
+                      <CalendarIcon className="mr-1 h-3 w-3" />
+                      {startDate ? format(startDate, "MMM dd") : "Start"}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent><Calendar mode="single" selected={startDate} onSelect={setStartDate} /></PopoverContent>
                 </Popover>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline">
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {endDate ? format(endDate, "PPP") : "End Date"}
+                    <Button variant="outline" size="sm" className="text-xs">
+                      <CalendarIcon className="mr-1 h-3 w-3" />
+                      {endDate ? format(endDate, "MMM dd") : "End"}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent><Calendar mode="single" selected={endDate} onSelect={setEndDate} /></PopoverContent>
@@ -492,13 +548,13 @@ const declineDraftGroup = async (date: string, shift: string) => {
               
               <Dialog open={showDeploymentDialog} onOpenChange={setShowDeploymentDialog}>
                 <DialogTrigger asChild>
-                  <Button disabled={!startDate || !endDate}>Configure MT Requirements</Button>
+                  <Button size="sm" disabled={!startDate || !endDate} className="w-full">Configure</Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                <DialogContent className="max-w-2xl max-h-[70vh] overflow-y-auto">
                   <DialogHeader>
-                    <DialogTitle>MT Requirements</DialogTitle>
+                    <DialogTitle className="text-base">MT Requirements</DialogTitle>
                   </DialogHeader>
-                  <div className="space-y-4">
+                  <div className="space-y-2">
                     {startDate && endDate && (() => {
                       const dates: string[] = [];
                       let current = new Date(startDate);
@@ -508,16 +564,15 @@ const declineDraftGroup = async (date: string, shift: string) => {
                       }
                       return dates;
                     })().map(date => (
-                      <Card key={date}>
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-sm">{format(new Date(date), "EEE, MMM dd")}</CardTitle>
-                        </CardHeader>
-                        <CardContent className="grid grid-cols-2 gap-4">
+                      <div key={date} className="border rounded p-2">
+                        <div className="text-xs font-medium mb-2">{format(new Date(date), "EEE, MMM dd")}</div>
+                        <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <Label className="text-xs">AM Shift MT</Label>
+                            <Label className="text-xs">AM MT</Label>
                             <Input 
                               type="number" 
                               step="0.1"
+                              className="h-7 text-xs"
                               value={truckDeployment[date]?.AM?.mt || 0}
                               onChange={(e) => {
                                 const mt = parseFloat(e.target.value) || 0;
@@ -525,13 +580,14 @@ const declineDraftGroup = async (date: string, shift: string) => {
                                 updateTruckDeployment(date, "AM", "trucks", Math.ceil(mt / 2).toString());
                               }}
                             />
-                            <p className="text-xs text-primary mt-1">→ {Math.ceil((truckDeployment[date]?.AM?.mt || 0) / 2)} trucks</p>
+                            <p className="text-xs text-primary mt-0.5">→ {Math.ceil((truckDeployment[date]?.AM?.mt || 0) / 2)} trucks</p>
                           </div>
                           <div>
-                            <Label className="text-xs">PM Shift MT</Label>
+                            <Label className="text-xs">PM MT</Label>
                             <Input 
                               type="number" 
                               step="0.1"
+                              className="h-7 text-xs"
                               value={truckDeployment[date]?.PM?.mt || 0}
                               onChange={(e) => {
                                 const mt = parseFloat(e.target.value) || 0;
@@ -539,193 +595,170 @@ const declineDraftGroup = async (date: string, shift: string) => {
                                 updateTruckDeployment(date, "PM", "trucks", Math.ceil(mt / 2).toString());
                               }}
                             />
-                            <p className="text-xs text-primary mt-1">→ {Math.ceil((truckDeployment[date]?.PM?.mt || 0) / 2)} trucks</p>
+                            <p className="text-xs text-primary mt-0.5">→ {Math.ceil((truckDeployment[date]?.PM?.mt || 0) / 2)} trucks</p>
                           </div>
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
                     ))}
-                    <Button onClick={generateWeekSchedule} disabled={loading}>Generate</Button>
+                    <Button onClick={generateWeekSchedule} disabled={loading} size="sm" className="w-full">Generate</Button>
                   </div>
                 </DialogContent>
               </Dialog>
+            </CardContent>
+          </Card>
 
-              <Dialog open={showMaintenanceDialog} onOpenChange={setShowMaintenanceDialog}>
-                <DialogTrigger asChild>
-                  <Button variant="outline">
-                    <Wrench className="mr-2 h-4 w-4" />
-                    Schedule Maintenance
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader><DialogTitle>Truck Maintenance</DialogTitle></DialogHeader>
-                  <div className="space-y-4">
-                    <Select value={newMaintenance.truck_id} onValueChange={(val) => setNewMaintenance({...newMaintenance, truck_id: val})}>
-                      <SelectTrigger><SelectValue placeholder="Select truck" /></SelectTrigger>
-                      <SelectContent>
-                        {trucks.map(t => <SelectItem key={t.id} value={t.id}>{t.code}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <Input type="date" value={newMaintenance.start_date} onChange={(e) => setNewMaintenance({...newMaintenance, start_date: e.target.value})} />
-                    <Input type="date" value={newMaintenance.end_date} onChange={(e) => setNewMaintenance({...newMaintenance, end_date: e.target.value})} />
-                    <Textarea value={newMaintenance.reason} onChange={(e) => setNewMaintenance({...newMaintenance, reason: e.target.value})} placeholder="Reason" />
-                    <Button onClick={addMaintenanceBlock}>Add</Button>
+          <Collapsible open={maintenanceExpanded} onOpenChange={setMaintenanceExpanded}>
+            <Card>
+              <CollapsibleTrigger className="w-full">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Wrench className="h-4 w-4" />
+                      Truck Maintenance
+                    </CardTitle>
+                    {maintenanceExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   </div>
-                </DialogContent>
-              </Dialog>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="space-y-2">
+                  <Dialog open={showMaintenanceDialog} onOpenChange={setShowMaintenanceDialog}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" variant="outline" className="w-full">Schedule Maintenance</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader><DialogTitle className="text-base">Schedule Maintenance</DialogTitle></DialogHeader>
+                      <div className="space-y-3">
+                        <Select value={newMaintenance.truck_id} onValueChange={(val) => setNewMaintenance({...newMaintenance, truck_id: val})}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select truck" /></SelectTrigger>
+                          <SelectContent>
+                            {trucks.map(t => <SelectItem key={t.id} value={t.id} className="text-xs">{t.code}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Input type="date" className="h-8 text-xs" value={newMaintenance.start_date} onChange={(e) => setNewMaintenance({...newMaintenance, start_date: e.target.value})} />
+                        <Input type="date" className="h-8 text-xs" value={newMaintenance.end_date} onChange={(e) => setNewMaintenance({...newMaintenance, end_date: e.target.value})} />
+                        <Textarea className="text-xs" value={newMaintenance.reason} onChange={(e) => setNewMaintenance({...newMaintenance, reason: e.target.value})} placeholder="Reason..." />
+                        <Button onClick={addMaintenanceBlock} size="sm" className="w-full">Add</Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
 
-              {maintenanceBlocks.length > 0 && (
-                <div className="space-y-2">
                   {maintenanceBlocks.map(block => (
-                    <div key={block.id} className="flex justify-between items-center p-2 border rounded">
-                      <span className="text-sm">{trucks.find(t => t.id === block.truck_id)?.code} • {format(new Date(block.start_date), "MMM dd")} - {format(new Date(block.end_date), "MMM dd")}</span>
-                      <Button size="sm" variant="destructive" onClick={() => deleteMaintenanceBlock(block.id!)}>
+                    <div key={block.id} className="flex items-center justify-between p-2 border rounded text-xs">
+                      <div>
+                        <span className="font-medium">{trucks.find(t => t.id === block.truck_id)?.code}</span>
+                        <span className="text-muted-foreground ml-2">{format(new Date(block.start_date), "MMM dd")} - {format(new Date(block.end_date), "MMM dd")}</span>
+                      </div>
+                      <Button size="sm" variant="ghost" onClick={() => deleteMaintenanceBlock(block.id!)}>
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
                   ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
         </TabsContent>
 
-        <TabsContent value="analytics" className="mt-4">
+        <TabsContent value="analytics">
           <Card>
-            <CardHeader><CardTitle>Analytics</CardTitle></CardHeader>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Analytics</CardTitle>
+            </CardHeader>
             <CardContent>
               {schedules.length > 0 ? (
                 <VisualScheduleChart schedules={schedules} drivers={drivers} trucks={trucks} />
               ) : (
-                <p className="text-center text-muted-foreground py-8">No data available</p>
+                <p className="text-center text-muted-foreground text-xs py-4">No data</p>
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* Drafts Review Dialog */}
-      <Dialog open={showDraftsDialog} onOpenChange={setShowDraftsDialog}>
-        <DialogContent className="max-w-3xl bg-background">
+      <Dialog open={!!editingSchedule} onOpenChange={() => setEditingSchedule(null)}>
+        <DialogContent className="bg-background">
           <DialogHeader>
-            <DialogTitle>Review Draft Assignments</DialogTitle>
+            <DialogTitle className="text-base">Edit Assignment</DialogTitle>
           </DialogHeader>
-          <div className="text-sm text-muted-foreground mb-2">{draftsDialogTitle}</div>
-          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-            {draftsInDialog.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No drafts</p>
-            ) : (
-              draftsInDialog.map((schedule, idx) => {
-                const driver = drivers.find(d => d.id === schedule.driver_id);
-                const truck = trucks.find(t => t.id === schedule.truck_id);
-                const scheduleHelpers = helpers.filter(h => schedule.helper_ids.includes(h.id));
-                return (
-                  <div key={schedule.id || idx} className="border rounded p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="font-medium">{driver?.name || 'No driver'} • {truck?.code || 'No truck'}</div>
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button size="sm" variant="outline" onClick={() => setEditingSchedule(schedule)}>
-                            <Edit2 className="h-4 w-4 mr-1" /> Edit
-                          </Button>
-                        </DialogTrigger>
-                        {editingSchedule?.id === schedule.id && (
-                          <DialogContent className="bg-background">
-                            <DialogHeader>
-                              <DialogTitle>Edit Draft</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-4">
-                              <div>
-                                <Label>Driver</Label>
-                                <Select 
-                                  value={editingSchedule?.driver_id || undefined}
-                                  onValueChange={(val) => setEditingSchedule({ ...editingSchedule!, driver_id: val })}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {drivers.map(d => (
-                                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div>
-                                <Label>Truck</Label>
-                                <Select 
-                                  value={editingSchedule?.truck_id || undefined}
-                                  onValueChange={(val) => setEditingSchedule({ ...editingSchedule!, truck_id: val })}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {trucks.map(t => (
-                                      <SelectItem key={t.id} value={t.id}>
-                                        {t.code} ({t.type} - {t.capacity}MT)
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div>
-                                <Label>Helpers</Label>
-                                <div className="space-y-2 max-h-48 overflow-y-auto border rounded p-2">
-                                  {helpers.map(h => (
-                                    <div key={h.id} className="flex items-center space-x-2">
-                                      <Checkbox
-                                        checked={editingSchedule?.helper_ids?.includes(h.id)}
-                                        onCheckedChange={(checked) => {
-                                          const currentHelpers = editingSchedule?.helper_ids || [];
-                                          const newHelpers = checked
-                                            ? [...currentHelpers, h.id]
-                                            : currentHelpers.filter(id => id !== h.id);
-                                          setEditingSchedule({ ...editingSchedule!, helper_ids: newHelpers });
-                                        }}
-                                      />
-                                      <Label>{h.name}</Label>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                              <div className="flex gap-2">
-                                <Button onClick={() => updateSchedule(editingSchedule!)} disabled={loading}>
-                                  Save Changes
-                                </Button>
-                                <Button variant="outline" onClick={() => setEditingSchedule(null)}>
-                                  Cancel
-                                </Button>
-                              </div>
-                            </div>
-                          </DialogContent>
-                        )}
-                      </Dialog>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      Helpers: {scheduleHelpers.map(h => h.name).join(', ') || 'None'}
-                    </div>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Driver</Label>
+              <Select 
+                value={editingSchedule?.driver_id || undefined}
+                onValueChange={(val) => setEditingSchedule({ ...editingSchedule!, driver_id: val })}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {drivers.map(d => (
+                    <SelectItem key={d.id} value={d.id} className="text-xs">{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Truck</Label>
+              <Select 
+                value={editingSchedule?.truck_id || undefined}
+                onValueChange={(val) => setEditingSchedule({ ...editingSchedule!, truck_id: val })}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {trucks.map(t => (
+                    <SelectItem key={t.id} value={t.id} className="text-xs">
+                      {t.code} ({t.type})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Helpers</Label>
+              <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
+                {helpers.map(h => (
+                  <div key={h.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      checked={editingSchedule?.helper_ids?.includes(h.id)}
+                      onCheckedChange={(checked) => {
+                        const currentHelpers = editingSchedule?.helper_ids || [];
+                        const newHelpers = checked
+                          ? [...currentHelpers, h.id]
+                          : currentHelpers.filter(id => id !== h.id);
+                        setEditingSchedule({ ...editingSchedule!, helper_ids: newHelpers });
+                      }}
+                    />
+                    <Label className="text-xs">{h.name}</Label>
                   </div>
-                );
-              })
-            )}
-          </div>
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setShowDraftsDialog(false)}>Close</Button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={() => updateSchedule(editingSchedule!)} disabled={loading} size="sm">Save</Button>
+              <Button variant="outline" size="sm" onClick={() => setEditingSchedule(null)}>Cancel</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Approval Dialog */}
       <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
         <DialogContent className="bg-background">
-          <DialogHeader><DialogTitle>Approve Schedules</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="border rounded p-2">
-              <SignatureCanvas ref={signatureRef} canvasProps={{ className: 'w-full h-32 border rounded' }} />
-            </div>
+          <DialogHeader>
+            <DialogTitle className="text-base">Approve Schedules</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Approve {selectedScheduleGroup.length} schedule assignments?
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Device ID: {deviceFingerprint.slice(0, 12)}...
+            </p>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => signatureRef.current?.clear()}>Clear</Button>
-              <Button onClick={approveSchedules} disabled={loading}>Approve</Button>
+              <Button onClick={approveSchedules} disabled={loading} size="sm">Approve</Button>
+              <Button variant="outline" size="sm" onClick={() => setShowApprovalDialog(false)}>Cancel</Button>
             </div>
           </div>
         </DialogContent>
