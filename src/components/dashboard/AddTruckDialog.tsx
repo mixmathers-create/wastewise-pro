@@ -20,7 +20,7 @@ const AddTruckDialog = ({ profile, onAdded }: { profile: any; onAdded: () => voi
     setLoading(true);
     try {
       const { error } = await supabase.from("trucks").insert({
-        team_id: profile.team_id,
+        team_id: profile?.team_id || null,
         code,
         type,
       });

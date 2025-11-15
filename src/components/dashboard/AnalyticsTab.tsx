@@ -9,15 +9,14 @@ const AnalyticsTab = ({ profile }: { profile: any }) => {
 
   useEffect(() => {
     const load = async () => {
-      if (!profile?.team_id) return;
       setLoading(true);
       try {
         const [clients, trucks, drivers, helpers, receipts] = await Promise.all([
-          supabase.from("clients").select("id").eq("team_id", profile.team_id),
-          supabase.from("trucks").select("id").eq("team_id", profile.team_id),
-          supabase.from("drivers").select("id").eq("team_id", profile.team_id),
-          supabase.from("helpers").select("id").eq("team_id", profile.team_id),
-          supabase.from("collection_receipts").select("id").eq("team_id", profile.team_id),
+          supabase.from("clients").select("id"),
+          supabase.from("trucks").select("id"),
+          supabase.from("drivers").select("id"),
+          supabase.from("helpers").select("id"),
+          supabase.from("collection_receipts").select("id"),
         ]);
         setStats({
           clients: clients.data?.length || 0,
@@ -33,7 +32,7 @@ const AnalyticsTab = ({ profile }: { profile: any }) => {
       }
     };
     load();
-  }, [profile?.team_id]);
+  }, []);
 
   return (
     <Card>

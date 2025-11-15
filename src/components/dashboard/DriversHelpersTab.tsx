@@ -14,11 +14,10 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
   const isAdmin = profile?.role === "admin";
 
   const fetchAll = async () => {
-    if (!profile?.team_id) return;
     setLoading(true);
     const [{ data: d, error: de }, { data: h, error: he }] = await Promise.all([
-      supabase.from("drivers").select("id,name,license_number").eq("team_id", profile.team_id).order("name"),
-      supabase.from("helpers").select("id,name").eq("team_id", profile.team_id).order("name"),
+      supabase.from("drivers").select("id,name,license_number").order("name"),
+      supabase.from("helpers").select("id,name").order("name"),
     ]);
     if (de) setError(de.message);
     else if (he) setError(he.message);
@@ -29,7 +28,7 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
 
   useEffect(() => {
     fetchAll();
-  }, [profile?.team_id]);
+  }, []);
 
   return (
     <div className="grid gap-4 md:grid-cols-2">

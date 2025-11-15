@@ -1,21 +1,25 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
+import CreateReceiptForm from "../collection/CreateReceiptForm";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 const CollectionsTab = ({ profile }: { profile: any }) => {
   const [receipts, setReceipts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const fetchReceipts = async () => {
-    if (!profile?.team_id) return;
     setLoading(true);
     const { data, error } = await supabase
       .from("collection_receipts")
       .select("id,created_at,qr_code,signed_by,pdf_url")
-      .eq("team_id", profile.team_id)
       .order("created_at", { ascending: false })
       .limit(20);
     if (error) setError(error.message);
@@ -25,13 +29,33 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
 
   useEffect(() => {
     fetchReceipts();
-  }, [profile?.team_id]);
+  }, []);
+
+  const handleSuccess = () => {
+    setDialogOpen(false);
+    fetchReceipts();
+  };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>QR Collections</CardTitle>
-        <CardDescription>Create and view collection receipts (Collection flow coming in next update)</CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>QR Collections</CardTitle>
+            <CardDescription>Create and view collection receipts</CardDescription>
+          </div>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="lg"><Plus className="mr-2 h-5 w-5" />Create Receipt</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>New Collection Receipt</DialogTitle>
+              </DialogHeader>
+              <CreateReceiptForm profile={profile} onSuccess={handleSuccess} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </CardHeader>
       <CardContent>
         {loading ? (

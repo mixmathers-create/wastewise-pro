@@ -19,7 +19,7 @@ const AddDriverDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
     setLoading(true);
     try {
       const { error } = await supabase.from("drivers").insert({
-        team_id: profile.team_id,
+        team_id: profile?.team_id || null,
         name,
         license_number: license,
       });

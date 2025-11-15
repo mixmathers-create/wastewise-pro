@@ -24,7 +24,7 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
       const qrCode = `CLIENT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
       const { error } = await supabase.from("clients").insert({
-        team_id: profile.team_id,
+        team_id: profile?.team_id || null,
         name,
         industry,
         address,
