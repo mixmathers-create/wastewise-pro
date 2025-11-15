@@ -3,12 +3,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, Users, Truck, FileDown, Edit2, Check } from "lucide-react";
-import { format, addDays, startOfWeek } from "date-fns";
+import { Calendar as CalendarIcon, Users, Truck, FileDown, Edit2, Check } from "lucide-react";
+import { format, addDays } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import jsPDF from "jspdf";
 
 interface Driver {
@@ -33,10 +36,18 @@ interface Schedule {
   id?: string;
   date: string;
   shift: string;
-  driver_id: string;
+  driver_id: string | null;
   helper_ids: string[];
-  truck_id: string;
+  truck_id: string | null;
   status: string;
+  is_backup?: boolean;
+}
+
+interface TruckDeployment {
+  [date: string]: {
+    AM: number;
+    PM: number;
+  };
 }
 
 const SchedulingTab = ({ profile }: { profile: any }) => {
@@ -48,8 +59,12 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const [loading, setLoading] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const [editingAvailability, setEditingAvailability] = useState<{ type: 'driver' | 'helper'; id: string; data: any } | null>(null);
+  
+  const [startDate, setStartDate] = useState<Date>();
+  const [endDate, setEndDate] = useState<Date>();
+  const [truckDeployment, setTruckDeployment] = useState<TruckDeployment>({});
+  const [showDeploymentDialog, setShowDeploymentDialog] = useState(false);
 
-  const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const shifts = ["AM", "PM"];
 
   useEffect(() => {
