@@ -28,6 +28,62 @@ const Login = () => {
       if (error) throw error;
 
       if (data.user) {
+        // Post-login bootstrap: Check and create missing profile/user_roles
+        try {
+          // Check if user_roles exists
+          const { data: userRoleData } = await supabase
+            .from("user_roles")
+            .select("*")
+            .eq("user_id", data.user.id)
+            .maybeSingle();
+
+          // If no user_role, this is likely a legacy account or incomplete signup
+          if (!userRoleData) {
+            // Get or create a default team for this user
+            const { data: existingProfile } = await supabase
+              .from("profiles")
+              .select("team_id")
+              .eq("user_id", data.user.id)
+              .maybeSingle();
+
+            let teamId = existingProfile?.team_id;
+
+            if (!teamId) {
+              // Create a new team for this user
+              const { data: newTeam } = await supabase
+                .from("teams")
+                .insert({ name: `${data.user.email}'s Team` })
+                .select()
+                .single();
+              
+              teamId = newTeam?.id;
+            }
+
+            if (teamId) {
+              // Create user_roles first
+              await supabase.from("user_roles").insert({
+                user_id: data.user.id,
+                team_id: teamId,
+                role: "admin", // Default to admin for bootstrap
+              });
+
+              // Create or update profile
+              if (!existingProfile) {
+                await supabase.from("profiles").insert({
+                  user_id: data.user.id,
+                  team_id: teamId,
+                  full_name: data.user.email?.split("@")[0] || "User",
+                  email: data.user.email || "",
+                  role: "admin",
+                });
+              }
+            }
+          }
+        } catch (bootstrapError) {
+          console.error("Bootstrap error:", bootstrapError);
+          // Continue login even if bootstrap fails
+        }
+
         toast({
           title: "Welcome back!",
           description: "You've successfully logged in.",
