@@ -24,10 +24,13 @@ const Signup = () => {
     setLoading(true);
 
     try {
-      // Create auth user
+      // Create auth user with email redirect
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`
+        }
       });
 
       if (authError) throw authError;
@@ -42,7 +45,16 @@ const Signup = () => {
 
         if (teamError) throw teamError;
 
-        // Create profile
+        // CRITICAL: Create user_roles FIRST (required for RLS on profiles)
+        const { error: roleError } = await supabase.from("user_roles").insert({
+          user_id: authData.user.id,
+          team_id: teamData.id,
+          role: role,
+        });
+
+        if (roleError) throw roleError;
+
+        // Now create profile (RLS will work since user_roles exists)
         const { error: profileError } = await supabase.from("profiles").insert({
           user_id: authData.user.id,
           team_id: teamData.id,
@@ -53,21 +65,13 @@ const Signup = () => {
 
         if (profileError) throw profileError;
 
-        // Create user role
-        const { error: roleError } = await supabase.from("user_roles" as any).insert({
-          user_id: authData.user.id,
-          team_id: teamData.id,
-          role: role,
-        });
-
-        if (roleError) throw roleError;
-
         toast({
           title: "Account created!",
-          description: "Please check your email to verify your account.",
+          description: "You're now logged in. Welcome to WasteWise!",
         });
 
-        navigate("/login");
+        // Auto-login: user is already authenticated, just navigate
+        navigate("/dashboard");
       }
     } catch (error: any) {
       toast({
