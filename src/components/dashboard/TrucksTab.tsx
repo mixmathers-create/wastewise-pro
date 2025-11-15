@@ -3,33 +3,41 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import AddTruckDialog from "./AddTruckDialog";
 
 const TrucksTab = ({ profile }: { profile: any }) => {
   const [trucks, setTrucks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isAdmin = profile?.role === "admin";
+
+  const fetchTrucks = async () => {
+    if (!profile?.team_id) return;
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("trucks")
+      .select("id,code,type")
+      .eq("team_id", profile.team_id)
+      .order("code");
+    if (error) setError(error.message);
+    setTrucks(data || []);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const fetchTrucks = async () => {
-      if (!profile?.team_id) return;
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("trucks")
-        .select("id,code,type")
-        .eq("team_id", profile.team_id)
-        .order("code");
-      if (error) setError(error.message);
-      setTrucks(data || []);
-      setLoading(false);
-    };
     fetchTrucks();
   }, [profile?.team_id]);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Trucks</CardTitle>
-        <CardDescription>Manage your fleet of waste collection trucks</CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Trucks</CardTitle>
+            <CardDescription>Manage your fleet of waste collection trucks</CardDescription>
+          </div>
+          {isAdmin && <AddTruckDialog profile={profile} onAdded={fetchTrucks} />}
+        </div>
       </CardHeader>
       <CardContent>
         {loading ? (
