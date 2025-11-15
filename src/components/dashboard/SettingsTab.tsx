@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { printerService } from "@/lib/printerService";
+import { bluetoothService } from "@/lib/bluetoothService";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const SettingsTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
@@ -12,24 +13,68 @@ const SettingsTab = ({ profile }: { profile: any }) => {
   const [logoUrl, setLogoUrl] = useState("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [printerConnected, setPrinterConnected] = useState(false);
+  const [showDeviceDialog, setShowDeviceDialog] = useState(false);
+  const [devices, setDevices] = useState<any[]>([]);
+  const [scanning, setScanning] = useState(false);
 
   useEffect(() => {
     const savedLogo = localStorage.getItem("receipt_logo");
     if (savedLogo) setLogoUrl(savedLogo);
   }, []);
 
-const handleConnectPrinter = async () => {
-  try {
-    const devices = await printerService.listDevices();
-    if (devices.length > 0) {
-      await printerService.connect(devices[0].address);
-      setPrinterConnected(true);
-      toast({ title: "Printer Connected", description: "Ready to print receipts" });
+  const handleConnectPrinter = async () => {
+    try {
+      if (!bluetoothService.isAvailable()) {
+        toast({ 
+          title: "Bluetooth Not Available", 
+          description: "Bluetooth scanning is only available on the Android app. Please pair your printer in Android Settings first.",
+          variant: "destructive" 
+        });
+        return;
+      }
+
+      setScanning(true);
+      
+      // Request permissions first (Android 12+)
+      const hasPermission = await bluetoothService.requestPermissions();
+      if (!hasPermission) {
+        toast({ title: "Permission Required", description: "Bluetooth permissions are needed to scan for printers.", variant: "destructive" });
+        setScanning(false);
+        return;
+      }
+
+      // List paired devices
+      const pairedDevices = await bluetoothService.listPairedDevices();
+      setDevices(pairedDevices);
+      setShowDeviceDialog(true);
+      setScanning(false);
+
+      if (pairedDevices.length === 0) {
+        toast({ 
+          title: "No Paired Devices", 
+          description: "Please pair your Bluetooth printer in Android Settings first." 
+        });
+      }
+    } catch (error: any) {
+      setScanning(false);
+      toast({ title: "Bluetooth Error", description: error.message, variant: "destructive" });
     }
-  } catch (error) {
-    toast({ title: "Connection Failed", description: error.message, variant: "destructive" });
-  }
-};
+  };
+
+  const handleDeviceSelect = async (device: any) => {
+    try {
+      const connected = await bluetoothService.connect(device.address);
+      if (connected) {
+        setPrinterConnected(true);
+        setShowDeviceDialog(false);
+        toast({ title: "Printer Connected", description: `Connected to ${device.name}` });
+      } else {
+        toast({ title: "Connection Failed", description: "Could not connect to printer", variant: "destructive" });
+      }
+    } catch (error: any) {
+      toast({ title: "Connection Error", description: error.message, variant: "destructive" });
+    }
+  };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -109,11 +154,44 @@ const handleConnectPrinter = async () => {
           <CardDescription>Connect to Bluetooth printer</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={handleConnectPrinter}>
-            {printerConnected ? "Printer Connected" : "Connect Printer"}
+          <Button onClick={handleConnectPrinter} disabled={scanning}>
+            {scanning ? "Scanning..." : printerConnected ? "Printer Connected ✓" : "Scan for Printer"}
           </Button>
+          {printerConnected && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Connected to: {bluetoothService.getConnectedDevice()?.name}
+            </p>
+          )}
         </CardContent>
       </Card>
+
+      <Dialog open={showDeviceDialog} onOpenChange={setShowDeviceDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Select Bluetooth Printer</DialogTitle>
+            <DialogDescription>Choose a paired device to connect</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {devices.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No paired devices found. Please pair your printer in Android Settings.</p>
+            ) : (
+              devices.map((device) => (
+                <Button
+                  key={device.address}
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => handleDeviceSelect(device)}
+                >
+                  <div className="text-left">
+                    <p className="font-medium">{device.name || "Unknown Device"}</p>
+                    <p className="text-xs text-muted-foreground">{device.address}</p>
+                  </div>
+                </Button>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -96,3 +96,15 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Barcode scanner styles */
+body.scanner-active {
+  visibility: hidden;
+  --background: 0 0% 0%;
+  --foreground: 0 0% 100%;
+  background-color: transparent;
+}
+
+body.scanner-active .barcode-scanner-modal {
+  visibility: visible;
+}

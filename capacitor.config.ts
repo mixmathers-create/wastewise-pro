@@ -8,6 +8,9 @@ const config: CapacitorConfig = {
   plugins: {
     Camera: {
       permissions: ['camera']
+    },
+    BarcodeScanner: {
+      cameraDirection: 'back'
     }
   }
 };
