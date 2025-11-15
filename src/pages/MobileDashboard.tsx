@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Recycle, LogOut, QrCode, Users, Settings } from "lucide-react";
+import { Capacitor } from '@capacitor/core';
 import { useToast } from "@/hooks/use-toast";
 import CollectionsTab from "@/components/dashboard/CollectionsTab";
 import ClientsTab from "@/components/dashboard/ClientsTab";
@@ -23,6 +24,20 @@ const MobileDashboard = () => {
   }, []);
 
   const checkUser = async () => {
+    // Skip authentication check on native platforms
+    if (Capacitor.isNativePlatform()) {
+      // Set a default profile for native app
+      setProfile({
+        id: 'mobile-user',
+        user_id: 'mobile-user',
+        email: 'mobile@app.local',
+        full_name: 'Mobile User',
+        role: 'user'
+      });
+      setLoading(false);
+      return;
+    }
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       

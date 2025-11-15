@@ -18,6 +18,9 @@ const RouterComponent = isNativePlatform() ? HashRouter : BrowserRouter;
 const App = () => {
   // Automatically route to mobile dashboard on native platforms
   const DashboardComponent = isNativePlatform() ? MobileDashboard : Dashboard;
+  
+  // Bypass login on native platforms - go directly to dashboard
+  const defaultRoute = isNativePlatform() ? "/dashboard" : "/login";
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -26,7 +29,7 @@ const App = () => {
         <Sonner />
         <RouterComponent>
           <Routes>
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/" element={<Navigate to={defaultRoute} replace />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/dashboard" element={<DashboardComponent />} />
