@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Camera } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
 import jsPDF from "jspdf";
 import { Capacitor } from "@capacitor/core";
+import { Camera as CapCamera, CameraResultType } from "@capacitor/camera";
 
 const wasteTypes = ["Municipal Solid Waste", "Food Waste", "Construction Waste", "Special Hauling"];
 const units = ["kg", "cbm", "truck load"];
@@ -24,6 +25,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const [loading, setLoading] = useState(false);
   const [qrInput, setQrInput] = useState("");
   const [clientData, setClientData] = useState<any>(null);
+  const [allClients, setAllClients] = useState<any[]>([]);
   const [trucks, setTrucks] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
   const [helpers, setHelpers] = useState<any[]>([]);
@@ -36,6 +38,15 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const [signedBy, setSignedBy] = useState("");
   const sigCanvas = useRef<SignatureCanvas>(null);
 
+  useEffect(() => {
+    loadClients();
+  }, []);
+
+  const loadClients = async () => {
+    const { data } = await supabase.from("clients").select("*").order("name");
+    setAllClients(data || []);
+  };
+
   const loadResources = async () => {
     const [t, d, h] = await Promise.all([
       supabase.from("trucks").select("*"),
@@ -45,6 +56,39 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     setTrucks(t.data || []);
     setDrivers(d.data || []);
     setHelpers(h.data || []);
+  };
+
+  const handleCamera = async () => {
+    try {
+      const image = await CapCamera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: CameraResultType.Uri
+      });
+      toast({ title: "Camera", description: "QR scanning from camera coming soon. Please select client or enter QR manually." });
+    } catch (error: any) {
+      toast({ title: "Camera Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleClientSelect = async (clientId: string) => {
+    setLoading(true);
+    try {
+      await loadResources();
+      const { data, error } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("id", clientId)
+        .single();
+      if (error) throw error;
+      setClientData(data);
+      setQrInput(data.qr_code);
+      toast({ title: "Client Selected", description: data.name });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const lookupClient = async () => {
@@ -165,10 +209,24 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   return (
     <div className="space-y-4">
       <div>
-        <Label>Client QR Code</Label>
+        <Label>Select Client</Label>
+        <Select onValueChange={handleClientSelect}>
+          <SelectTrigger><SelectValue placeholder="Choose from database" /></SelectTrigger>
+          <SelectContent>
+            {allClients.map((c) => (
+              <SelectItem key={c.id} value={c.id}>{c.name} - {c.industry}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="text-center text-muted-foreground text-sm">- OR -</div>
+
+      <div>
+        <Label>Scan/Enter QR Code</Label>
         <div className="flex gap-2">
           <Input value={qrInput} onChange={(e) => setQrInput(e.target.value)} placeholder="Enter or scan QR" />
-          <Button type="button" variant="outline"><Camera className="h-4 w-4" /></Button>
+          <Button type="button" variant="outline" onClick={handleCamera}><Camera className="h-4 w-4" /></Button>
           <Button type="button" onClick={lookupClient} disabled={loading}>Lookup</Button>
         </div>
       </div>
