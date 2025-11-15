@@ -212,37 +212,49 @@ export type Database = {
       }
       schedules: {
         Row: {
+          approved_at: string | null
+          approved_by: string | null
           created_at: string | null
           date: string
           driver_id: string | null
           helper_ids: string[]
           id: string
           is_backup: boolean | null
+          mt_requirement: number | null
           shift: string
+          signature_data: string | null
           status: string | null
           truck_id: string | null
           updated_at: string | null
         }
         Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string | null
           date: string
           driver_id?: string | null
           helper_ids?: string[]
           id?: string
           is_backup?: boolean | null
+          mt_requirement?: number | null
           shift: string
+          signature_data?: string | null
           status?: string | null
           truck_id?: string | null
           updated_at?: string | null
         }
         Update: {
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string | null
           date?: string
           driver_id?: string | null
           helper_ids?: string[]
           id?: string
           is_backup?: boolean | null
+          mt_requirement?: number | null
           shift?: string
+          signature_data?: string | null
           status?: string | null
           truck_id?: string | null
           updated_at?: string | null

@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar as CalendarIcon, FileDown, Edit2, Check, Wrench, Trash2 } from "lucide-react";
+import { Calendar as CalendarIcon, FileDown, Edit2, Check, Wrench, Trash2, FileSignature, Lock } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import jsPDF from "jspdf";
+import SignatureCanvas from "react-signature-canvas";
 
 interface Driver {
   id: string;
@@ -32,6 +33,8 @@ interface TruckType {
   id: string;
   code: string;
   status: string;
+  capacity: number;
+  type: string;
 }
 
 interface Schedule {
@@ -43,12 +46,16 @@ interface Schedule {
   truck_id: string | null;
   status: string;
   is_backup?: boolean;
+  mt_requirement?: number;
+  approved_by?: string;
+  approved_at?: string;
+  signature_data?: string;
 }
 
 interface TruckDeployment {
   [date: string]: {
-    AM: number;
-    PM: number;
+    AM: { trucks: number; mt: number };
+    PM: { trucks: number; mt: number };
   };
 }
 
@@ -83,6 +90,11 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
     end_date: '',
     reason: ''
   });
+  
+  const [pendingSchedules, setPendingSchedules] = useState<Schedule[]>([]);
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
+  const [selectedScheduleGroup, setSelectedScheduleGroup] = useState<Schedule[]>([]);
+  const signatureRef = useRef<SignatureCanvas>(null);
 
   const shifts = ["AM", "PM"];
   const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -94,12 +106,13 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [driversRes, helpersRes, trucksRes, schedulesRes, maintenanceRes] = await Promise.all([
+      const [driversRes, helpersRes, trucksRes, schedulesRes, maintenanceRes, pendingRes] = await Promise.all([
         supabase.from("drivers").select("*"),
         supabase.from("helpers").select("*"),
         supabase.from("trucks").select("*"),
-        supabase.from("schedules").select("*").gte("date", format(new Date(), "yyyy-MM-dd")),
+        supabase.from("schedules").select("*").gte("date", format(new Date(), "yyyy-MM-dd")).in("status", ["approved", "scheduled"]),
         supabase.from("truck_maintenance_blocks").select("*").gte("end_date", format(new Date(), "yyyy-MM-dd")),
+        supabase.from("schedules").select("*").eq("status", "draft").gte("date", format(new Date(), "yyyy-MM-dd")),
       ]);
 
       setDrivers((driversRes.data as any[]) || []);
@@ -107,6 +120,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
       setTrucks(trucksRes.data || []);
       setSchedules(schedulesRes.data || []);
       setMaintenanceBlocks(maintenanceRes.data || []);
+      setPendingSchedules(pendingRes.data || []);
     } catch (error: any) {
       toast({ title: "Error loading data", description: error.message, variant: "destructive" });
     } finally {
@@ -143,18 +157,24 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
     let currentDate = new Date(startDate!);
     while (currentDate <= endDate!) {
       const dateStr = format(currentDate, "yyyy-MM-dd");
-      deployment[dateStr] = { AM: 1, PM: 1 };
+      deployment[dateStr] = { AM: { trucks: 1, mt: 4 }, PM: { trucks: 1, mt: 4 } };
       currentDate = addDays(currentDate, 1);
     }
     setTruckDeployment(deployment);
     setShowDeploymentDialog(true);
   };
 
-  const updateTruckDeployment = (date: string, shift: "AM" | "PM", value: string) => {
+  const updateTruckDeployment = (date: string, shift: "AM" | "PM", field: "trucks" | "mt", value: string) => {
     const numValue = parseInt(value) || 0;
     setTruckDeployment(prev => ({
       ...prev,
-      [date]: { ...prev[date], [shift]: Math.max(0, Math.min(numValue, trucks.length)) }
+      [date]: { 
+        ...prev[date], 
+        [shift]: { 
+          ...prev[date][shift], 
+          [field]: field === "trucks" ? Math.max(0, Math.min(numValue, trucks.length)) : Math.max(0, numValue)
+        } 
+      }
     }));
   };
 
@@ -173,7 +193,9 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
         const dayName = format(currentDate, "EEE");
 
         for (const shift of ["AM", "PM"]) {
-          const trucksNeeded = truckDeployment[dateStr]?.[shift] || 0;
+          const deploymentInfo = truckDeployment[dateStr]?.[shift];
+          const trucksNeeded = deploymentInfo?.trucks || 0;
+          const mtRequired = deploymentInfo?.mt || 0;
           if (trucksNeeded === 0) continue;
 
           const needsBackup = trucksNeeded > 5;
@@ -195,9 +217,22 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                    !usedHelpersInPreviousShift.has(h.id);
           });
 
-          const availableTrucks = trucks.filter((t) => 
+          // Filter available trucks and sort by efficiency based on MT requirement
+          let availableTrucks = trucks.filter((t) => 
             t.status === "available" && !isTruckUnderMaintenance(t.id, dateStr)
           );
+          
+          // Smart truck assignment based on MT requirement
+          // For higher MT loads, prioritize trucks with higher capacity (GC = 4MT)
+          // For lower MT loads, use smaller trucks first (DT = 2MT) to be efficient
+          const avgMtPerTruck = mtRequired / trucksNeeded;
+          if (avgMtPerTruck >= 3) {
+            // High MT requirement: prioritize GC trucks (higher capacity)
+            availableTrucks.sort((a, b) => (b.capacity || 0) - (a.capacity || 0));
+          } else {
+            // Low MT requirement: prioritize DT trucks (smaller, more efficient)
+            availableTrucks.sort((a, b) => (a.capacity || 0) - (b.capacity || 0));
+          }
 
           if (availableDrivers.length < driversNeeded) {
             toast({ 
@@ -240,8 +275,9 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
               driver_id: driver.id,
               helper_ids: assignedHelpers.map(h => h.id),
               truck_id: truckAssignment.id,
-              status: "scheduled",
-              is_backup: false
+              status: "draft",
+              is_backup: false,
+              mt_requirement: mtRequired
             });
 
             usedDriversThisShift.add(driver.id);
@@ -259,8 +295,9 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                 driver_id: backupDriver.id,
                 helper_ids: [backupHelper.id],
                 truck_id: null,
-                status: "scheduled",
-                is_backup: true
+                status: "draft",
+                is_backup: true,
+                mt_requirement: mtRequired
               });
               usedDriversThisShift.add(backupDriver.id);
               usedHelpersThisShift.add(backupHelper.id);
@@ -281,11 +318,14 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
         return;
       }
 
-      await supabase.from("schedules").delete().gte("date", format(startDate!, "yyyy-MM-dd")).lte("date", format(endDate!, "yyyy-MM-dd"));
+      await supabase.from("schedules").delete().gte("date", format(startDate!, "yyyy-MM-dd")).lte("date", format(endDate!, "yyyy-MM-dd")).eq("status", "draft");
       const { error } = await supabase.from("schedules").insert(newSchedules);
       if (error) throw error;
 
-      toast({ title: "Success", description: `Generated ${newSchedules.length} schedules!` });
+      toast({ 
+        title: "Draft schedules created", 
+        description: `Generated ${newSchedules.length} draft schedules. Please review and approve them.` 
+      });
       setShowDeploymentDialog(false);
       loadData();
     } catch (error: any) {
@@ -304,6 +344,88 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
     try {
       await supabase.from("schedules").delete().gte("date", format(startDate, "yyyy-MM-dd")).lte("date", format(endDate, "yyyy-MM-dd"));
       toast({ title: "Schedules cleared" });
+      loadData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openApprovalDialog = (dateRange: { start: string; end: string }) => {
+    const schedulesToApprove = pendingSchedules.filter(
+      s => s.date >= dateRange.start && s.date <= dateRange.end
+    );
+    setSelectedScheduleGroup(schedulesToApprove);
+    setShowApprovalDialog(true);
+  };
+
+  const approveSchedules = async () => {
+    if (!signatureRef.current || signatureRef.current.isEmpty()) {
+      toast({ title: "Signature required", description: "Please provide your signature", variant: "destructive" });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const signatureData = signatureRef.current.toDataURL();
+      const approvedBy = profile.full_name || profile.email;
+      const approvedAt = new Date().toISOString();
+
+      const updates = selectedScheduleGroup.map(schedule => ({
+        id: schedule.id,
+        status: "approved",
+        approved_by: approvedBy,
+        approved_at: approvedAt,
+        signature_data: signatureData
+      }));
+
+      for (const update of updates) {
+        const { error } = await supabase
+          .from("schedules")
+          .update({
+            status: update.status,
+            approved_by: update.approved_by,
+            approved_at: update.approved_at,
+            signature_data: update.signature_data
+          })
+          .eq("id", update.id);
+        
+        if (error) throw error;
+      }
+
+      toast({ title: "Schedules approved", description: `${updates.length} schedules have been approved and are now active.` });
+      setShowApprovalDialog(false);
+      setSelectedScheduleGroup([]);
+      signatureRef.current?.clear();
+      loadData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const overrideApprovedSchedule = async (scheduleId: string) => {
+    const confirmed = window.confirm(
+      "This schedule is already approved. Overriding will require re-approval. Continue?"
+    );
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from("schedules")
+        .update({ 
+          status: "draft",
+          approved_by: null,
+          approved_at: null,
+          signature_data: null
+        })
+        .eq("id", scheduleId);
+      
+      if (error) throw error;
+      toast({ title: "Schedule unlocked", description: "Schedule status changed to draft for editing." });
       loadData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -462,6 +584,52 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
 
   return (
     <div className="space-y-6">
+      {/* Pending Schedules Section */}
+      {pendingSchedules.length > 0 && (
+        <Card className="border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+              <FileSignature className="h-5 w-5" />
+              Pending Approval ({pendingSchedules.length} schedules)
+            </CardTitle>
+            <CardDescription>
+              Review and approve draft schedules to make them active
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Object.entries(
+                pendingSchedules.reduce((acc, schedule) => {
+                  const key = `${schedule.date}-${schedule.shift}`;
+                  if (!acc[key]) acc[key] = [];
+                  acc[key].push(schedule);
+                  return acc;
+                }, {} as Record<string, Schedule[]>)
+              ).map(([key, groupSchedules]) => {
+                const [date, shift] = key.split('-');
+                return (
+                  <div key={key} className="flex items-center justify-between p-3 border rounded-lg bg-background">
+                    <div>
+                      <p className="font-medium">{format(new Date(date), "EEE, MMM dd, yyyy")}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {shift === "AM" ? "Morning Shift (8AM-8PM)" : "Night Shift (8PM-8AM)"} • {groupSchedules.length} assignments • {groupSchedules[0].mt_requirement || 0} MT required
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={() => openApprovalDialog({ start: date, end: date })}
+                      size="sm"
+                    >
+                      <Check className="h-4 w-4 mr-2" />
+                      Approve
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -572,8 +740,11 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                                       const truck = trucks.find(t => t.id === schedule.truck_id);
                                       const scheduleHelpers = helpers.filter(h => schedule.helper_ids.includes(h.id));
                                       
-                                      return (
+                                       return (
                                         <div key={idx} className="flex items-start gap-2 text-sm">
+                                          {schedule.status === 'approved' && (
+                                            <Lock className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                                          )}
                                           <Dialog>
                                             <DialogTrigger asChild>
                                               <Button 
@@ -700,28 +871,54 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Morning Shift (8AM-8PM)</Label>
-                        <Input 
-                          type="number" 
-                          min="0" 
-                          max={trucks.length}
-                          value={truckDeployment[date]?.AM || 0}
-                          onChange={(e) => updateTruckDeployment(date, "AM", e.target.value)}
-                        />
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Trucks Needed</Label>
+                          <Input 
+                            type="number" 
+                            min="0" 
+                            max={trucks.length}
+                            value={truckDeployment[date]?.AM?.trucks || 0}
+                            onChange={(e) => updateTruckDeployment(date, "AM", "trucks", e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">MT Requirement</Label>
+                          <Input 
+                            type="number" 
+                            min="0" 
+                            step="0.1"
+                            value={truckDeployment[date]?.AM?.mt || 0}
+                            onChange={(e) => updateTruckDeployment(date, "AM", "mt", e.target.value)}
+                          />
+                        </div>
                         <p className="text-xs text-muted-foreground">
-                          {truckDeployment[date]?.AM > 5 && "⚠️ Backup personnel will be assigned"}
+                          {(truckDeployment[date]?.AM?.trucks || 0) > 5 && "⚠️ Backup personnel will be assigned"}
                         </p>
                       </div>
                       <div className="space-y-2">
                         <Label>Night Shift (8PM-8AM)</Label>
-                        <Input 
-                          type="number" 
-                          min="0" 
-                          max={trucks.length}
-                          value={truckDeployment[date]?.PM || 0}
-                          onChange={(e) => updateTruckDeployment(date, "PM", e.target.value)}
-                        />
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Trucks Needed</Label>
+                          <Input 
+                            type="number" 
+                            min="0" 
+                            max={trucks.length}
+                            value={truckDeployment[date]?.PM?.trucks || 0}
+                            onChange={(e) => updateTruckDeployment(date, "PM", "trucks", e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">MT Requirement</Label>
+                          <Input 
+                            type="number" 
+                            min="0" 
+                            step="0.1"
+                            value={truckDeployment[date]?.PM?.mt || 0}
+                            onChange={(e) => updateTruckDeployment(date, "PM", "mt", e.target.value)}
+                          />
+                        </div>
                         <p className="text-xs text-muted-foreground">
-                          {truckDeployment[date]?.PM > 5 && "⚠️ Backup personnel will be assigned"}
+                          {(truckDeployment[date]?.PM?.trucks || 0) > 5 && "⚠️ Backup personnel will be assigned"}
                         </p>
                       </div>
                     </div>
@@ -1027,6 +1224,50 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
           )}
         </CardContent>
       </Card>
+
+      {/* Approval Dialog */}
+      <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Approve Schedules</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-muted-foreground mb-2">
+                You are approving {selectedScheduleGroup.length} schedule(s). Once approved, these schedules will become active and locked from editing unless overridden.
+              </p>
+            </div>
+            <div className="border rounded-lg p-4 bg-muted/50">
+              <Label className="text-sm font-medium">Signature</Label>
+              <div className="mt-2 border border-border rounded-lg bg-background">
+                <SignatureCanvas
+                  ref={signatureRef}
+                  canvasProps={{
+                    className: 'w-full h-40',
+                  }}
+                />
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => signatureRef.current?.clear()}
+                className="mt-2"
+              >
+                Clear Signature
+              </Button>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowApprovalDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={approveSchedules} disabled={loading}>
+                <Check className="h-4 w-4 mr-2" />
+                Approve & Sign
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
