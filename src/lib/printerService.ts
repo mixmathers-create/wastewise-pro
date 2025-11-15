@@ -1,9 +1,10 @@
 import { Capacitor } from '@capacitor/core';
 import html2canvas from 'html2canvas';
 
-// Access the lidta-capacitor-bl-printer plugin dynamically
-const LidtaCapacitorBlPrinter = Capacitor.isPluginAvailable('LidtaCapacitorBlPrinter') 
-  ? Capacitor.Plugins.LidtaCapacitorBlPrinter 
+// Access the lidta-capacitor-bl-printer plugin dynamically (safe on Capacitor 7)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const LidtaCapacitorBlPrinter: any = (typeof window !== 'undefined' && (window as any).Capacitor && (window as any).Capacitor.Plugins && (window as any).Capacitor.Plugins.LidtaCapacitorBlPrinter)
+  ? (window as any).Capacitor.Plugins.LidtaCapacitorBlPrinter
   : null;
 
 interface PrinterConnection {

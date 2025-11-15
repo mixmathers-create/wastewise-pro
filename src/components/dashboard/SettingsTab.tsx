@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { printerService } from "@/lib/printerService";
-import { useState } from "react";
 
 const SettingsTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
