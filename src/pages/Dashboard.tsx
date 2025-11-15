@@ -11,6 +11,9 @@ import TrucksTab from "@/components/dashboard/TrucksTab";
 import DriversHelpersTab from "@/components/dashboard/DriversHelpersTab";
 import AnalyticsTab from "@/components/dashboard/AnalyticsTab";
 import SettingsTab from "@/components/dashboard/SettingsTab";
+import SchedulingTab from "@/components/dashboard/SchedulingTab";
+import EnhancedAnalyticsTab from "@/components/dashboard/EnhancedAnalyticsTab";
+import EnhancedSettingsTab from "@/components/dashboard/EnhancedSettingsTab";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -36,7 +39,7 @@ const Dashboard = () => {
 
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select("*, teams(*)")
+        .select("*")
         .eq("user_id", user.id)
         .single();
 
@@ -85,7 +88,7 @@ const Dashboard = () => {
             </div>
             <div>
               <h1 className="text-xl font-bold">WasteWise</h1>
-              <p className="text-xs text-muted-foreground">{profile?.teams?.name}</p>
+              <p className="text-xs text-muted-foreground">Waste Management System</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -146,12 +149,16 @@ const Dashboard = () => {
             <DriversHelpersTab profile={profile} />
           </TabsContent>
 
+          <TabsContent value="scheduling">
+            <SchedulingTab profile={profile} />
+          </TabsContent>
+
           <TabsContent value="analytics">
-            <AnalyticsTab profile={profile} />
+            <EnhancedAnalyticsTab profile={profile} />
           </TabsContent>
 
           <TabsContent value="settings">
-            <SettingsTab profile={profile} />
+            <EnhancedSettingsTab profile={profile} />
           </TabsContent>
         </Tabs>
       </main>

@@ -24,7 +24,6 @@ const AddHelperDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
       const generatedId = `HLP-${Date.now().toString().slice(-6)}`;
       
       const { error } = await supabase.from("helpers").insert({
-        team_id: profile?.team_id || "00000000-0000-0000-0000-000000000001",
         name,
         id_number: idNumber || generatedId,
         birthdate: birthdate || null,

@@ -65,8 +65,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
         contact_info: row.contact_info || null,
         contact_person: row.contact_person || null,
         contact_number: row.contact_number || null,
-        qr_code: `CLIENT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        team_id: profile?.team_id || ''
+        qr_code: `CLIENT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       }));
 
       const { error } = await supabase.from("clients").insert(clientsToInsert);

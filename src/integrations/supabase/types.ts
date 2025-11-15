@@ -25,7 +25,6 @@ export type Database = {
           industry: string
           name: string
           qr_code: string
-          team_id: string
         }
         Insert: {
           address?: string | null
@@ -37,7 +36,6 @@ export type Database = {
           industry: string
           name: string
           qr_code: string
-          team_id: string
         }
         Update: {
           address?: string | null
@@ -49,17 +47,8 @@ export type Database = {
           industry?: string
           name?: string
           qr_code?: string
-          team_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "clients_team_id_fkey"
-            columns: ["team_id"]
-            isOneToOne: false
-            referencedRelation: "teams"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       collection_receipts: {
         Row: {
@@ -74,7 +63,6 @@ export type Database = {
           qr_code: string
           signature_data: string | null
           signed_by: string | null
-          team_id: string
           truck_id: string
           waste_types: string[]
         }
@@ -90,7 +78,6 @@ export type Database = {
           qr_code: string
           signature_data?: string | null
           signed_by?: string | null
-          team_id: string
           truck_id: string
           waste_types: string[]
         }
@@ -106,7 +93,6 @@ export type Database = {
           qr_code?: string
           signature_data?: string | null
           signed_by?: string | null
-          team_id?: string
           truck_id?: string
           waste_types?: string[]
         }
@@ -126,13 +112,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "collection_receipts_team_id_fkey"
-            columns: ["team_id"]
-            isOneToOne: false
-            referencedRelation: "teams"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "collection_receipts_truck_id_fkey"
             columns: ["truck_id"]
             isOneToOne: false
@@ -143,6 +122,7 @@ export type Database = {
       }
       drivers: {
         Row: {
+          availability: Json | null
           birthdate: string | null
           contact_number: string | null
           created_at: string
@@ -150,9 +130,9 @@ export type Database = {
           id_number: string | null
           license_number: string | null
           name: string
-          team_id: string
         }
         Insert: {
+          availability?: Json | null
           birthdate?: string | null
           contact_number?: string | null
           created_at?: string
@@ -160,9 +140,9 @@ export type Database = {
           id_number?: string | null
           license_number?: string | null
           name: string
-          team_id: string
         }
         Update: {
+          availability?: Json | null
           birthdate?: string | null
           contact_number?: string | null
           created_at?: string
@@ -170,55 +150,38 @@ export type Database = {
           id_number?: string | null
           license_number?: string | null
           name?: string
-          team_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "drivers_team_id_fkey"
-            columns: ["team_id"]
-            isOneToOne: false
-            referencedRelation: "teams"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       helpers: {
         Row: {
+          availability: Json | null
           birthdate: string | null
           contact_number: string | null
           created_at: string
           id: string
           id_number: string | null
           name: string
-          team_id: string
         }
         Insert: {
+          availability?: Json | null
           birthdate?: string | null
           contact_number?: string | null
           created_at?: string
           id?: string
           id_number?: string | null
           name: string
-          team_id: string
         }
         Update: {
+          availability?: Json | null
           birthdate?: string | null
           contact_number?: string | null
           created_at?: string
           id?: string
           id_number?: string | null
           name?: string
-          team_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "helpers_team_id_fkey"
-            columns: ["team_id"]
-            isOneToOne: false
-            referencedRelation: "teams"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -227,7 +190,6 @@ export type Database = {
           full_name: string
           id: string
           role: string
-          team_id: string
           user_id: string
         }
         Insert: {
@@ -236,7 +198,6 @@ export type Database = {
           full_name: string
           id?: string
           role: string
-          team_id: string
           user_id: string
         }
         Update: {
@@ -245,36 +206,60 @@ export type Database = {
           full_name?: string
           id?: string
           role?: string
-          team_id?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      schedules: {
+        Row: {
+          created_at: string | null
+          date: string
+          driver_id: string | null
+          helper_ids: string[]
+          id: string
+          shift: string
+          status: string | null
+          truck_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          date: string
+          driver_id?: string | null
+          helper_ids?: string[]
+          id?: string
+          shift: string
+          status?: string | null
+          truck_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          date?: string
+          driver_id?: string | null
+          helper_ids?: string[]
+          id?: string
+          shift?: string
+          status?: string | null
+          truck_id?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "profiles_team_id_fkey"
-            columns: ["team_id"]
+            foreignKeyName: "schedules_driver_id_fkey"
+            columns: ["driver_id"]
             isOneToOne: false
-            referencedRelation: "teams"
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedules_truck_id_fkey"
+            columns: ["truck_id"]
+            isOneToOne: false
+            referencedRelation: "trucks"
             referencedColumns: ["id"]
           },
         ]
-      }
-      teams: {
-        Row: {
-          created_at: string
-          id: string
-          name: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          name: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          name?: string
-        }
-        Relationships: []
       }
       trucks: {
         Row: {
@@ -282,7 +267,7 @@ export type Database = {
           created_at: string
           id: string
           plate_number: string | null
-          team_id: string
+          status: string | null
           type: string
         }
         Insert: {
@@ -290,7 +275,7 @@ export type Database = {
           created_at?: string
           id?: string
           plate_number?: string | null
-          team_id: string
+          status?: string | null
           type: string
         }
         Update: {
@@ -298,50 +283,31 @@ export type Database = {
           created_at?: string
           id?: string
           plate_number?: string | null
-          team_id?: string
+          status?: string | null
           type?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "trucks_team_id_fkey"
-            columns: ["team_id"]
-            isOneToOne: false
-            referencedRelation: "teams"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       user_roles: {
         Row: {
           created_at: string | null
           id: string
           role: Database["public"]["Enums"]["app_role"]
-          team_id: string
           user_id: string
         }
         Insert: {
           created_at?: string | null
           id?: string
           role: Database["public"]["Enums"]["app_role"]
-          team_id: string
           user_id: string
         }
         Update: {
           created_at?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
-          team_id?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_roles_team_id_fkey"
-            columns: ["team_id"]
-            isOneToOne: false
-            referencedRelation: "teams"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Views: {
