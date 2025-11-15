@@ -264,6 +264,44 @@ export type Database = {
           },
         ]
       }
+      truck_maintenance_blocks: {
+        Row: {
+          created_at: string | null
+          end_date: string
+          id: string
+          reason: string | null
+          start_date: string
+          truck_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          end_date: string
+          id?: string
+          reason?: string | null
+          start_date: string
+          truck_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          end_date?: string
+          id?: string
+          reason?: string | null
+          start_date?: string
+          truck_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "truck_maintenance_blocks_truck_id_fkey"
+            columns: ["truck_id"]
+            isOneToOne: false
+            referencedRelation: "trucks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trucks: {
         Row: {
           capacity: number | null

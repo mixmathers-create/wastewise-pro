@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar as CalendarIcon, FileDown, Edit2, Check } from "lucide-react";
+import { Calendar as CalendarIcon, FileDown, Edit2, Check, Wrench, Trash2 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import jsPDF from "jspdf";
 
@@ -51,12 +52,21 @@ interface TruckDeployment {
   };
 }
 
+interface MaintenanceBlock {
+  id?: string;
+  truck_id: string;
+  start_date: string;
+  end_date: string;
+  reason: string;
+}
+
 const SchedulingTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [helpers, setHelpers] = useState<Helper[]>([]);
   const [trucks, setTrucks] = useState<TruckType[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [maintenanceBlocks, setMaintenanceBlocks] = useState<MaintenanceBlock[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const [editingAvailability, setEditingAvailability] = useState<{ type: 'driver' | 'helper'; id: string; data: any } | null>(null);
@@ -65,6 +75,14 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const [endDate, setEndDate] = useState<Date>();
   const [truckDeployment, setTruckDeployment] = useState<TruckDeployment>({});
   const [showDeploymentDialog, setShowDeploymentDialog] = useState(false);
+  const [showMaintenanceDialog, setShowMaintenanceDialog] = useState(false);
+  
+  const [newMaintenance, setNewMaintenance] = useState<MaintenanceBlock>({
+    truck_id: '',
+    start_date: '',
+    end_date: '',
+    reason: ''
+  });
 
   const shifts = ["AM", "PM"];
   const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -76,22 +94,32 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [driversRes, helpersRes, trucksRes, schedulesRes] = await Promise.all([
+      const [driversRes, helpersRes, trucksRes, schedulesRes, maintenanceRes] = await Promise.all([
         supabase.from("drivers").select("*"),
         supabase.from("helpers").select("*"),
         supabase.from("trucks").select("*"),
         supabase.from("schedules").select("*").gte("date", format(new Date(), "yyyy-MM-dd")),
+        supabase.from("truck_maintenance_blocks").select("*").gte("end_date", format(new Date(), "yyyy-MM-dd")),
       ]);
 
       setDrivers((driversRes.data as any[]) || []);
       setHelpers((helpersRes.data as any[]) || []);
       setTrucks(trucksRes.data || []);
       setSchedules(schedulesRes.data || []);
+      setMaintenanceBlocks(maintenanceRes.data || []);
     } catch (error: any) {
       toast({ title: "Error loading data", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
+  };
+
+  const isTruckUnderMaintenance = (truckId: string, date: string): boolean => {
+    return maintenanceBlocks.some(block => 
+      block.truck_id === truckId && 
+      date >= block.start_date && 
+      date <= block.end_date
+    );
   };
 
   const validateDateRange = () => {
@@ -167,7 +195,9 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                    !usedHelpersInPreviousShift.has(h.id);
           });
 
-          const availableTrucks = trucks.filter((t) => t.status === "available");
+          const availableTrucks = trucks.filter((t) => 
+            t.status === "available" && !isTruckUnderMaintenance(t.id, dateStr)
+          );
 
           if (availableDrivers.length < driversNeeded) {
             toast({ 
@@ -310,6 +340,50 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
       if (error) throw error;
       toast({ title: "Availability updated" });
       setEditingAvailability(null);
+      loadData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addMaintenanceBlock = async () => {
+    if (!newMaintenance.truck_id || !newMaintenance.start_date || !newMaintenance.end_date) {
+      toast({ title: "Missing fields", description: "Please fill all required fields", variant: "destructive" });
+      return;
+    }
+
+    const startDate = new Date(newMaintenance.start_date);
+    const endDate = new Date(newMaintenance.end_date);
+    const diffDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays > 30) {
+      toast({ title: "Invalid range", description: "Maintenance period cannot exceed 30 days", variant: "destructive" });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.from("truck_maintenance_blocks").insert(newMaintenance);
+      if (error) throw error;
+      toast({ title: "Maintenance block added" });
+      setNewMaintenance({ truck_id: '', start_date: '', end_date: '', reason: '' });
+      setShowMaintenanceDialog(false);
+      loadData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteMaintenanceBlock = async (id: string) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.from("truck_maintenance_blocks").delete().eq("id", id);
+      if (error) throw error;
+      toast({ title: "Maintenance block removed" });
       loadData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -583,7 +657,9 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                                             {schedule.is_backup && <span className="font-semibold text-orange-500">[BACKUP] </span>}
                                             <span className="font-medium">{driver?.name}</span>
                                             {!schedule.is_backup && <span> • {truck?.code}</span>}
-                                            <span className="text-muted-foreground"> • {scheduleHelpers.length} helpers</span>
+                                            <div className="text-xs text-muted-foreground mt-1">
+                                              Helpers: {scheduleHelpers.map(h => h.name).join(', ') || 'None'}
+                                            </div>
                                           </div>
                                         </div>
                                       );
@@ -843,6 +919,112 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
               </div>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Truck Maintenance Management */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Wrench className="h-5 w-5" />
+                Truck Maintenance Schedule
+              </CardTitle>
+              <CardDescription>Block trucks for maintenance (max 30 days per block)</CardDescription>
+            </div>
+            <Dialog open={showMaintenanceDialog} onOpenChange={setShowMaintenanceDialog}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Wrench className="h-4 w-4 mr-2" />
+                  Schedule Maintenance
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="bg-background">
+                <DialogHeader>
+                  <DialogTitle>Schedule Truck Maintenance</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Truck</Label>
+                    <Select value={newMaintenance.truck_id} onValueChange={(value) => setNewMaintenance(prev => ({ ...prev, truck_id: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select truck" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background">
+                        {trucks.map(t => (
+                          <SelectItem key={t.id} value={t.id}>{t.code}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Start Date</Label>
+                    <Input 
+                      type="date" 
+                      value={newMaintenance.start_date}
+                      onChange={(e) => setNewMaintenance(prev => ({ ...prev, start_date: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label>End Date</Label>
+                    <Input 
+                      type="date" 
+                      value={newMaintenance.end_date}
+                      onChange={(e) => setNewMaintenance(prev => ({ ...prev, end_date: e.target.value }))}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Maximum 30 days from start date</p>
+                  </div>
+                  <div>
+                    <Label>Reason</Label>
+                    <Textarea 
+                      value={newMaintenance.reason}
+                      onChange={(e) => setNewMaintenance(prev => ({ ...prev, reason: e.target.value }))}
+                      placeholder="e.g., Regular maintenance, repairs, inspection"
+                    />
+                  </div>
+                  <Button onClick={addMaintenanceBlock} disabled={loading} className="w-full">
+                    Add Maintenance Block
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {maintenanceBlocks.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No maintenance scheduled</p>
+          ) : (
+            <div className="space-y-3">
+              {maintenanceBlocks.map(block => {
+                const truck = trucks.find(t => t.id === block.truck_id);
+                return (
+                  <Card key={block.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="font-medium">{truck?.code}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {format(new Date(block.start_date), "MMM dd, yyyy")} - {format(new Date(block.end_date), "MMM dd, yyyy")}
+                          </div>
+                          {block.reason && (
+                            <div className="text-sm mt-1">{block.reason}</div>
+                          )}
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => block.id && deleteMaintenanceBlock(block.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
