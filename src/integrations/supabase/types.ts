@@ -217,6 +217,7 @@ export type Database = {
           driver_id: string | null
           helper_ids: string[]
           id: string
+          is_backup: boolean | null
           shift: string
           status: string | null
           truck_id: string | null
@@ -228,6 +229,7 @@ export type Database = {
           driver_id?: string | null
           helper_ids?: string[]
           id?: string
+          is_backup?: boolean | null
           shift: string
           status?: string | null
           truck_id?: string | null
@@ -239,6 +241,7 @@ export type Database = {
           driver_id?: string | null
           helper_ids?: string[]
           id?: string
+          is_backup?: boolean | null
           shift?: string
           status?: string | null
           truck_id?: string | null
