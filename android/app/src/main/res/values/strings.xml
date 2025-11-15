@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">WasteWise</string>
+    <string name="title_activity_main">WasteWise</string>
+    <string name="package_name">app.lovable.d5da6030305c43408010d32b9004d074</string>
+    <string name="custom_url_scheme">app.lovable.d5da6030305c43408010d32b9004d074</string>
+</resources>
