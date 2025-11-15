@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Delete, X } from "lucide-react";
 
+
 interface NumericKeypadProps {
   value: string;
   onChange: (value: string) => void;

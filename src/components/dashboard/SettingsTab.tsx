@@ -4,17 +4,33 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { printerService } from "@/lib/printerService";
+import { useState } from "react";
 
 const SettingsTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
   const teamName = profile?.teams?.name || profile?.team_id || "";
   const [logoUrl, setLogoUrl] = useState("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [printerConnected, setPrinterConnected] = useState(false);
 
   useEffect(() => {
     const savedLogo = localStorage.getItem("receipt_logo");
     if (savedLogo) setLogoUrl(savedLogo);
   }, []);
+
+const handleConnectPrinter = async () => {
+  try {
+    const devices = await printerService.listDevices();
+    if (devices.length > 0) {
+      await printerService.connect(devices[0].address);
+      setPrinterConnected(true);
+      toast({ title: "Printer Connected", description: "Ready to print receipts" });
+    }
+  } catch (error) {
+    toast({ title: "Connection Failed", description: error.message, variant: "destructive" });
+  }
+};
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -86,6 +102,17 @@ const SettingsTab = ({ profile }: { profile: any }) => {
             )}
             <p className="text-xs text-muted-foreground">Upload a logo to appear on printed receipts</p>
           </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Printer Settings</CardTitle>
+          <CardDescription>Connect to Bluetooth printer</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={handleConnectPrinter}>
+            {printerConnected ? "Printer Connected" : "Connect Printer"}
+          </Button>
         </CardContent>
       </Card>
     </div>

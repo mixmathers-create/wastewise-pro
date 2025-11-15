@@ -12,6 +12,8 @@ import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { Capacitor } from "@capacitor/core";
 import { Camera as CapCamera, CameraResultType } from "@capacitor/camera";
+import { MobileInput } from "@/components/mobile/MobileInput";
+import { printerService } from "@/lib/printerService";
 
 const wasteTypes = ["Municipal Solid Waste", "Food Waste", "Construction Waste", "Special Hauling"];
 const units = ["kg", "cbm", "truck load"];
@@ -146,6 +148,18 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     if (!sigCanvas.current || sigCanvas.current.isEmpty()) {
       toast({ title: "Signature required", description: "Please sign the receipt", variant: "destructive" });
       return;
+    }
+    if (printerService.isConnected()) {
+      await printerService.printReceipt({
+        header: "WasteWise Collection Receipt",
+        items: [
+          { label: "Client", value: clientName },
+          { label: "Date", value: new Date().toLocaleDateString() },
+          { label: "QR Code", value: qrCode },
+          { label: "Weight", value: `${weight} kg` }
+        ],
+        footer: "Thank you for using WasteWise!"
+      });
     }
 
     setLoading(true);
@@ -424,7 +438,13 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
                   <SelectTrigger className="flex-1"><SelectValue placeholder="Waste type" /></SelectTrigger>
                   <SelectContent>{wasteTypes.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
                 </Select>
-                <Input type="number" placeholder="Qty" value={item.quantity} onChange={(e) => updateItem(idx, "quantity", parseFloat(e.target.value) || 0)} className="w-24" />
+                <MobileInput
+                  type="number"
+                  value={value}
+                  onChange={setValue}
+                  allowDecimal={true}
+                  maxLength={10}
+                /> placeholder="Qty" value={item.quantity} onChange={(e) => updateItem(idx, "quantity", parseFloat(e.target.value) || 0)} className="w-24" />
                 <Select value={item.unit} onValueChange={(v) => updateItem(idx, "unit", v)}>
                   <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
                   <SelectContent>{units.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
