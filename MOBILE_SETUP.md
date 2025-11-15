@@ -57,10 +57,42 @@ npx cap open android
 ```
 
 ### 8. Configure for Senraise H10
-In Android Studio:
-1. Set minimum SDK to API 34 (Android 14)
-2. Configure screen orientation in `AndroidManifest.xml` if needed
-3. Add required permissions for Bluetooth printer
+
+#### Set Minimum SDK to API 34 (Android 14)
+
+**File**: `android/app/build.gradle`
+
+Find the `defaultConfig` section (around line 50-60) and set:
+```gradle
+android {
+    ...
+    defaultConfig {
+        ...
+        minSdkVersion 34
+        targetSdkVersion 34
+    }
+}
+```
+
+#### Configure Screen Orientation (Optional)
+
+**File**: `android/app/src/main/AndroidManifest.xml`
+
+Inside the `<activity>` tag (around line 15-20), add this attribute to lock orientation:
+```xml
+<activity
+    android:name=".MainActivity"
+    android:screenOrientation="portrait"
+    ...>
+```
+
+Options: `portrait`, `landscape`, `sensorPortrait`, `sensorLandscape`
+
+#### Add Bluetooth Printer Permissions
+
+**File**: `android/app/src/main/AndroidManifest.xml`
+
+See "Printer Integration" section below for detailed Bluetooth permission setup.
 
 ## Mobile-Specific Features
 
