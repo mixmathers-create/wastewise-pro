@@ -21,7 +21,7 @@ const TrucksTab = ({ profile }: { profile: any }) => {
     setLoading(true);
     const { data, error } = await supabase
       .from("trucks")
-      .select("id,code,type")
+      .select("id,code,type,plate_number")
       .order("code");
     if (error) setError(error.message);
     setTrucks(data || []);
@@ -33,7 +33,7 @@ const TrucksTab = ({ profile }: { profile: any }) => {
   }, []);
 
   const downloadTemplate = () => {
-    const csv = generateCSV([], ['code', 'type']);
+    const csv = generateCSV([], ['code', 'plate_number', 'type']);
     downloadCSV(csv, 'trucks-template.csv');
   };
 
@@ -47,8 +47,9 @@ const TrucksTab = ({ profile }: { profile: any }) => {
     try {
       const trucksToInsert = rows.map(row => ({
         code: row.code,
+        plate_number: row.plate_number,
         type: row.type,
-        team_id: profile?.team_id || ''
+        team_id: profile?.team_id || '00000000-0000-0000-0000-000000000001'
       }));
 
       const { error } = await supabase.from("trucks").insert(trucksToInsert);
@@ -105,14 +106,16 @@ const TrucksTab = ({ profile }: { profile: any }) => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Code</TableHead>
-                <TableHead>Type</TableHead>
+              <TableHead>Code</TableHead>
+              <TableHead>Plate Number</TableHead>
+              <TableHead>Type</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {trucks.map((t) => (
                 <TableRow key={t.id}>
                   <TableCell className="font-medium">{t.code}</TableCell>
+                  <TableCell>{t.plate_number || "N/A"}</TableCell>
                   <TableCell>{t.type}</TableCell>
                 </TableRow>
               ))}

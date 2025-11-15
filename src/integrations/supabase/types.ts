@@ -143,22 +143,31 @@ export type Database = {
       }
       drivers: {
         Row: {
+          birthdate: string | null
+          contact_number: string | null
           created_at: string
           id: string
+          id_number: string | null
           license_number: string | null
           name: string
           team_id: string
         }
         Insert: {
+          birthdate?: string | null
+          contact_number?: string | null
           created_at?: string
           id?: string
+          id_number?: string | null
           license_number?: string | null
           name: string
           team_id: string
         }
         Update: {
+          birthdate?: string | null
+          contact_number?: string | null
           created_at?: string
           id?: string
+          id_number?: string | null
           license_number?: string | null
           name?: string
           team_id?: string
@@ -175,20 +184,29 @@ export type Database = {
       }
       helpers: {
         Row: {
+          birthdate: string | null
+          contact_number: string | null
           created_at: string
           id: string
+          id_number: string | null
           name: string
           team_id: string
         }
         Insert: {
+          birthdate?: string | null
+          contact_number?: string | null
           created_at?: string
           id?: string
+          id_number?: string | null
           name: string
           team_id: string
         }
         Update: {
+          birthdate?: string | null
+          contact_number?: string | null
           created_at?: string
           id?: string
+          id_number?: string | null
           name?: string
           team_id?: string
         }
@@ -263,6 +281,7 @@ export type Database = {
           code: string
           created_at: string
           id: string
+          plate_number: string | null
           team_id: string
           type: string
         }
@@ -270,6 +289,7 @@ export type Database = {
           code: string
           created_at?: string
           id?: string
+          plate_number?: string | null
           team_id: string
           type: string
         }
@@ -277,6 +297,7 @@ export type Database = {
           code?: string
           created_at?: string
           id?: string
+          plate_number?: string | null
           team_id?: string
           type?: string
         }

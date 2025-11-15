@@ -14,15 +14,17 @@ const AddTruckDialog = ({ profile, onAdded }: { profile: any; onAdded: () => voi
   const [loading, setLoading] = useState(false);
   const [code, setCode] = useState("");
   const [type, setType] = useState("Garbage Collector");
+  const [plateNumber, setPlateNumber] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       const { error } = await supabase.from("trucks").insert({
-        team_id: profile?.team_id || null,
+        team_id: profile?.team_id || "00000000-0000-0000-0000-000000000001",
         code,
         type,
+        plate_number: plateNumber,
       });
 
       if (error) throw error;
@@ -31,6 +33,7 @@ const AddTruckDialog = ({ profile, onAdded }: { profile: any; onAdded: () => voi
       setOpen(false);
       setCode("");
       setType("Garbage Collector");
+      setPlateNumber("");
       onAdded();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -52,6 +55,10 @@ const AddTruckDialog = ({ profile, onAdded }: { profile: any; onAdded: () => voi
           <div>
             <Label htmlFor="code">Truck Code</Label>
             <Input id="code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="GC-01" required />
+          </div>
+          <div>
+            <Label htmlFor="plateNumber">Plate Number</Label>
+            <Input id="plateNumber" value={plateNumber} onChange={(e) => setPlateNumber(e.target.value)} placeholder="ABC-1234" required />
           </div>
           <div>
             <Label htmlFor="type">Type</Label>
