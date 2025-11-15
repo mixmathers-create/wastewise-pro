@@ -9,20 +9,21 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchReceipts = async () => {
+    if (!profile?.team_id) return;
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("collection_receipts")
+      .select("id,created_at,qr_code,signed_by,pdf_url")
+      .eq("team_id", profile.team_id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (error) setError(error.message);
+    setReceipts(data || []);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const fetchReceipts = async () => {
-      if (!profile?.team_id) return;
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("collection_receipts")
-        .select("id,created_at,qr_code,signed_by,pdf_url")
-        .eq("team_id", profile.team_id)
-        .order("created_at", { ascending: false })
-        .limit(20);
-      if (error) setError(error.message);
-      setReceipts(data || []);
-      setLoading(false);
-    };
     fetchReceipts();
   }, [profile?.team_id]);
 
@@ -30,7 +31,7 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
     <Card>
       <CardHeader>
         <CardTitle>QR Collections</CardTitle>
-        <CardDescription>Recent collection receipts</CardDescription>
+        <CardDescription>Create and view collection receipts (Collection flow coming in next update)</CardDescription>
       </CardHeader>
       <CardContent>
         {loading ? (
