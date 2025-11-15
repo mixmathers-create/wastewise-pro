@@ -53,6 +53,15 @@ const Signup = () => {
 
         if (profileError) throw profileError;
 
+        // Create user role
+        const { error: roleError } = await supabase.from("user_roles" as any).insert({
+          user_id: authData.user.id,
+          team_id: teamData.id,
+          role: role,
+        });
+
+        if (roleError) throw roleError;
+
         toast({
           title: "Account created!",
           description: "Please check your email to verify your account.",
