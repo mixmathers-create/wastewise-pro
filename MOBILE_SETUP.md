@@ -213,7 +213,7 @@ if (printerService.isConnected()) {
 }
 ```
 
-**Note**: The printer service currently has placeholder implementations at lines 40-113 in `src/lib/printerService.ts`. You'll need to replace these with actual [lidta-capacitor-bl-printer](https://www.npmjs.com/package/lidta-capacitor-bl-printer) API calls.
+**Note**: The printer service is fully implemented using `capacitor-thermal-printer`. See `PRINTER_SETUP_GUIDE.md` for complete setup instructions.
 
 ## Display Optimization
 
