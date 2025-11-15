@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Recycle, LogOut, QrCode, Users, Truck, UserCog, BarChart3, Settings } from "lucide-react";
+import { Recycle, LogOut, QrCode, Users, Truck, UserCog, BarChart3, Settings, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import CollectionsTab from "@/components/dashboard/CollectionsTab";
 import ClientsTab from "@/components/dashboard/ClientsTab";
@@ -106,7 +106,7 @@ const Dashboard = () => {
 
       <main className="container mx-auto p-4">
         <Tabs defaultValue="collections" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="collections">
               <QrCode className="mr-2 h-4 w-4" />
               Collections
@@ -122,6 +122,10 @@ const Dashboard = () => {
             <TabsTrigger value="drivers">
               <UserCog className="mr-2 h-4 w-4" />
               Drivers & Helpers
+            </TabsTrigger>
+            <TabsTrigger value="scheduling">
+              <Calendar className="mr-2 h-4 w-4" />
+              Scheduling
             </TabsTrigger>
             <TabsTrigger value="analytics">
               <BarChart3 className="mr-2 h-4 w-4" />
