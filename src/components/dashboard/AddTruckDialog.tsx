@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,13 @@ const AddTruckDialog = ({ profile, onAdded }: { profile: any; onAdded: () => voi
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [code, setCode] = useState("");
-  const [type, setType] = useState("Garbage Collector");
+  const [type, setType] = useState("GC");
   const [plateNumber, setPlateNumber] = useState("");
+  const [capacity, setCapacity] = useState(4);
+
+  useEffect(() => {
+    setCapacity(type === "GC" ? 4 : 2);
+  }, [type]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,6 +29,8 @@ const AddTruckDialog = ({ profile, onAdded }: { profile: any; onAdded: () => voi
         code,
         type,
         plate_number: plateNumber,
+        capacity,
+        status: 'available'
       });
 
       if (error) throw error;
@@ -31,8 +38,9 @@ const AddTruckDialog = ({ profile, onAdded }: { profile: any; onAdded: () => voi
       toast({ title: "Truck added successfully" });
       setOpen(false);
       setCode("");
-      setType("Garbage Collector");
+      setType("GC");
       setPlateNumber("");
+      setCapacity(4);
       onAdded();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -65,11 +73,26 @@ const AddTruckDialog = ({ profile, onAdded }: { profile: any; onAdded: () => voi
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Garbage Collector">Garbage Collector</SelectItem>
-                <SelectItem value="Dump Truck">Dump Truck</SelectItem>
+              <SelectContent className="bg-background">
+                <SelectItem value="GC">GC - Garbage Collector (4 MT)</SelectItem>
+                <SelectItem value="DT">DT - Dump Truck (2 MT)</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <Label htmlFor="capacity">Capacity (Metric Tons)</Label>
+            <Input 
+              id="capacity" 
+              type="number" 
+              step="0.5"
+              value={capacity} 
+              onChange={(e) => setCapacity(parseFloat(e.target.value))} 
+              placeholder="4" 
+              required 
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              GC trucks typically carry 4 MT, DT trucks carry 2 MT
+            </p>
           </div>
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? "Adding..." : "Add Truck"}
