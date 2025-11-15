@@ -57,10 +57,42 @@ npx cap open android
 ```
 
 ### 8. Configure for Senraise H10
-In Android Studio:
-1. Set minimum SDK to API 34 (Android 14)
-2. Configure screen orientation in `AndroidManifest.xml` if needed
-3. Add required permissions for Bluetooth printer
+
+#### Set Minimum SDK to API 34 (Android 14)
+
+**File**: `android/app/build.gradle`
+
+Find the `defaultConfig` section (around line 50-60) and set:
+```gradle
+android {
+    ...
+    defaultConfig {
+        ...
+        minSdkVersion 34
+        targetSdkVersion 34
+    }
+}
+```
+
+#### Configure Screen Orientation (Optional)
+
+**File**: `android/app/src/main/AndroidManifest.xml`
+
+Inside the `<activity>` tag (around line 15-20), add this attribute to lock orientation:
+```xml
+<activity
+    android:name=".MainActivity"
+    android:screenOrientation="portrait"
+    ...>
+```
+
+Options: `portrait`, `landscape`, `sensorPortrait`, `sensorLandscape`
+
+#### Add Bluetooth Printer Permissions
+
+**File**: `android/app/src/main/AndroidManifest.xml`
+
+See "Printer Integration" section below for detailed Bluetooth permission setup.
 
 ## Mobile-Specific Features
 
@@ -181,7 +213,7 @@ if (printerService.isConnected()) {
 }
 ```
 
-**Note**: The printer service currently has placeholder implementations at lines 40-113 in `src/lib/printerService.ts`. You'll need to replace these with actual [lidta-capacitor-bl-printer](https://www.npmjs.com/package/lidta-capacitor-bl-printer) API calls.
+**Note**: The printer service is fully implemented using `lidta-capacitor-bl-printer`. See `PRINTER_SETUP_GUIDE.md` for complete setup instructions.
 
 ## Display Optimization
 
@@ -220,8 +252,9 @@ The app is configured for hot reload from the Lovable sandbox. Any changes you m
 npx cap sync android
 ```
 
-## Printer Integration TODO
-The Bluetooth printer integration needs the following configurations:
+## Printer Integration
+
+The project now uses **`capacitor-thermal-printer`** which is compatible with Capacitor 7 and provides a high-performance, feature-rich printing experience.
 
 ### 1. Configure AndroidManifest.xml - Add Bluetooth permissions
 
@@ -234,6 +267,7 @@ Add these permissions inside the `<manifest>` tag, before the `<application>` ta
 <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
 <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 ```
 
 Example placement:
@@ -252,37 +286,73 @@ Example placement:
 </manifest>
 ```
 
-### 2. Update printerService.ts - Implement actual printer API calls
+### 2. Printer Service Implementation
 
 **File**: `src/lib/printerService.ts`
 
-Replace the placeholder implementations with actual lidta-capacitor-bl-printer API calls:
+The printer service is now fully implemented using `capacitor-thermal-printer`. The API includes:
 
-- **Line 40-48** (connect method): Replace the console.log with actual Bluetooth connection API
-- **Line 58-66** (disconnect method): Implement actual disconnect API call
-- **Line 83-91** (listDevices method): Implement device discovery API
-- **Line 105-113** (printText method): Implement actual printing command
+- **`connect(address: string)`** - Connect to a printer by Bluetooth address
+- **`disconnect()`** - Disconnect from the current printer
+- **`listDevices()`** - Get list of available Bluetooth printers
+- **`printText(text: string)`** - Print plain text
+- **`printReceipt(data)`** - Print formatted receipts with styling
 
-Refer to the [lidta-capacitor-bl-printer documentation](https://www.npmjs.com/package/lidta-capacitor-bl-printer) for the correct API methods.
+The library uses a high-performance builder pattern for advanced formatting. See the [capacitor-thermal-printer documentation](https://github.com/malik12tree/capacitor-thermal-printer) for more features like QR codes, barcodes, and images.
 
-### 3. Test with H10 built-in printer
+### 3. Using the Printer
 
-The Senraise H10 has a built-in thermal printer that should work with the lidta library. After implementing the API calls above, test with:
+**Important**: With `capacitor-thermal-printer`, you must pair the Bluetooth printer in Android Settings first, then use its Bluetooth address to connect.
+
+#### Get Printer Bluetooth Address
+
+1. On the H10 device, go to **Settings → Bluetooth**
+2. Pair with your thermal printer
+3. Note the Bluetooth address (e.g., `00:11:22:33:44:55`)
+
+#### Connect and Print
 
 ```typescript
-// In your component or test file
 import { printerService } from "@/lib/printerService";
 
-const testPrinter = async () => {
-  const devices = await printerService.listDevices();
-  console.log('Available devices:', devices);
-  
-  // Connect to first device (or select by name/address)
-  if (devices.length > 0) {
-    await printerService.connect(devices[0].address);
-    await printerService.printText("Test Print from WasteWise");
-  }
-};
+// Connect using the Bluetooth address from Android settings
+await printerService.connect('00:11:22:33:44:55');
+
+// Print a receipt
+await printerService.printReceipt({
+  header: "WasteWise Collection Receipt",
+  items: [
+    { label: "Client", value: "ABC Corp" },
+    { label: "Date", value: "2025-01-15" },
+    { label: "Weight", value: "150 kg" }
+  ],
+  footer: "Thank you!",
+  logo: base64Logo // Optional base64 image
+});
+
+// Disconnect when done
+await printerService.disconnect();
+```
+
+#### Advanced Printing Features
+
+The `capacitor-thermal-printer` library supports:
+- **Text formatting**: Bold, underline, double-width
+- **Alignment**: Left, center, right
+- **Images**: Print logos from base64 strings
+- **QR Codes**: Generate and print QR codes
+- **Barcodes**: UPC, EAN, Code128, etc.
+- **Paper control**: Cut paper automatically
+
+Example with QR code:
+```typescript
+await CapacitorThermalPrinter
+  .begin()
+  .align('center')
+  .text('Scan for more info:\n')
+  .qr('https://wastewise.com/receipt/123')
+  .cutPaper()
+  .write();
 ```
 
 ## Troubleshooting
