@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar as CalendarIcon, Users, Truck, FileDown, Edit2, Check } from "lucide-react";
+import { Calendar as CalendarIcon, FileDown, Edit2, Check } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import jsPDF from "jspdf";
 
 interface Driver {
@@ -66,6 +67,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const [showDeploymentDialog, setShowDeploymentDialog] = useState(false);
 
   const shifts = ["AM", "PM"];
+  const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   useEffect(() => {
     loadData();
@@ -92,57 +94,170 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
     }
   };
 
+  const validateDateRange = () => {
+    if (!startDate || !endDate) {
+      toast({ title: "Select dates", description: "Please select both start and end dates", variant: "destructive" });
+      return false;
+    }
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (diffDays > 6) {
+      toast({ title: "Invalid range", description: "Date range must be within 7 days", variant: "destructive" });
+      return false;
+    }
+    return true;
+  };
+
+  const openDeploymentDialog = () => {
+    if (!validateDateRange()) return;
+    
+    const deployment: TruckDeployment = {};
+    let currentDate = new Date(startDate!);
+    while (currentDate <= endDate!) {
+      const dateStr = format(currentDate, "yyyy-MM-dd");
+      deployment[dateStr] = { AM: 1, PM: 1 };
+      currentDate = addDays(currentDate, 1);
+    }
+    setTruckDeployment(deployment);
+    setShowDeploymentDialog(true);
+  };
+
+  const updateTruckDeployment = (date: string, shift: "AM" | "PM", value: string) => {
+    const numValue = parseInt(value) || 0;
+    setTruckDeployment(prev => ({
+      ...prev,
+      [date]: { ...prev[date], [shift]: Math.max(0, Math.min(numValue, trucks.length)) }
+    }));
+  };
+
   const generateWeekSchedule = async () => {
+    if (!validateDateRange()) return;
+    
     setLoading(true);
     try {
-      const startDate = startOfWeek(new Date(), { weekStartsOn: 1 });
       const newSchedules: Schedule[] = [];
+      const usedDriversInPreviousShift = new Set<string>();
+      const usedHelpersInPreviousShift = new Set<string>();
 
-      for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
-        const currentDate = addDays(startDate, dayOffset);
+      let currentDate = new Date(startDate!);
+      while (currentDate <= endDate!) {
         const dateStr = format(currentDate, "yyyy-MM-dd");
         const dayName = format(currentDate, "EEE");
 
         for (const shift of ["AM", "PM"]) {
+          const trucksNeeded = truckDeployment[dateStr]?.[shift] || 0;
+          if (trucksNeeded === 0) continue;
+
+          const needsBackup = trucksNeeded > 5;
+          const driversNeeded = trucksNeeded + (needsBackup ? 1 : 0);
+          const helpersPerTruck = 3;
+          const helpersNeeded = trucksNeeded * helpersPerTruck + (needsBackup ? 1 : 0);
+
           const availableDrivers = drivers.filter((d) => {
             const avail = d.availability as any;
-            return avail?.shifts?.includes(shift) && avail?.days?.includes(dayName);
+            return avail?.shifts?.includes(shift) && 
+                   avail?.days?.includes(dayName) &&
+                   !usedDriversInPreviousShift.has(d.id);
           });
+
           const availableHelpers = helpers.filter((h) => {
             const avail = h.availability as any;
-            return avail?.shifts?.includes(shift) && avail?.days?.includes(dayName);
+            return avail?.shifts?.includes(shift) && 
+                   avail?.days?.includes(dayName) &&
+                   !usedHelpersInPreviousShift.has(h.id);
           });
+
           const availableTrucks = trucks.filter((t) => t.status === "available");
 
-          if (availableDrivers.length > 0 && availableHelpers.length >= 2 && availableTrucks.length > 0) {
-            const driver = availableDrivers[Math.floor(Math.random() * availableDrivers.length)];
-            const selectedHelpers = availableHelpers
-              .sort(() => 0.5 - Math.random())
-              .slice(0, 2)
-              .map((h) => h.id);
-            const truck = availableTrucks[Math.floor(Math.random() * availableTrucks.length)];
+          if (availableDrivers.length < driversNeeded) {
+            toast({ 
+              title: "Insufficient drivers", 
+              description: `Need ${driversNeeded} drivers for ${dateStr} ${shift}, only ${availableDrivers.length} available`,
+              variant: "destructive" 
+            });
+            continue;
+          }
+
+          if (availableHelpers.length < helpersNeeded) {
+            toast({ 
+              title: "Insufficient helpers", 
+              description: `Need ${helpersNeeded} helpers for ${dateStr} ${shift}, only ${availableHelpers.length} available`,
+              variant: "destructive" 
+            });
+            continue;
+          }
+
+          if (availableTrucks.length < trucksNeeded) {
+            toast({ 
+              title: "Insufficient trucks", 
+              description: `Need ${trucksNeeded} trucks for ${dateStr} ${shift}, only ${availableTrucks.length} available`,
+              variant: "destructive" 
+            });
+            continue;
+          }
+
+          const usedDriversThisShift = new Set<string>();
+          const usedHelpersThisShift = new Set<string>();
+
+          for (let i = 0; i < trucksNeeded; i++) {
+            const driver = availableDrivers[i];
+            const truckAssignment = availableTrucks[i];
+            const assignedHelpers = availableHelpers.slice(i * helpersPerTruck, (i + 1) * helpersPerTruck);
 
             newSchedules.push({
               date: dateStr,
               shift,
               driver_id: driver.id,
-              helper_ids: selectedHelpers,
-              truck_id: truck.id,
+              helper_ids: assignedHelpers.map(h => h.id),
+              truck_id: truckAssignment.id,
               status: "scheduled",
+              is_backup: false
             });
+
+            usedDriversThisShift.add(driver.id);
+            assignedHelpers.forEach(h => usedHelpersThisShift.add(h.id));
           }
+
+          if (needsBackup) {
+            const backupDriver = availableDrivers[trucksNeeded];
+            const backupHelper = availableHelpers[trucksNeeded * helpersPerTruck];
+            
+            if (backupDriver && backupHelper) {
+              newSchedules.push({
+                date: dateStr,
+                shift,
+                driver_id: backupDriver.id,
+                helper_ids: [backupHelper.id],
+                truck_id: null,
+                status: "scheduled",
+                is_backup: true
+              });
+              usedDriversThisShift.add(backupDriver.id);
+              usedHelpersThisShift.add(backupHelper.id);
+            }
+          }
+
+          usedDriversInPreviousShift.clear();
+          usedHelpersInPreviousShift.clear();
+          usedDriversThisShift.forEach(id => usedDriversInPreviousShift.add(id));
+          usedHelpersThisShift.forEach(id => usedHelpersInPreviousShift.add(id));
         }
+
+        currentDate = addDays(currentDate, 1);
       }
 
-      if (newSchedules.length > 0) {
-        const { error } = await supabase.from("schedules").insert(newSchedules);
-        if (error) throw error;
-
-        toast({ title: "Success", description: `Generated ${newSchedules.length} shifts for the week` });
-        loadData();
-      } else {
-        toast({ title: "No schedules", description: "Not enough resources to generate schedules", variant: "destructive" });
+      if (newSchedules.length === 0) {
+        toast({ title: "No schedules created", description: "Check availability and deployment settings", variant: "destructive" });
+        return;
       }
+
+      await supabase.from("schedules").delete().gte("date", format(startDate!, "yyyy-MM-dd")).lte("date", format(endDate!, "yyyy-MM-dd"));
+      const { error } = await supabase.from("schedules").insert(newSchedules);
+      if (error) throw error;
+
+      toast({ title: "Success", description: `Generated ${newSchedules.length} schedules!` });
+      setShowDeploymentDialog(false);
+      loadData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -151,11 +266,14 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   };
 
   const clearSchedules = async () => {
+    if (!startDate || !endDate) {
+      toast({ title: "Select dates", variant: "destructive" });
+      return;
+    }
     setLoading(true);
     try {
-      const { error } = await supabase.from("schedules").delete().gte("date", format(new Date(), "yyyy-MM-dd"));
-      if (error) throw error;
-      toast({ title: "Cleared", description: "All future schedules cleared" });
+      await supabase.from("schedules").delete().gte("date", format(startDate, "yyyy-MM-dd")).lte("date", format(endDate, "yyyy-MM-dd"));
+      toast({ title: "Schedules cleared" });
       loadData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -165,615 +283,564 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   };
 
   const updateSchedule = async (schedule: Schedule) => {
+    setLoading(true);
     try {
       const { error } = await supabase.from("schedules").update({
         driver_id: schedule.driver_id,
-        helper_ids: schedule.helper_ids,
         truck_id: schedule.truck_id,
-      }).eq("id", schedule.id);
+        helper_ids: schedule.helper_ids
+      }).eq("id", schedule.id!);
 
       if (error) throw error;
-      toast({ title: "Success", description: "Schedule updated" });
+      toast({ title: "Schedule updated" });
       setEditingSchedule(null);
       loadData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const updateAvailability = async () => {
-    if (!editingAvailability) return;
+  const updateAvailability = async (type: 'driver' | 'helper', id: string, availability: any) => {
+    setLoading(true);
     try {
-      const table = editingAvailability.type === 'driver' ? 'drivers' : 'helpers';
-      const { error } = await supabase.from(table).update({
-        availability: editingAvailability.data.availability
-      }).eq("id", editingAvailability.id);
-
+      const table = type === 'driver' ? 'drivers' : 'helpers';
+      const { error } = await supabase.from(table).update({ availability }).eq("id", id);
       if (error) throw error;
-      toast({ title: "Success", description: "Availability updated" });
+      toast({ title: "Availability updated" });
       setEditingAvailability(null);
       loadData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
   };
 
   const exportToPDF = () => {
-    const doc = new jsPDF();
-    const startDate = startOfWeek(new Date(), { weekStartsOn: 1 });
-    
-    doc.setFontSize(18);
-    doc.text("Weekly Schedule", 14, 20);
-    doc.setFontSize(10);
-    doc.text(`Week of ${format(startDate, "MMM d, yyyy")}`, 14, 28);
-
-    let yPos = 40;
-    const lineHeight = 8;
-
-    for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
-      const currentDate = addDays(startDate, dayOffset);
-      const dateStr = format(currentDate, "yyyy-MM-dd");
-
-      doc.setFontSize(12);
-      doc.text(format(currentDate, "EEEE, MMM d"), 14, yPos);
-      yPos += lineHeight;
-
-      for (const shift of ["AM", "PM"]) {
-        const daySchedules = schedules.filter(s => s.date === dateStr && s.shift === shift);
-        
-        doc.setFontSize(10);
-        doc.text(`  ${shift} Shift (${shift === "AM" ? "8:00 AM - 8:00 PM" : "8:00 PM - 8:00 AM"})`, 14, yPos);
-        yPos += lineHeight;
-
-        if (daySchedules.length === 0) {
-          doc.setFontSize(9);
-          doc.text("    No assignments", 14, yPos);
-          yPos += lineHeight;
-        } else {
-          daySchedules.forEach(sched => {
-            const driver = drivers.find(d => d.id === sched.driver_id);
-            const truck = trucks.find(t => t.id === sched.truck_id);
-            const assignedHelpers = sched.helper_ids
-              .map(hid => helpers.find(h => h.id === hid)?.name)
-              .filter(Boolean)
-              .join(", ");
-
-            doc.setFontSize(9);
-            doc.text(`    Driver: ${driver?.name || "N/A"}  |  Truck: ${truck?.code || "N/A"}  |  Helpers: ${assignedHelpers}`, 14, yPos);
-            yPos += lineHeight;
-          });
-        }
-
-        if (yPos > 270) {
-          doc.addPage();
-          yPos = 20;
-        }
-      }
-      yPos += 4;
+    if (!schedules.length || !startDate || !endDate) {
+      toast({ title: "No schedule", variant: "destructive" });
+      return;
     }
+
+    const doc = new jsPDF({ orientation: "landscape" });
+    doc.setFontSize(18);
+    doc.text("Weekly Schedule", 14, 15);
+    doc.setFontSize(10);
+    doc.text(`${format(startDate, "MMM dd, yyyy")} - ${format(endDate, "MMM dd, yyyy")}`, 14, 22);
+
+    const dates: string[] = [];
+    let currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      dates.push(format(currentDate, "yyyy-MM-dd"));
+      currentDate = addDays(currentDate, 1);
+    }
+
+    let yPos = 35;
+    doc.setFontSize(12);
+    doc.text("Date", 14, yPos);
+    doc.text("Shift", 50, yPos);
+    doc.text("Driver", 80, yPos);
+    doc.text("Truck", 130, yPos);
+    doc.text("Helpers", 170, yPos);
+    doc.line(14, yPos + 2, 280, yPos + 2);
+    yPos += 8;
+
+    dates.forEach(date => {
+      shifts.forEach(shift => {
+        const shiftSchedules = schedules.filter(s => s.date === date && s.shift === shift);
+        
+        if (shiftSchedules.length > 0) {
+          doc.setFontSize(10);
+          
+          shiftSchedules.forEach((schedule, idx) => {
+            const driver = drivers.find(d => d.id === schedule.driver_id);
+            const truck = trucks.find(t => t.id === schedule.truck_id);
+            const scheduleHelpers = helpers.filter(h => schedule.helper_ids.includes(h.id));
+            
+            if (yPos > 180) {
+              doc.addPage();
+              yPos = 20;
+            }
+            
+            if (idx === 0) {
+              doc.text(format(new Date(date), "MMM dd"), 14, yPos);
+              doc.text(shift === "AM" ? "8AM-8PM" : "8PM-8AM", 50, yPos);
+            }
+            
+            const backupLabel = schedule.is_backup ? " [BACKUP]" : "";
+            doc.text(`${driver?.name || 'N/A'}${backupLabel}`, 80, yPos);
+            doc.text(truck?.code || 'N/A', 130, yPos);
+            doc.text(`${scheduleHelpers.length} helpers`, 170, yPos);
+            
+            yPos += 6;
+          });
+          
+          yPos += 3;
+        }
+      });
+    });
 
     doc.save(`schedule-${format(startDate, "yyyy-MM-dd")}.pdf`);
-    toast({ title: "Success", description: "Schedule exported to PDF" });
+    toast({ title: "PDF exported" });
   };
-
-  const getWeeklyChartData = () => {
-    const startDate = startOfWeek(new Date(), { weekStartsOn: 1 });
-    const chartData: any[][] = [];
-
-    for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
-      const currentDate = addDays(startDate, dayOffset);
-      const dateStr = format(currentDate, "yyyy-MM-dd");
-      const dayName = format(currentDate, "EEE");
-
-      const amSchedules = schedules.filter(s => s.date === dateStr && s.shift === "AM");
-      const pmSchedules = schedules.filter(s => s.date === dateStr && s.shift === "PM");
-
-      chartData.push([dayName, dateStr, amSchedules, pmSchedules]);
-    }
-
-    return chartData;
-  };
-
-  const weekData = getWeeklyChartData();
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Weekly Schedule Generator
+            <CalendarIcon className="h-5 w-5" />
+            Scheduling Management
           </CardTitle>
-          <CardDescription>Auto-assign drivers, helpers, and trucks based on availability</CardDescription>
+          <CardDescription>
+            Select a 7-day window and specify truck deployment to generate schedules
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-2">
-            <Button onClick={generateWeekSchedule} disabled={loading}>
-              Generate Week Schedule
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Start Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {startDate ? format(startDate, "PPP") : "Pick start date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 bg-background">
+                  <Calendar 
+                    mode="single" 
+                    selected={startDate} 
+                    onSelect={setStartDate} 
+                    initialFocus 
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-2">
+              <Label>End Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {endDate ? format(endDate, "PPP") : "Pick end date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 bg-background">
+                  <Calendar 
+                    mode="single" 
+                    selected={endDate} 
+                    onSelect={setEndDate} 
+                    initialFocus 
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+
+          <div className="flex gap-4">
+            <Button onClick={openDeploymentDialog} disabled={loading || !startDate || !endDate}>
+              Configure & Generate
             </Button>
-            <Button variant="destructive" onClick={clearSchedules} disabled={loading}>
-              Clear Schedules
+            <Button onClick={clearSchedules} variant="outline" disabled={loading}>
+              Clear
             </Button>
-            <Button variant="outline" onClick={exportToPDF} disabled={schedules.length === 0}>
-              <FileDown className="mr-2 h-4 w-4" />
-              Export to PDF
+            <Button onClick={exportToPDF} variant="outline" disabled={!schedules.length}>
+              <FileDown className="h-4 w-4 mr-2" />
+              Export PDF
             </Button>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-md border p-4">
-              <p className="text-sm text-muted-foreground">Available Drivers</p>
-              <p className="text-2xl font-bold">{drivers.length}</p>
-            </div>
-            <div className="rounded-md border p-4">
-              <p className="text-sm text-muted-foreground">Available Helpers</p>
-              <p className="text-2xl font-bold">{helpers.length}</p>
-            </div>
-            <div className="rounded-md border p-4">
-              <p className="text-sm text-muted-foreground">Available Trucks</p>
-              <p className="text-2xl font-bold">{trucks.filter((t) => t.status === "available").length}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Weekly Schedule Chart</CardTitle>
-          <CardDescription>Current week assignments with edit capabilities</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <p className="text-muted-foreground">Loading...</p>
-          ) : schedules.length === 0 ? (
-            <p className="text-muted-foreground">No schedules generated yet. Click "Generate Week Schedule" above.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b">
-                    <th className="p-2 text-left font-semibold">Day</th>
-                    <th className="p-2 text-left font-semibold">AM Shift (8AM-8PM)</th>
-                    <th className="p-2 text-left font-semibold">PM Shift (8PM-8AM)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {weekData.map(([dayName, dateStr, amSchedules, pmSchedules]) => (
-                    <tr key={dateStr} className="border-b hover:bg-muted/50">
-                      <td className="p-2 align-top">
-                        <div className="font-medium">{dayName}</div>
-                        <div className="text-xs text-muted-foreground">{format(new Date(dateStr), "MMM d")}</div>
-                      </td>
-                      <td className="p-2 align-top">
-                        {amSchedules.length === 0 ? (
-                          <span className="text-sm text-muted-foreground">No assignment</span>
-                        ) : (
-                          amSchedules.map((sched: Schedule, idx: number) => {
-                            const driver = drivers.find(d => d.id === sched.driver_id);
-                            const truck = trucks.find(t => t.id === sched.truck_id);
-                            const assignedHelpers = sched.helper_ids
-                              .map(hid => helpers.find(h => h.id === hid)?.name)
-                              .filter(Boolean);
-                            
-                            return (
-                              <div key={idx} className="mb-2 rounded-sm bg-muted p-2 text-sm">
-                                <div className="flex items-start justify-between">
-                                  <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                      <Users className="h-3 w-3" />
-                                      <span className="font-medium">{driver?.name || "N/A"}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Truck className="h-3 w-3" />
-                                      <span>{truck?.code || "N/A"}</span>
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      Helpers: {assignedHelpers.join(", ")}
-                                    </div>
-                                  </div>
-                                  <Dialog>
-                                    <DialogTrigger asChild>
-                                      <Button 
-                                        variant="ghost" 
-                                        size="sm"
-                                        onClick={() => setEditingSchedule(sched)}
-                                      >
-                                        <Edit2 className="h-3 w-3" />
-                                      </Button>
-                                    </DialogTrigger>
-                                    <DialogContent>
-                                      <DialogHeader>
-                                        <DialogTitle>Edit Schedule</DialogTitle>
-                                      </DialogHeader>
-                                      {editingSchedule && (
-                                        <div className="space-y-4">
-                                          <div>
-                                            <Label>Driver</Label>
-                                            <Select 
-                                              value={editingSchedule.driver_id}
-                                              onValueChange={(v) => setEditingSchedule({...editingSchedule, driver_id: v})}
-                                            >
-                                              <SelectTrigger>
-                                                <SelectValue />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                {drivers.map(d => (
-                                                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                                                ))}
-                                              </SelectContent>
-                                            </Select>
-                                          </div>
-                                          <div>
-                                            <Label>Truck</Label>
-                                            <Select 
-                                              value={editingSchedule.truck_id}
-                                              onValueChange={(v) => setEditingSchedule({...editingSchedule, truck_id: v})}
-                                            >
-                                              <SelectTrigger>
-                                                <SelectValue />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                {trucks.map(t => (
-                                                  <SelectItem key={t.id} value={t.id}>{t.code}</SelectItem>
-                                                ))}
-                                              </SelectContent>
-                                            </Select>
-                                          </div>
-                                          <div>
-                                            <Label>Helpers</Label>
-                                            <div className="space-y-2 mt-2">
-                                              {helpers.map(h => (
-                                                <div key={h.id} className="flex items-center gap-2">
-                                                  <Checkbox 
-                                                    checked={editingSchedule.helper_ids.includes(h.id)}
-                                                    onCheckedChange={(checked) => {
-                                                      if (checked) {
-                                                        setEditingSchedule({
-                                                          ...editingSchedule, 
-                                                          helper_ids: [...editingSchedule.helper_ids, h.id]
-                                                        });
-                                                      } else {
-                                                        setEditingSchedule({
-                                                          ...editingSchedule, 
-                                                          helper_ids: editingSchedule.helper_ids.filter(id => id !== h.id)
-                                                        });
-                                                      }
-                                                    }}
-                                                  />
-                                                  <Label>{h.name}</Label>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                          <Button onClick={() => updateSchedule(editingSchedule)}>
-                                            <Check className="mr-2 h-4 w-4" />
-                                            Save Changes
-                                          </Button>
-                                        </div>
-                                      )}
-                                    </DialogContent>
-                                  </Dialog>
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </td>
-                      <td className="p-2 align-top">
-                        {pmSchedules.length === 0 ? (
-                          <span className="text-sm text-muted-foreground">No assignment</span>
-                        ) : (
-                          pmSchedules.map((sched: Schedule, idx: number) => {
-                            const driver = drivers.find(d => d.id === sched.driver_id);
-                            const truck = trucks.find(t => t.id === sched.truck_id);
-                            const assignedHelpers = sched.helper_ids
-                              .map(hid => helpers.find(h => h.id === hid)?.name)
-                              .filter(Boolean);
-                            
-                            return (
-                              <div key={idx} className="mb-2 rounded-sm bg-muted p-2 text-sm">
-                                <div className="flex items-start justify-between">
-                                  <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                      <Users className="h-3 w-3" />
-                                      <span className="font-medium">{driver?.name || "N/A"}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Truck className="h-3 w-3" />
-                                      <span>{truck?.code || "N/A"}</span>
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      Helpers: {assignedHelpers.join(", ")}
-                                    </div>
-                                  </div>
-                                  <Dialog>
-                                    <DialogTrigger asChild>
-                                      <Button 
-                                        variant="ghost" 
-                                        size="sm"
-                                        onClick={() => setEditingSchedule(sched)}
-                                      >
-                                        <Edit2 className="h-3 w-3" />
-                                      </Button>
-                                    </DialogTrigger>
-                                    <DialogContent>
-                                      <DialogHeader>
-                                        <DialogTitle>Edit Schedule</DialogTitle>
-                                      </DialogHeader>
-                                      {editingSchedule && (
-                                        <div className="space-y-4">
-                                          <div>
-                                            <Label>Driver</Label>
-                                            <Select 
-                                              value={editingSchedule.driver_id}
-                                              onValueChange={(v) => setEditingSchedule({...editingSchedule, driver_id: v})}
-                                            >
-                                              <SelectTrigger>
-                                                <SelectValue />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                {drivers.map(d => (
-                                                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                                                ))}
-                                              </SelectContent>
-                                            </Select>
-                                          </div>
-                                          <div>
-                                            <Label>Truck</Label>
-                                            <Select 
-                                              value={editingSchedule.truck_id}
-                                              onValueChange={(v) => setEditingSchedule({...editingSchedule, truck_id: v})}
-                                            >
-                                              <SelectTrigger>
-                                                <SelectValue />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                {trucks.map(t => (
-                                                  <SelectItem key={t.id} value={t.id}>{t.code}</SelectItem>
-                                                ))}
-                                              </SelectContent>
-                                            </Select>
-                                          </div>
-                                          <div>
-                                            <Label>Helpers</Label>
-                                            <div className="space-y-2 mt-2">
-                                              {helpers.map(h => (
-                                                <div key={h.id} className="flex items-center gap-2">
-                                                  <Checkbox 
-                                                    checked={editingSchedule.helper_ids.includes(h.id)}
-                                                    onCheckedChange={(checked) => {
-                                                      if (checked) {
-                                                        setEditingSchedule({
-                                                          ...editingSchedule, 
-                                                          helper_ids: [...editingSchedule.helper_ids, h.id]
-                                                        });
-                                                      } else {
-                                                        setEditingSchedule({
-                                                          ...editingSchedule, 
-                                                          helper_ids: editingSchedule.helper_ids.filter(id => id !== h.id)
-                                                        });
-                                                      }
-                                                    }}
-                                                  />
-                                                  <Label>{h.name}</Label>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                          <Button onClick={() => updateSchedule(editingSchedule)}>
-                                            <Check className="mr-2 h-4 w-4" />
-                                            Save Changes
-                                          </Button>
-                                        </div>
-                                      )}
-                                    </DialogContent>
-                                  </Dialog>
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </td>
+          {/* Weekly Schedule Chart */}
+          {schedules.length > 0 && startDate && endDate && (
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold mb-4">Weekly Schedule Chart</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-muted">
+                      <th className="border border-border p-2 text-left">Date</th>
+                      <th className="border border-border p-2 text-left">Shift</th>
+                      <th className="border border-border p-2 text-left">Trucks</th>
+                      <th className="border border-border p-2 text-left">Assignments</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const dates: string[] = [];
+                      let currentDate = new Date(startDate);
+                      while (currentDate <= endDate) {
+                        dates.push(format(currentDate, "yyyy-MM-dd"));
+                        currentDate = addDays(currentDate, 1);
+                      }
+                      
+                      return dates.flatMap(date => 
+                        shifts.map(shift => {
+                          const shiftSchedules = schedules.filter(s => s.date === date && s.shift === shift);
+                          return (
+                            <tr key={`${date}-${shift}`} className="hover:bg-muted/50">
+                              <td className="border border-border p-2">{format(new Date(date), "EEE, MMM dd")}</td>
+                              <td className="border border-border p-2">
+                                {shift === "AM" ? "8AM-8PM" : "8PM-8AM"}
+                              </td>
+                              <td className="border border-border p-2 font-semibold">{shiftSchedules.length}</td>
+                              <td className="border border-border p-2">
+                                {shiftSchedules.length === 0 ? (
+                                  <span className="text-muted-foreground">No assignments</span>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {shiftSchedules.map((schedule, idx) => {
+                                      const driver = drivers.find(d => d.id === schedule.driver_id);
+                                      const truck = trucks.find(t => t.id === schedule.truck_id);
+                                      const scheduleHelpers = helpers.filter(h => schedule.helper_ids.includes(h.id));
+                                      
+                                      return (
+                                        <div key={idx} className="flex items-start gap-2 text-sm">
+                                          <Dialog>
+                                            <DialogTrigger asChild>
+                                              <Button 
+                                                variant="ghost" 
+                                                size="sm"
+                                                className="h-6 px-2"
+                                                onClick={() => setEditingSchedule(schedule)}
+                                              >
+                                                <Edit2 className="h-3 w-3" />
+                                              </Button>
+                                            </DialogTrigger>
+                                            <DialogContent className="bg-background">
+                                              <DialogHeader>
+                                                <DialogTitle>Edit Schedule Assignment</DialogTitle>
+                                              </DialogHeader>
+                                              <div className="space-y-4">
+                                                <div>
+                                                  <Label>Driver</Label>
+                                                  <Select 
+                                                    value={editingSchedule?.driver_id || undefined} 
+                                                    onValueChange={(value) => setEditingSchedule(prev => prev ? {...prev, driver_id: value} : null)}
+                                                  >
+                                                    <SelectTrigger>
+                                                      <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-background">
+                                                      {drivers.map(d => (
+                                                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                                      ))}
+                                                    </SelectContent>
+                                                  </Select>
+                                                </div>
+                                                {!schedule.is_backup && (
+                                                  <div>
+                                                    <Label>Truck</Label>
+                                                    <Select 
+                                                      value={editingSchedule?.truck_id || undefined} 
+                                                      onValueChange={(value) => setEditingSchedule(prev => prev ? {...prev, truck_id: value} : null)}
+                                                    >
+                                                      <SelectTrigger>
+                                                        <SelectValue />
+                                                      </SelectTrigger>
+                                                      <SelectContent className="bg-background">
+                                                        {trucks.map(t => (
+                                                          <SelectItem key={t.id} value={t.id}>{t.code}</SelectItem>
+                                                        ))}
+                                                      </SelectContent>
+                                                    </Select>
+                                                  </div>
+                                                )}
+                                                <div>
+                                                  <Label>Helpers ({schedule.is_backup ? "Backup" : "2-4 per truck"})</Label>
+                                                  <div className="space-y-2 mt-2 max-h-60 overflow-y-auto">
+                                                    {helpers.map(h => (
+                                                      <div key={h.id} className="flex items-center space-x-2">
+                                                        <Checkbox 
+                                                          checked={editingSchedule?.helper_ids.includes(h.id)}
+                                                          onCheckedChange={(checked) => {
+                                                            setEditingSchedule(prev => {
+                                                              if (!prev) return null;
+                                                              const newHelperIds = checked 
+                                                                ? [...prev.helper_ids, h.id]
+                                                                : prev.helper_ids.filter(id => id !== h.id);
+                                                              return {...prev, helper_ids: newHelperIds};
+                                                            });
+                                                          }}
+                                                        />
+                                                        <Label>{h.name}</Label>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                                <Button onClick={() => updateSchedule(editingSchedule!)}>
+                                                  <Check className="h-4 w-4 mr-2" />
+                                                  Save Changes
+                                                </Button>
+                                              </div>
+                                            </DialogContent>
+                                          </Dialog>
+                                          <div className="flex-1">
+                                            {schedule.is_backup && <span className="font-semibold text-orange-500">[BACKUP] </span>}
+                                            <span className="font-medium">{driver?.name}</span>
+                                            {!schedule.is_backup && <span> • {truck?.code}</span>}
+                                            <span className="text-muted-foreground"> • {scheduleHelpers.length} helpers</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      );
+                    })()}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
 
+      {/* Truck Deployment Dialog */}
+      <Dialog open={showDeploymentDialog} onOpenChange={setShowDeploymentDialog}>
+        <DialogContent className="max-w-4xl bg-background max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Configure Truck Deployment</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Specify how many trucks to deploy for each shift. If more than 5 trucks are deployed, backup driver and helper will be added automatically.
+            </p>
+            <div className="space-y-3">
+              {Object.keys(truckDeployment).sort().map(date => (
+                <Card key={date}>
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm">{format(new Date(date), "EEEE, MMMM dd, yyyy")}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="py-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Morning Shift (8AM-8PM)</Label>
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          max={trucks.length}
+                          value={truckDeployment[date]?.AM || 0}
+                          onChange={(e) => updateTruckDeployment(date, "AM", e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {truckDeployment[date]?.AM > 5 && "⚠️ Backup personnel will be assigned"}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Night Shift (8PM-8AM)</Label>
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          max={trucks.length}
+                          value={truckDeployment[date]?.PM || 0}
+                          onChange={(e) => updateTruckDeployment(date, "PM", e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {truckDeployment[date]?.PM > 5 && "⚠️ Backup personnel will be assigned"}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <div className="flex gap-2 pt-4">
+              <Button onClick={generateWeekSchedule} disabled={loading}>
+                Generate Schedule
+              </Button>
+              <Button variant="outline" onClick={() => setShowDeploymentDialog(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Availability Management */}
       <Card>
         <CardHeader>
           <CardTitle>Manage Availability</CardTitle>
-          <CardDescription>Override driver and helper availability settings</CardDescription>
+          <CardDescription>Update driver and helper availability for scheduling</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <h3 className="font-semibold mb-2">Drivers</h3>
-            <div className="space-y-2">
-              {drivers.map(driver => (
-                <div key={driver.id} className="flex items-center justify-between p-2 border rounded">
-                  <div>
-                    <p className="font-medium">{driver.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Shifts: {(driver.availability as any)?.shifts?.join(", ") || "None"} | 
-                      Days: {(driver.availability as any)?.days?.join(", ") || "None"}
-                    </p>
-                  </div>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setEditingAvailability({ type: 'driver', id: driver.id, data: driver })}
-                      >
-                        <Edit2 className="h-3 w-3 mr-1" />
-                        Edit
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Edit Driver Availability - {driver.name}</DialogTitle>
-                      </DialogHeader>
-                      {editingAvailability && editingAvailability.type === 'driver' && (
-                        <div className="space-y-4">
-                          <div>
-                            <Label>Shifts</Label>
-                            <div className="flex gap-4 mt-2">
-                              {shifts.map(shift => (
-                                <div key={shift} className="flex items-center gap-2">
-                                  <Checkbox 
-                                    checked={editingAvailability.data.availability?.shifts?.includes(shift) || false}
-                                    onCheckedChange={(checked) => {
-                                      const currentShifts = editingAvailability.data.availability?.shifts || [];
-                                      const newShifts = checked 
-                                        ? [...currentShifts, shift]
-                                        : currentShifts.filter((s: string) => s !== shift);
-                                      setEditingAvailability({
-                                        ...editingAvailability,
-                                        data: {
-                                          ...editingAvailability.data,
-                                          availability: { ...editingAvailability.data.availability, shifts: newShifts }
-                                        }
-                                      });
-                                    }}
-                                  />
-                                  <Label>{shift}</Label>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <Label>Days</Label>
-                            <div className="grid grid-cols-4 gap-2 mt-2">
-                              {daysOfWeek.map(day => (
-                                <div key={day} className="flex items-center gap-2">
-                                  <Checkbox 
-                                    checked={editingAvailability.data.availability?.days?.includes(day) || false}
-                                    onCheckedChange={(checked) => {
-                                      const currentDays = editingAvailability.data.availability?.days || [];
-                                      const newDays = checked 
-                                        ? [...currentDays, day]
-                                        : currentDays.filter((d: string) => d !== day);
-                                      setEditingAvailability({
-                                        ...editingAvailability,
-                                        data: {
-                                          ...editingAvailability.data,
-                                          availability: { ...editingAvailability.data.availability, days: newDays }
-                                        }
-                                      });
-                                    }}
-                                  />
-                                  <Label>{day}</Label>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <Button onClick={updateAvailability}>
-                            <Check className="mr-2 h-4 w-4" />
-                            Save Changes
-                          </Button>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <h3 className="font-semibold mb-3">Drivers ({drivers.length})</h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {drivers.map(driver => {
+                  const avail = driver.availability as any;
+                  return (
+                    <div key={driver.id} className="flex items-center justify-between p-2 border border-border rounded">
+                      <div className="flex-1">
+                        <div className="font-medium">{driver.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {avail?.shifts?.join(", ")} • {avail?.days?.join(", ")}
                         </div>
-                      )}
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              ))}
+                      </div>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setEditingAvailability({ type: 'driver', id: driver.id, data: driver.availability })}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="bg-background">
+                          <DialogHeader>
+                            <DialogTitle>Edit Driver Availability - {driver.name}</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <div>
+                              <Label>Available Shifts</Label>
+                              <div className="space-y-2 mt-2">
+                                {shifts.map(shift => (
+                                  <div key={shift} className="flex items-center space-x-2">
+                                    <Checkbox 
+                                      checked={editingAvailability?.data?.shifts?.includes(shift)}
+                                      onCheckedChange={(checked) => {
+                                        setEditingAvailability(prev => {
+                                          if (!prev) return null;
+                                          const newShifts = checked 
+                                            ? [...(prev.data?.shifts || []), shift]
+                                            : (prev.data?.shifts || []).filter((s: string) => s !== shift);
+                                          return {...prev, data: {...prev.data, shifts: newShifts}};
+                                        });
+                                      }}
+                                    />
+                                    <Label>{shift} ({shift === "AM" ? "8AM-8PM" : "8PM-8AM"})</Label>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <Label>Available Days</Label>
+                              <div className="grid grid-cols-2 gap-2 mt-2">
+                                {daysOfWeek.map(day => (
+                                  <div key={day} className="flex items-center space-x-2">
+                                    <Checkbox 
+                                      checked={editingAvailability?.data?.days?.includes(day)}
+                                      onCheckedChange={(checked) => {
+                                        setEditingAvailability(prev => {
+                                          if (!prev) return null;
+                                          const newDays = checked 
+                                            ? [...(prev.data?.days || []), day]
+                                            : (prev.data?.days || []).filter((d: string) => d !== day);
+                                          return {...prev, data: {...prev.data, days: newDays}};
+                                        });
+                                      }}
+                                    />
+                                    <Label>{day}</Label>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <Button onClick={() => updateAvailability('driver', driver.id, editingAvailability!.data)}>
+                              <Check className="h-4 w-4 mr-2" />
+                              Save Changes
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-
-          <div>
-            <h3 className="font-semibold mb-2">Helpers</h3>
-            <div className="space-y-2">
-              {helpers.map(helper => (
-                <div key={helper.id} className="flex items-center justify-between p-2 border rounded">
-                  <div>
-                    <p className="font-medium">{helper.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Shifts: {(helper.availability as any)?.shifts?.join(", ") || "None"} | 
-                      Days: {(helper.availability as any)?.days?.join(", ") || "None"}
-                    </p>
-                  </div>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setEditingAvailability({ type: 'helper', id: helper.id, data: helper })}
-                      >
-                        <Edit2 className="h-3 w-3 mr-1" />
-                        Edit
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Edit Helper Availability - {helper.name}</DialogTitle>
-                      </DialogHeader>
-                      {editingAvailability && editingAvailability.type === 'helper' && (
-                        <div className="space-y-4">
-                          <div>
-                            <Label>Shifts</Label>
-                            <div className="flex gap-4 mt-2">
-                              {shifts.map(shift => (
-                                <div key={shift} className="flex items-center gap-2">
-                                  <Checkbox 
-                                    checked={editingAvailability.data.availability?.shifts?.includes(shift) || false}
-                                    onCheckedChange={(checked) => {
-                                      const currentShifts = editingAvailability.data.availability?.shifts || [];
-                                      const newShifts = checked 
-                                        ? [...currentShifts, shift]
-                                        : currentShifts.filter((s: string) => s !== shift);
-                                      setEditingAvailability({
-                                        ...editingAvailability,
-                                        data: {
-                                          ...editingAvailability.data,
-                                          availability: { ...editingAvailability.data.availability, shifts: newShifts }
-                                        }
-                                      });
-                                    }}
-                                  />
-                                  <Label>{shift}</Label>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <Label>Days</Label>
-                            <div className="grid grid-cols-4 gap-2 mt-2">
-                              {daysOfWeek.map(day => (
-                                <div key={day} className="flex items-center gap-2">
-                                  <Checkbox 
-                                    checked={editingAvailability.data.availability?.days?.includes(day) || false}
-                                    onCheckedChange={(checked) => {
-                                      const currentDays = editingAvailability.data.availability?.days || [];
-                                      const newDays = checked 
-                                        ? [...currentDays, day]
-                                        : currentDays.filter((d: string) => d !== day);
-                                      setEditingAvailability({
-                                        ...editingAvailability,
-                                        data: {
-                                          ...editingAvailability.data,
-                                          availability: { ...editingAvailability.data.availability, days: newDays }
-                                        }
-                                      });
-                                    }}
-                                  />
-                                  <Label>{day}</Label>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <Button onClick={updateAvailability}>
-                            <Check className="mr-2 h-4 w-4" />
-                            Save Changes
-                          </Button>
+            
+            <div>
+              <h3 className="font-semibold mb-3">Helpers ({helpers.length})</h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {helpers.map(helper => {
+                  const avail = helper.availability as any;
+                  return (
+                    <div key={helper.id} className="flex items-center justify-between p-2 border border-border rounded">
+                      <div className="flex-1">
+                        <div className="font-medium">{helper.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {avail?.shifts?.join(", ")} • {avail?.days?.join(", ")}
                         </div>
-                      )}
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              ))}
+                      </div>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setEditingAvailability({ type: 'helper', id: helper.id, data: helper.availability })}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="bg-background">
+                          <DialogHeader>
+                            <DialogTitle>Edit Helper Availability - {helper.name}</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <div>
+                              <Label>Available Shifts</Label>
+                              <div className="space-y-2 mt-2">
+                                {shifts.map(shift => (
+                                  <div key={shift} className="flex items-center space-x-2">
+                                    <Checkbox 
+                                      checked={editingAvailability?.data?.shifts?.includes(shift)}
+                                      onCheckedChange={(checked) => {
+                                        setEditingAvailability(prev => {
+                                          if (!prev) return null;
+                                          const newShifts = checked 
+                                            ? [...(prev.data?.shifts || []), shift]
+                                            : (prev.data?.shifts || []).filter((s: string) => s !== shift);
+                                          return {...prev, data: {...prev.data, shifts: newShifts}};
+                                        });
+                                      }}
+                                    />
+                                    <Label>{shift} ({shift === "AM" ? "8AM-8PM" : "8PM-8AM"})</Label>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <Label>Available Days</Label>
+                              <div className="grid grid-cols-2 gap-2 mt-2">
+                                {daysOfWeek.map(day => (
+                                  <div key={day} className="flex items-center space-x-2">
+                                    <Checkbox 
+                                      checked={editingAvailability?.data?.days?.includes(day)}
+                                      onCheckedChange={(checked) => {
+                                        setEditingAvailability(prev => {
+                                          if (!prev) return null;
+                                          const newDays = checked 
+                                            ? [...(prev.data?.days || []), day]
+                                            : (prev.data?.days || []).filter((d: string) => d !== day);
+                                          return {...prev, data: {...prev.data, days: newDays}};
+                                        });
+                                      }}
+                                    />
+                                    <Label>{day}</Label>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <Button onClick={() => updateAvailability('helper', helper.id, editingAvailability!.data)}>
+                              <Check className="h-4 w-4 mr-2" />
+                              Save Changes
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </CardContent>
