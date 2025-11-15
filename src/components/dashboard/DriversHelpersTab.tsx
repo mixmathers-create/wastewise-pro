@@ -56,8 +56,7 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
         license_number: row.license_number || null,
         id_number: row.id_number || `DRV-${Date.now().toString().slice(-6)}`,
         birthdate: row.birthdate || null,
-        contact_number: row.contact_number || null,
-        team_id: profile?.team_id || '00000000-0000-0000-0000-000000000001'
+        contact_number: row.contact_number || null
       }));
 
       const { error } = await supabase.from("drivers").insert(driversToInsert);
@@ -84,8 +83,7 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
         name: row.name,
         id_number: row.id_number || `HLP-${Date.now().toString().slice(-6)}`,
         birthdate: row.birthdate || null,
-        contact_number: row.contact_number || null,
-        team_id: profile?.team_id || '00000000-0000-0000-0000-000000000001'
+        contact_number: row.contact_number || null
       }));
 
       const { error } = await supabase.from("helpers").insert(helpersToInsert);

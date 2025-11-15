@@ -25,7 +25,6 @@ const AddDriverDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
       const generatedId = `DRV-${Date.now().toString().slice(-6)}`;
       
       const { error } = await supabase.from("drivers").insert({
-        team_id: profile?.team_id || "00000000-0000-0000-0000-000000000001",
         name,
         license_number: license,
         id_number: idNumber || generatedId,

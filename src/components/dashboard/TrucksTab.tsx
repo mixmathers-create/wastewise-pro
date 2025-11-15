@@ -48,8 +48,7 @@ const TrucksTab = ({ profile }: { profile: any }) => {
       const trucksToInsert = rows.map(row => ({
         code: row.code,
         plate_number: row.plate_number,
-        type: row.type,
-        team_id: profile?.team_id || '00000000-0000-0000-0000-000000000001'
+        type: row.type
       }));
 
       const { error } = await supabase.from("trucks").insert(trucksToInsert);

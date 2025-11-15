@@ -36,28 +36,15 @@ const Signup = () => {
       if (authError) throw authError;
 
       if (authData.user) {
-        // Create team
-        const { data: teamData, error: teamError } = await supabase
-          .from("teams")
-          .insert({ name: teamName })
-          .select()
-          .single();
-
-        if (teamError) throw teamError;
-
-        // CRITICAL: Create user_roles FIRST (required for RLS on profiles)
         const { error: roleError } = await supabase.from("user_roles").insert({
           user_id: authData.user.id,
-          team_id: teamData.id,
           role: role,
         });
 
         if (roleError) throw roleError;
 
-        // Now create profile (RLS will work since user_roles exists)
         const { error: profileError } = await supabase.from("profiles").insert({
           user_id: authData.user.id,
-          team_id: teamData.id,
           full_name: fullName,
           email: email,
           role: role,
@@ -70,7 +57,6 @@ const Signup = () => {
           description: "You're now logged in. Welcome to WasteWise!",
         });
 
-        // Auto-login: user is already authenticated, just navigate
         navigate("/dashboard");
       }
     } catch (error: any) {
@@ -96,16 +82,6 @@ const Signup = () => {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignup} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="teamName">Team Name</Label>
-              <Input
-                id="teamName"
-                placeholder="Your Company Name"
-                value={teamName}
-                onChange={(e) => setTeamName(e.target.value)}
-                required
-              />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="fullName">Full Name</Label>
               <Input

@@ -28,9 +28,8 @@ const Login = () => {
       if (error) throw error;
 
       if (data.user) {
-        // Post-login bootstrap: Link to Demo team if no profile exists
+        // Post-login bootstrap: Create profile if doesn't exist
         try {
-          // Check if profile exists
           const { data: existingProfile } = await supabase
             .from("profiles")
             .select("*")
@@ -38,36 +37,20 @@ const Login = () => {
             .maybeSingle();
 
           if (!existingProfile) {
-            // Find Demo team (or any existing team with data)
-            const { data: demoTeam } = await supabase
-              .from("teams")
-              .select("*")
-              .or('name.eq.Demo Waste Management Team,name.eq.Demo WasteWise Team')
-              .maybeSingle();
+            await supabase.from("user_roles").insert({
+              user_id: data.user.id,
+              role: "admin",
+            });
 
-            const teamId = demoTeam?.id;
-
-            if (teamId) {
-              // Create user_roles first
-              await supabase.from("user_roles").insert({
-                user_id: data.user.id,
-                team_id: teamId,
-                role: "admin",
-              });
-
-              // Create profile
-              await supabase.from("profiles").insert({
-                user_id: data.user.id,
-                team_id: teamId,
-                full_name: data.user.email?.split("@")[0] || "User",
-                email: data.user.email || "",
-                role: "admin",
-              });
-            }
+            await supabase.from("profiles").insert({
+              user_id: data.user.id,
+              full_name: data.user.email?.split("@")[0] || "User",
+              email: data.user.email || "",
+              role: "admin",
+            });
           }
         } catch (bootstrapError) {
           console.error("Bootstrap error:", bootstrapError);
-          // Continue login even if bootstrap fails
         }
 
         toast({

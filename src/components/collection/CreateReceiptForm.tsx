@@ -154,7 +154,6 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       const signatureData = sigCanvas.current.toDataURL();
 
       const { error } = await supabase.from("collection_receipts").insert({
-        team_id: profile?.team_id || null,
         client_id: clientData.id,
         truck_id: selectedTruck,
         driver_id: selectedDriver,
@@ -189,6 +188,12 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const generatePDF = async (receiptQR: string, client: any, signature: string) => {
     const now = new Date();
     const logoUrl = localStorage.getItem("receipt_logo");
+    const companyName = localStorage.getItem("receipt_company_name") || "WASTEWISE";
+    const companyAddress = localStorage.getItem("receipt_company_address") || "";
+    const companyContact = localStorage.getItem("receipt_company_contact") || "";
+    const headerText = localStorage.getItem("receipt_header") || "COLLECTION RECEIPT";
+    const footerText = localStorage.getItem("receipt_footer") || "Thank you for your cooperation!";
+    const baseFontSize = parseInt(localStorage.getItem("receipt_font_size") || "8");
     
     const truckName = trucks.find((t) => t.id === selectedTruck)?.code || selectedTruck;
     const driverName = drivers.find((d) => d.id === selectedDriver)?.name || selectedDriver;
@@ -209,38 +214,53 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
         doc.addImage(logoUrl, "PNG", 14, y, 30, 15);
         y += 18;
       } catch (e) {
-        doc.setFontSize(12);
-        doc.text("WASTEWISE", 29, y, { align: "center" });
+        doc.setFontSize(baseFontSize + 4);
+        doc.text(companyName, 29, y, { align: "center" });
         y += 8;
       }
     } else {
-      doc.setFontSize(12);
-      doc.text("WASTEWISE", 29, y, { align: "center" });
+      doc.setFontSize(baseFontSize + 4);
+      doc.text(companyName, 29, y, { align: "center" });
       y += 8;
     }
 
+    // Company info
+    if (companyAddress || companyContact) {
+      doc.setFontSize(baseFontSize - 2);
+      if (companyAddress) {
+        doc.text(companyAddress, 29, y, { align: "center", maxWidth: 48 });
+        y += 4;
+      }
+      if (companyContact) {
+        doc.text(companyContact, 29, y, { align: "center" });
+        y += 4;
+      }
+    }
+
     // Header
-    doc.setFontSize(9);
-    doc.text("COLLECTION RECEIPT", 29, y, { align: "center" });
+    doc.setFontSize(baseFontSize + 1);
+    doc.text(headerText, 29, y, { align: "center" });
     y += 5;
-    doc.setFontSize(7);
+    doc.setFontSize(baseFontSize - 1);
     doc.text(`Serial: ${receiptQR}`, 29, y, { align: "center" });
     y += 4;
     doc.text(`${now.toLocaleDateString()} • ${now.toLocaleTimeString()}`, 29, y, { align: "center" });
     y += 8;
 
     // Client Info
-    doc.setFontSize(6);
+    doc.setFontSize(baseFontSize - 2);
     doc.text("CLIENT INFORMATION", 5, y);
     y += 4;
-    doc.setFontSize(7);
+    doc.setFontSize(baseFontSize - 1);
     doc.text(client.name, 5, y);
     y += 3;
-    doc.setFontSize(6);
+    doc.setFontSize(baseFontSize - 2);
     doc.text(`ID: ${client.id.slice(0, 8)}`, 5, y);
     y += 3;
-    doc.text(client.address || "", 5, y, { maxWidth: 48 });
-    y += 3;
+    if (client.address) {
+      doc.text(client.address, 5, y, { maxWidth: 48 });
+      y += 3;
+    }
     doc.text(`Industry: ${client.industry}`, 5, y);
     y += 3;
     if (client.contact_person) {
@@ -257,10 +277,10 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     y += 5;
 
     // Collection Details
-    doc.setFontSize(6);
+    doc.setFontSize(baseFontSize - 2);
     doc.text("COLLECTION DETAILS", 5, y);
     y += 4;
-    doc.setFontSize(7);
+    doc.setFontSize(baseFontSize - 1);
     doc.text(`Truck: ${truckName}`, 5, y);
     y += 3;
     doc.text(`Driver: ${driverName}`, 5, y);
@@ -269,16 +289,16 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     y += 6;
 
     // Waste Items
-    doc.setFontSize(6);
+    doc.setFontSize(baseFontSize - 2);
     doc.text("WASTE COLLECTED", 5, y);
     y += 4;
-    doc.setFontSize(7);
+    doc.setFontSize(baseFontSize - 1);
     items.forEach((item) => {
       doc.text(item.waste_type, 5, y);
       y += 3;
     });
     y += 2;
-    doc.setFontSize(8);
+    doc.setFontSize(baseFontSize);
     doc.text(`TOTAL: ${totalQuantity} (mixed units)`, 5, y);
     y += 6;
 
@@ -297,11 +317,11 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     // Receipt QR
     doc.addImage(receiptQrUrl, "PNG", 19, y, 20, 20);
     y += 22;
-    doc.setFontSize(6);
+    doc.setFontSize(baseFontSize - 2);
     doc.text("Scan to verify receipt", 29, y, { align: "center" });
     y += 5;
-    doc.setFontSize(5);
-    doc.text("Thank you for your cooperation!", 29, y, { align: "center" });
+    doc.setFontSize(baseFontSize - 3);
+    doc.text(footerText, 29, y, { align: "center", maxWidth: 50 });
 
     doc.save(`receipt-${receiptQR}.pdf`);
     toast({ title: "PDF Generated", description: "Receipt downloaded" });

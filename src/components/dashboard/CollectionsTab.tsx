@@ -71,7 +71,7 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
                 <TableHead>Date</TableHead>
                 <TableHead>QR Code</TableHead>
                 <TableHead>Signed By</TableHead>
-                <TableHead>PDF</TableHead>
+                <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -80,7 +80,7 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
                   <TableCell>{new Date(r.created_at).toLocaleString()}</TableCell>
                   <TableCell className="font-medium">{r.qr_code}</TableCell>
                   <TableCell>{r.signed_by || '-'}</TableCell>
-                  <TableCell>{r.pdf_url ? <a className="underline" href={r.pdf_url} target="_blank" rel="noreferrer">Open</a> : '-'}</TableCell>
+                  <TableCell><span className="text-green-600">Completed</span></TableCell>
                 </TableRow>
               ))}
             </TableBody>
