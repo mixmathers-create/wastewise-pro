@@ -52,44 +52,57 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
   useEffect(() => {
     if (showWebScanner && !Capacitor.isNativePlatform()) {
-      const scanner = new Html5QrcodeScanner(
-        "qr-reader",
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        false
-      );
-      
-      scanner.render(
-        async (decodedText) => {
-          setQrInput(decodedText);
-          toast({ title: "QR Code Scanned", description: "Looking up client..." });
-          
-          // Auto-lookup the client
-          const { data, error } = await supabase
-            .from("clients")
-            .select("*")
-            .eq("qr_code", decodedText)
-            .single();
-            
-          if (error || !data) {
-            toast({ title: "Client not found", description: "No client matches this QR code.", variant: "destructive" });
-          } else {
-            await loadResources();
-            setClientData(data);
-            toast({ title: "Client Found", description: `Loaded: ${data.name}` });
-          }
-          
-          scanner.clear();
-          setShowWebScanner(false);
-        },
-        (errorMessage) => {
-          // Ignore scanning errors, they happen continuously
+      // Wait for dialog to fully render before initializing scanner
+      const timeoutId = setTimeout(() => {
+        const element = document.getElementById("qr-reader");
+        if (!element) {
+          console.error("QR reader element not found");
+          return;
         }
-      );
-      
-      scannerRef.current = scanner;
+
+        const scanner = new Html5QrcodeScanner(
+          "qr-reader",
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          false
+        );
+        
+        scanner.render(
+          async (decodedText) => {
+            setQrInput(decodedText);
+            toast({ title: "QR Code Scanned", description: "Looking up client..." });
+            
+            // Auto-lookup the client
+            const { data, error } = await supabase
+              .from("clients")
+              .select("*")
+              .eq("qr_code", decodedText)
+              .single();
+              
+            if (error || !data) {
+              toast({ title: "Client not found", description: "No client matches this QR code.", variant: "destructive" });
+            } else {
+              await loadResources();
+              setClientData(data);
+              toast({ title: "Client Found", description: `Loaded: ${data.name}` });
+            }
+            
+            scanner.clear();
+            setShowWebScanner(false);
+          },
+          (errorMessage) => {
+            // Ignore scanning errors, they happen continuously
+          }
+        );
+        
+        scannerRef.current = scanner;
+      }, 100);
       
       return () => {
-        scanner.clear();
+        clearTimeout(timeoutId);
+        if (scannerRef.current) {
+          scannerRef.current.clear().catch(() => {});
+          scannerRef.current = null;
+        }
       };
     }
   }, [showWebScanner]);
@@ -440,13 +453,25 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
   return (
     <>
-      <Dialog open={showWebScanner} onOpenChange={setShowWebScanner}>
+      <Dialog open={showWebScanner} onOpenChange={(open) => {
+        if (!open && scannerRef.current) {
+          scannerRef.current.clear().catch(() => {});
+          scannerRef.current = null;
+        }
+        setShowWebScanner(open);
+      }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Scan QR Code</DialogTitle>
           </DialogHeader>
-          <div id="qr-reader" className="w-full"></div>
-          <Button variant="outline" onClick={() => setShowWebScanner(false)}>
+          <div id="qr-reader" className="w-full min-h-[300px]"></div>
+          <Button variant="outline" onClick={() => {
+            if (scannerRef.current) {
+              scannerRef.current.clear().catch(() => {});
+              scannerRef.current = null;
+            }
+            setShowWebScanner(false);
+          }}>
             Cancel
           </Button>
         </DialogContent>
