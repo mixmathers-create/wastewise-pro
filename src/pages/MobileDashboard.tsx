@@ -16,7 +16,7 @@ const MobileDashboard = () => {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-   const DashboardComponent = isNativePlatform() ? MobileDashboard : Dashboard;
+   
 
   useEffect(() => {
     checkUser();

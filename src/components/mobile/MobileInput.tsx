@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { NumericKeypad } from "./NumericKeypad";
 import { isNativePlatform } from "@/lib/capacitorUtils";
-import { MobileInput } from "@/components/mobile/MobileInput";
+
 
 interface MobileInputProps extends Omit<React.ComponentProps<typeof Input>, 'onChange'> {
   value: string;
@@ -41,12 +41,14 @@ export const MobileInput = ({
 
   return (
     <>
-      <MobileInput
-        type="number"
+      <Input
+        {...props}
         value={value}
-        onChange={setValue}
-        allowDecimal={true}
-        maxLength={10}
+        onChange={(e) => onChange(e.target.value)}
+        onClick={handleInputClick}
+        inputMode={type === "number" ? (allowDecimal ? "decimal" : "numeric") : undefined}
+        pattern={type === "number" ? (allowDecimal ? "[0-9]*[.,]?[0-9]*" : "[0-9]*") : undefined}
+        type={type === "number" ? "text" : type}
       />
 
       {isMobile && type === "number" && (
