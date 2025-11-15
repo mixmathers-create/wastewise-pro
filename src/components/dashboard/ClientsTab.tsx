@@ -22,7 +22,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
     setLoading(true);
     const { data, error } = await supabase
       .from("clients")
-      .select("id,name,industry,address,qr_code")
+      .select("id,name,industry,address,qr_code,contact_person,contact_number")
       .order("name");
     if (error) setError(error.message);
     setClients(data || []);
@@ -46,7 +46,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
   };
 
   const downloadTemplate = () => {
-    const csv = generateCSV([], ['name', 'industry', 'address', 'contact_info']);
+    const csv = generateCSV([], ['name', 'industry', 'address', 'contact_info', 'contact_person', 'contact_number']);
     downloadCSV(csv, 'clients-template.csv');
   };
 
@@ -63,6 +63,8 @@ const ClientsTab = ({ profile }: { profile: any }) => {
         industry: row.industry,
         address: row.address || null,
         contact_info: row.contact_info || null,
+        contact_person: row.contact_person || null,
+        contact_number: row.contact_number || null,
         qr_code: `CLIENT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         team_id: profile?.team_id || ''
       }));
@@ -126,6 +128,8 @@ const ClientsTab = ({ profile }: { profile: any }) => {
                 <TableHead>QR Code</TableHead>
                 <TableHead>Address</TableHead>
                 <TableHead>Industry</TableHead>
+                <TableHead>Contact Person</TableHead>
+                <TableHead>Contact Number</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -142,8 +146,10 @@ const ClientsTab = ({ profile }: { profile: any }) => {
                       <QRCodeImage qrCode={c.qr_code} />
                     </Button>
                   </TableCell>
-                  <TableCell>{c.address}</TableCell>
+                  <TableCell>{c.address || "—"}</TableCell>
                   <TableCell>{c.industry}</TableCell>
+                  <TableCell>{c.contact_person || "—"}</TableCell>
+                  <TableCell>{c.contact_number || "—"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Camera } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
 import jsPDF from "jspdf";
+import QRCode from "qrcode";
 import { Capacitor } from "@capacitor/core";
 import { Camera as CapCamera, CameraResultType } from "@capacitor/camera";
 
@@ -174,23 +175,122 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   };
 
   const generatePDF = async (receiptQR: string, client: any, signature: string) => {
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text("WasteWise Collection Receipt", 10, 10);
-    doc.setFontSize(12);
-    doc.text(`Receipt QR: ${receiptQR}`, 10, 20);
-    doc.text(`Client: ${client.name}`, 10, 30);
-    doc.text(`Industry: ${client.industry}`, 10, 40);
-    doc.text(`Address: ${client.address}`, 10, 50);
-    doc.text(`Truck: ${selectedTruck}`, 10, 60);
-    doc.text(`Driver: ${selectedDriver}`, 10, 70);
-    doc.text(`Helpers: ${selectedHelpers.join(", ")}`, 10, 80);
-    doc.text(`Signed by: ${signedBy}`, 10, 90);
-    let y = 100;
-    items.forEach((item, idx) => {
-      doc.text(`Item ${idx + 1}: ${item.waste_type} - ${item.quantity} ${item.unit}`, 10, y);
-      y += 10;
+    const now = new Date();
+    const logoUrl = localStorage.getItem("receipt_logo");
+    
+    const truckName = trucks.find((t) => t.id === selectedTruck)?.code || selectedTruck;
+    const driverName = drivers.find((d) => d.id === selectedDriver)?.name || selectedDriver;
+    const helperNames = selectedHelpers.map((hid) => helpers.find((h) => h.id === hid)?.name || hid);
+    
+    const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+    
+    // Generate QR codes
+    const clientQrUrl = await QRCode.toDataURL(client.qr_code, { width: 150 });
+    const receiptQrUrl = await QRCode.toDataURL(receiptQR, { width: 150 });
+
+    const doc = new jsPDF({ format: [58, 200], unit: "mm" });
+    let y = 10;
+
+    // Logo or company name
+    if (logoUrl) {
+      try {
+        doc.addImage(logoUrl, "PNG", 14, y, 30, 15);
+        y += 18;
+      } catch (e) {
+        doc.setFontSize(12);
+        doc.text("WASTEWISE", 29, y, { align: "center" });
+        y += 8;
+      }
+    } else {
+      doc.setFontSize(12);
+      doc.text("WASTEWISE", 29, y, { align: "center" });
+      y += 8;
+    }
+
+    // Header
+    doc.setFontSize(9);
+    doc.text("COLLECTION RECEIPT", 29, y, { align: "center" });
+    y += 5;
+    doc.setFontSize(7);
+    doc.text(`Serial: ${receiptQR}`, 29, y, { align: "center" });
+    y += 4;
+    doc.text(`${now.toLocaleDateString()} • ${now.toLocaleTimeString()}`, 29, y, { align: "center" });
+    y += 8;
+
+    // Client Info
+    doc.setFontSize(6);
+    doc.text("CLIENT INFORMATION", 5, y);
+    y += 4;
+    doc.setFontSize(7);
+    doc.text(client.name, 5, y);
+    y += 3;
+    doc.setFontSize(6);
+    doc.text(`ID: ${client.id.slice(0, 8)}`, 5, y);
+    y += 3;
+    doc.text(client.address || "", 5, y, { maxWidth: 48 });
+    y += 3;
+    doc.text(`Industry: ${client.industry}`, 5, y);
+    y += 3;
+    if (client.contact_person) {
+      doc.text(`Contact: ${client.contact_person}`, 5, y);
+      y += 3;
+    }
+    if (client.contact_number) {
+      doc.text(`Tel: ${client.contact_number}`, 5, y);
+      y += 3;
+    }
+    
+    // Client QR
+    doc.addImage(clientQrUrl, "PNG", 40, y - 15, 15, 15);
+    y += 5;
+
+    // Collection Details
+    doc.setFontSize(6);
+    doc.text("COLLECTION DETAILS", 5, y);
+    y += 4;
+    doc.setFontSize(7);
+    doc.text(`Truck: ${truckName}`, 5, y);
+    y += 3;
+    doc.text(`Driver: ${driverName}`, 5, y);
+    y += 3;
+    doc.text(`Helpers: ${helperNames.join(", ")}`, 5, y, { maxWidth: 48 });
+    y += 6;
+
+    // Waste Items
+    doc.setFontSize(6);
+    doc.text("WASTE COLLECTED", 5, y);
+    y += 4;
+    doc.setFontSize(7);
+    items.forEach((item) => {
+      doc.text(item.waste_type, 5, y);
+      y += 3;
     });
+    y += 2;
+    doc.setFontSize(8);
+    doc.text(`TOTAL: ${totalQuantity} (mixed units)`, 5, y);
+    y += 6;
+
+    // Signature
+    doc.setFontSize(6);
+    doc.text("CLIENT SIGNATURE", 5, y);
+    y += 4;
+    if (signature) {
+      doc.addImage(signature, "PNG", 5, y, 48, 12);
+      y += 14;
+    }
+    doc.setFontSize(7);
+    doc.text(`Signed by: ${signedBy}`, 5, y);
+    y += 8;
+
+    // Receipt QR
+    doc.addImage(receiptQrUrl, "PNG", 19, y, 20, 20);
+    y += 22;
+    doc.setFontSize(6);
+    doc.text("Scan to verify receipt", 29, y, { align: "center" });
+    y += 5;
+    doc.setFontSize(5);
+    doc.text("Thank you for your cooperation!", 29, y, { align: "center" });
+
     doc.save(`receipt-${receiptQR}.pdf`);
     toast({ title: "PDF Generated", description: "Receipt downloaded" });
   };

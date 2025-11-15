@@ -16,6 +16,8 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
   const [industry, setIndustry] = useState("");
   const [address, setAddress] = useState("");
   const [contact, setContact] = useState("");
+  const [contactPerson, setContactPerson] = useState("");
+  const [contactNumber, setContactNumber] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +31,8 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
         industry,
         address,
         contact_info: contact,
+        contact_person: contactPerson,
+        contact_number: contactNumber,
         qr_code: qrCode,
       });
 
@@ -40,6 +44,8 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
       setIndustry("");
       setAddress("");
       setContact("");
+      setContactPerson("");
+      setContactNumber("");
       onAdded();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -73,6 +79,14 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
           <div>
             <Label htmlFor="contact">Contact Info</Label>
             <Input id="contact" value={contact} onChange={(e) => setContact(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="contactPerson">Contact Person</Label>
+            <Input id="contactPerson" value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="contactNumber">Contact Number</Label>
+            <Input id="contactNumber" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} />
           </div>
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? "Adding..." : "Add Client"}
