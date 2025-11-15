@@ -213,7 +213,7 @@ if (printerService.isConnected()) {
 }
 ```
 
-**Note**: The printer service is fully implemented using `capacitor-thermal-printer`. See `PRINTER_SETUP_GUIDE.md` for complete setup instructions.
+**Note**: The printer service is fully implemented using `lidta-capacitor-bl-printer`. See `PRINTER_SETUP_GUIDE.md` for complete setup instructions.
 
 ## Display Optimization
 
