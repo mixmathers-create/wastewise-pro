@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import html2canvas from 'html2canvas';
+import { LidtaCapacitorBlPrinter } from 'lidta-capacitor-bl-printer'; //lidta-capacitor-bl-printer plugin
 
 // Import the lidta-capacitor-bl-printer plugin
 const LidtaCapacitorBlPrinter = Capacitor.isPluginAvailable('LidtaCapacitorBlPrinter') 
