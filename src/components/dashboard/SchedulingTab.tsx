@@ -99,6 +99,16 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [maintenanceExpanded, setMaintenanceExpanded] = useState(false);
+  
+  const [showPeekDialog, setShowPeekDialog] = useState(false);
+  const [peekSchedules, setPeekSchedules] = useState<Schedule[]>([]);
+  const [peekTitle, setPeekTitle] = useState<string>("");
+  
+  const [showDraftsDialog, setShowDraftsDialog] = useState(false);
+  const [draftsInDialog, setDraftsInDialog] = useState<Schedule[]>([]);
+  const [draftsDialogTitle, setDraftsDialogTitle] = useState<string>("");
+  
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const shifts = ["AM", "PM"];
   const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -334,6 +344,20 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
     }
   };
 
+  const openPeekDialog = (date: string, shift: string) => {
+    const shiftSchedules = schedules.filter(s => s.date === date && s.shift === shift);
+    setPeekSchedules(shiftSchedules);
+    setPeekTitle(`${format(new Date(date), "EEE, MMM dd, yyyy")} • ${shift === 'AM' ? '8AM-8PM' : '8PM-8AM'}`);
+    setShowPeekDialog(true);
+  };
+
+  const openDraftsDialog = (date: string, shift: string) => {
+    const groupDrafts = pendingSchedules.filter(s => s.date === date && s.shift === shift);
+    setDraftsInDialog(groupDrafts);
+    setDraftsDialogTitle(`${format(new Date(date), "EEE, MMM dd, yyyy")} • ${shift} Shift`);
+    setShowDraftsDialog(true);
+  };
+
   const updateSchedule = async (schedule: Schedule) => {
     setLoading(true);
     try {
@@ -408,6 +432,12 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   }, {} as Record<string, { AM: Schedule[]; PM: Schedule[] }>);
 
   const sortedDates = Object.keys(groupedSchedules).sort();
+  
+  // Filter schedules by selected date (show ±7 days)
+  const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
+  const minDate = format(addDays(selectedDate, -7), "yyyy-MM-dd");
+  const maxDate = format(addDays(selectedDate, 7), "yyyy-MM-dd");
+  const visibleDates = sortedDates.filter(d => d >= minDate && d <= maxDate);
 
   return (
     <div className="space-y-4">
@@ -445,6 +475,9 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                           <span className="text-muted-foreground ml-2">{shift} • {group.length} trucks</span>
                         </div>
                         <div className="flex gap-1">
+                          <Button variant="outline" size="sm" onClick={() => openDraftsDialog(date, shift)}>
+                            <Edit2 className="h-3 w-3 mr-1" /> Review
+                          </Button>
                           <Button variant="ghost" size="sm" onClick={() => declineDraftGroup(date, shift)}>
                             <X className="h-3 w-3" />
                           </Button>
@@ -462,12 +495,30 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Live Schedule</CardTitle>
-              <CardDescription className="text-xs">All approved assignments</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Live Schedule</CardTitle>
+                  <CardDescription className="text-xs">All approved assignments</CardDescription>
+                </div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="text-xs">
+                      <CalendarIcon className="mr-1 h-3 w-3" />
+                      {format(selectedDate, "MMM dd, yyyy")}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent>
+                    <Calendar mode="single" selected={selectedDate} onSelect={(date) => date && setSelectedDate(date)} />
+                  </PopoverContent>
+                </Popover>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {sortedDates.map(date => {
+                {visibleDates.length === 0 ? (
+                  <p className="text-center text-muted-foreground text-xs py-4">No schedules for this date range</p>
+                ) : (
+                  visibleDates.map(date => {
                   const dateKey = date;
                   const isExpanded = expandedGroups.has(dateKey);
                   const dayData = groupedSchedules[date];
@@ -491,8 +542,18 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                             if (shiftSchedules.length === 0) return null;
                             return (
                               <div key={shift} className="border-l-2 border-primary/30 pl-3">
-                                <div className="text-xs font-medium text-muted-foreground mb-1">
-                                  {shift === 'AM' ? '8AM-8PM' : '8PM-8AM'}
+                                <div className="flex items-center justify-between mb-1">
+                                  <div className="text-xs font-medium text-muted-foreground">
+                                    {shift === 'AM' ? '8AM-8PM' : '8PM-8AM'}
+                                  </div>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-5 px-2 text-xs"
+                                    onClick={() => openPeekDialog(date, shift)}
+                                  >
+                                    <Edit2 className="h-3 w-3 mr-1" /> Peek
+                                  </Button>
                                 </div>
                                 <div className="space-y-1">
                                   {shiftSchedules.map((s, i) => {
@@ -512,7 +573,8 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                       </CollapsibleContent>
                     </Collapsible>
                   );
-                })}
+                })
+                )}
               </div>
             </CardContent>
           </Card>
@@ -744,6 +806,110 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
         </DialogContent>
       </Dialog>
 
+      {/* Peek Dialog */}
+      <Dialog open={showPeekDialog} onOpenChange={setShowPeekDialog}>
+        <DialogContent className="max-w-2xl bg-background">
+          <DialogHeader>
+            <DialogTitle className="text-base">Schedule Details</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground mb-2">{peekTitle}</div>
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+            {peekSchedules.length === 0 ? (
+              <p className="text-center text-muted-foreground text-xs py-4">No schedules</p>
+            ) : (
+              peekSchedules.map((schedule, idx) => {
+                const driver = drivers.find(d => d.id === schedule.driver_id);
+                const truck = trucks.find(t => t.id === schedule.truck_id);
+                const scheduleHelpers = helpers.filter(h => schedule.helper_ids.includes(h.id));
+                return (
+                  <div key={schedule.id || idx} className="border rounded p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium text-sm">{truck?.code} - {truck?.type}</div>
+                      <Badge variant="outline" className="text-xs">{truck?.capacity}MT</Badge>
+                    </div>
+                    <div className="text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Driver:</span>
+                        <span className="font-medium">{driver?.name || 'N/A'}</span>
+                      </div>
+                    </div>
+                    <div className="text-xs">
+                      <div className="text-muted-foreground mb-1">Helpers:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {scheduleHelpers.length === 0 ? (
+                          <span className="text-muted-foreground">None</span>
+                        ) : (
+                          scheduleHelpers.map(h => (
+                            <Badge key={h.id} variant="secondary" className="text-xs">{h.name}</Badge>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    {schedule.mt_requirement && (
+                      <div className="text-xs text-muted-foreground">
+                        MT Requirement: {schedule.mt_requirement.toFixed(1)} MT
+                      </div>
+                    )}
+                    {schedule.approved_by && (
+                      <div className="text-xs text-muted-foreground pt-2 border-t">
+                        Approved by {schedule.approved_by} on {schedule.approved_at && format(new Date(schedule.approved_at), "MMM dd, yyyy 'at' h:mm a")}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => setShowPeekDialog(false)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Drafts Review Dialog */}
+      <Dialog open={showDraftsDialog} onOpenChange={setShowDraftsDialog}>
+        <DialogContent className="max-w-3xl bg-background">
+          <DialogHeader>
+            <DialogTitle className="text-base">Review & Edit Drafts</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground mb-2">{draftsDialogTitle}</div>
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+            {draftsInDialog.length === 0 ? (
+              <p className="text-center text-muted-foreground text-xs py-4">No drafts</p>
+            ) : (
+              draftsInDialog.map((schedule, idx) => {
+                const driver = drivers.find(d => d.id === schedule.driver_id);
+                const truck = trucks.find(t => t.id === schedule.truck_id);
+                const scheduleHelpers = helpers.filter(h => schedule.helper_ids.includes(h.id));
+                return (
+                  <div key={schedule.id || idx} className="border rounded p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm">
+                        <span className="font-medium">{truck?.code}</span> • {driver?.name}
+                      </div>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => setEditingSchedule(schedule)}
+                      >
+                        <Edit2 className="h-3 w-3 mr-1" /> Edit
+                      </Button>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Helpers: {scheduleHelpers.map(h => h.name).join(', ') || 'None'}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => setShowDraftsDialog(false)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approval Dialog */}
       <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
         <DialogContent className="bg-background">
           <DialogHeader>
