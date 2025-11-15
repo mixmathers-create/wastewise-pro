@@ -11,11 +11,10 @@ import SignatureCanvas from "react-signature-canvas";
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { Capacitor } from "@capacitor/core";
-import { BarcodeScanner, BarcodeFormat } from "@capacitor-mlkit/barcode-scanning";
+import { BarcodeScanner } from "@capacitor-community/barcode-scanner";
 import { MobileInput } from "@/components/mobile/MobileInput";
 import { printerService } from "@/lib/printerService";
 import { Card } from "@/components/ui/card";
-import { useZxing } from "react-zxing";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const wasteTypes = ["Municipal Solid Waste", "Food Waste", "Construction Waste", "Special Hauling"];
@@ -42,7 +41,6 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     { waste_type: "", quantity: 0, unit: "kg" }
   ]);
   const [signedBy, setSignedBy] = useState("");
-  const [showWebScanner, setShowWebScanner] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const sigCanvas = useRef<SignatureCanvas>(null);
 
@@ -52,7 +50,6 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
   const handleQRDetected = async (decodedText: string) => {
     setQrInput(decodedText);
-    setShowWebScanner(false);
     setIsScanning(false);
     toast({ title: "QR Code Scanned", description: "Looking up client..." });
     
@@ -70,12 +67,6 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       toast({ title: "Client Found", description: `Loaded: ${data.name}` });
     }
   };
-
-  const { ref: zxingRef } = useZxing({
-    onDecodeResult(result) {
-      handleQRDetected(result.getText());
-    },
-  });
 
   const loadClients = async () => {
     const { data } = await supabase.from("clients").select("*").order("name");
@@ -96,55 +87,58 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const handleCamera = async () => {
     try {
       if (!Capacitor.isNativePlatform()) {
-        setShowWebScanner(true);
-        return;
-      }
-
-      // Request camera permissions
-      const { camera } = await BarcodeScanner.requestPermissions();
-      if (camera !== 'granted') {
-        toast({ title: "Permission denied", description: "Camera permission is required to scan QR codes.", variant: "destructive" });
-        return;
-      }
-
-      // Hide web content
-      document.body.classList.add('scanner-active');
-      setIsScanning(true);
-
-      // Scan single barcode
-      const result = await new Promise<string | null>(async (resolve) => {
-        const listener = await BarcodeScanner.addListener(
-          'barcodeScanned' as any,
-          async (event: any) => {
-            await listener.remove();
-            document.body.classList.remove('scanner-active');
-            setIsScanning(false);
-            await BarcodeScanner.stopScan();
-            resolve(event.barcode?.displayValue || null);
-          }
-        );
-
-        await BarcodeScanner.startScan({
-          formats: [BarcodeFormat.QrCode]
+        toast({ 
+          title: "Camera not available", 
+          description: "Please use mobile app to scan QR codes", 
+          variant: "destructive" 
         });
-      });
-
-      if (result) {
-        await handleQRDetected(result);
+        return;
       }
-    } catch (error: any) {
+
+      // Check permission
+      const status = await BarcodeScanner.checkPermission({ force: true });
+      if (!status.granted) {
+        toast({ 
+          title: "Permission denied", 
+          description: "Camera permission is required to scan QR codes", 
+          variant: "destructive" 
+        });
+        return;
+      }
+
+      setIsScanning(true);
+      
+      // Make background transparent and start scanning
+      document.body.classList.add('scanner-active');
+      await BarcodeScanner.hideBackground();
+      
+      const result = await BarcodeScanner.startScan();
+      
+      if (result.hasContent) {
+        await handleQRDetected(result.content);
+      }
+      
+      // Clean up
       document.body.classList.remove('scanner-active');
+      await BarcodeScanner.showBackground();
       setIsScanning(false);
-      toast({ title: "Scanner Error", description: error.message, variant: "destructive" });
+    } catch (error) {
+      console.error("Camera error:", error);
+      document.body.classList.remove('scanner-active');
+      await BarcodeScanner.showBackground();
+      toast({ title: "Camera Error", description: "Could not access camera", variant: "destructive" });
+      setIsScanning(false);
     }
   };
 
   const stopScanning = async () => {
-    if (Capacitor.isNativePlatform() && isScanning) {
-      document.body.classList.remove('scanner-active');
-      await BarcodeScanner.removeAllListeners();
+    try {
       await BarcodeScanner.stopScan();
+      document.body.classList.remove('scanner-active');
+      await BarcodeScanner.showBackground();
       setIsScanning(false);
+    } catch (error) {
+      console.error("Error stopping scanner:", error);
     }
   };
 
@@ -424,21 +418,6 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
   return (
     <>
-      {/* Web Scanner Dialog */}
-      <Dialog open={showWebScanner} onOpenChange={setShowWebScanner}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Scan QR Code</DialogTitle>
-          </DialogHeader>
-          <div className="relative">
-            <video ref={zxingRef} className="w-full rounded-md" />
-          </div>
-          <Button variant="outline" onClick={() => setShowWebScanner(false)}>
-            Cancel
-          </Button>
-        </DialogContent>
-      </Dialog>
-
       {/* Mobile Scanner Overlay */}
       {isScanning && (
         <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center">
