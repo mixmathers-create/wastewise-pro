@@ -21,7 +21,7 @@ const TrucksTab = ({ profile }: { profile: any }) => {
     setLoading(true);
     const { data, error } = await supabase
       .from("trucks")
-      .select("id,code,type,plate_number")
+      .select("id,code,type,plate_number,capacity,status")
       .order("code");
     if (error) setError(error.message);
     setTrucks(data || []);
@@ -33,7 +33,7 @@ const TrucksTab = ({ profile }: { profile: any }) => {
   }, []);
 
   const downloadTemplate = () => {
-    const csv = generateCSV([], ['code', 'plate_number', 'type']);
+    const csv = generateCSV([], ['code', 'plate_number', 'type', 'capacity']);
     downloadCSV(csv, 'trucks-template.csv');
   };
 
@@ -48,7 +48,8 @@ const TrucksTab = ({ profile }: { profile: any }) => {
       const trucksToInsert = rows.map(row => ({
         code: row.code,
         plate_number: row.plate_number,
-        type: row.type
+        type: row.type,
+        capacity: row.capacity ? parseFloat(row.capacity) : (row.type === 'GC' ? 4 : 2)
       }));
 
       const { error } = await supabase.from("trucks").insert(trucksToInsert);
@@ -108,6 +109,8 @@ const TrucksTab = ({ profile }: { profile: any }) => {
               <TableHead>Code</TableHead>
               <TableHead>Plate Number</TableHead>
               <TableHead>Type</TableHead>
+              <TableHead>Capacity (MT)</TableHead>
+              <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -116,6 +119,8 @@ const TrucksTab = ({ profile }: { profile: any }) => {
                   <TableCell className="font-medium">{t.code}</TableCell>
                   <TableCell>{t.plate_number || "N/A"}</TableCell>
                   <TableCell>{t.type}</TableCell>
+                  <TableCell>{t.capacity || 0} MT</TableCell>
+                  <TableCell><span className={`inline-flex px-2 py-1 text-xs rounded-full ${t.status === 'available' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{t.status}</span></TableCell>
                 </TableRow>
               ))}
             </TableBody>

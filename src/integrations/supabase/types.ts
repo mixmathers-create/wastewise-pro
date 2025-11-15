@@ -263,6 +263,7 @@ export type Database = {
       }
       trucks: {
         Row: {
+          capacity: number | null
           code: string
           created_at: string
           id: string
@@ -271,6 +272,7 @@ export type Database = {
           type: string
         }
         Insert: {
+          capacity?: number | null
           code: string
           created_at?: string
           id?: string
@@ -279,6 +281,7 @@ export type Database = {
           type: string
         }
         Update: {
+          capacity?: number | null
           code?: string
           created_at?: string
           id?: string
