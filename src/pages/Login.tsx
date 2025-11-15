@@ -28,55 +28,41 @@ const Login = () => {
       if (error) throw error;
 
       if (data.user) {
-        // Post-login bootstrap: Check and create missing profile/user_roles
+        // Post-login bootstrap: Link to Demo team if no profile exists
         try {
-          // Check if user_roles exists
-          const { data: userRoleData } = await supabase
-            .from("user_roles")
+          // Check if profile exists
+          const { data: existingProfile } = await supabase
+            .from("profiles")
             .select("*")
             .eq("user_id", data.user.id)
             .maybeSingle();
 
-          // If no user_role, this is likely a legacy account or incomplete signup
-          if (!userRoleData) {
-            // Get or create a default team for this user
-            const { data: existingProfile } = await supabase
-              .from("profiles")
-              .select("team_id")
-              .eq("user_id", data.user.id)
+          if (!existingProfile) {
+            // Find Demo team (or any existing team with data)
+            const { data: demoTeam } = await supabase
+              .from("teams")
+              .select("*")
+              .or('name.eq.Demo Waste Management Team,name.eq.Demo WasteWise Team')
               .maybeSingle();
 
-            let teamId = existingProfile?.team_id;
-
-            if (!teamId) {
-              // Create a new team for this user
-              const { data: newTeam } = await supabase
-                .from("teams")
-                .insert({ name: `${data.user.email}'s Team` })
-                .select()
-                .single();
-              
-              teamId = newTeam?.id;
-            }
+            const teamId = demoTeam?.id;
 
             if (teamId) {
               // Create user_roles first
               await supabase.from("user_roles").insert({
                 user_id: data.user.id,
                 team_id: teamId,
-                role: "admin", // Default to admin for bootstrap
+                role: "admin",
               });
 
-              // Create or update profile
-              if (!existingProfile) {
-                await supabase.from("profiles").insert({
-                  user_id: data.user.id,
-                  team_id: teamId,
-                  full_name: data.user.email?.split("@")[0] || "User",
-                  email: data.user.email || "",
-                  role: "admin",
-                });
-              }
+              // Create profile
+              await supabase.from("profiles").insert({
+                user_id: data.user.id,
+                team_id: teamId,
+                full_name: data.user.email?.split("@")[0] || "User",
+                email: data.user.email || "",
+                role: "admin",
+              });
             }
           }
         } catch (bootstrapError) {
