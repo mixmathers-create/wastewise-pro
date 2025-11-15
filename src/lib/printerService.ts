@@ -1,3 +1,4 @@
+import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
 import { isNativePlatform } from './capacitorUtils';
 
 interface PrinterConnection {
@@ -33,7 +34,6 @@ export class PrinterService {
 
   /**
    * Connect to a Bluetooth printer
-   * TODO: Implement actual connection logic based on lidta-capacitor-bl-printer API
    */
   async connect(address: string): Promise<boolean> {
     if (!this.isAvailable()) {
@@ -41,8 +41,7 @@ export class PrinterService {
     }
 
     try {
-      // TODO: Implement actual Bluetooth printer connection
-      console.log('Connecting to printer:', address);
+      await CapacitorThermalPrinter.connect({ address });
       this.connectedPrinter = { address, name: 'Connected Printer' };
       return true;
     } catch (error) {
@@ -60,8 +59,7 @@ export class PrinterService {
     }
 
     try {
-      // TODO: Implement actual disconnect
-      console.log('Disconnecting printer');
+      await CapacitorThermalPrinter.disconnect();
       this.connectedPrinter = null;
     } catch (error) {
       console.error('Printer disconnection error:', error);
@@ -78,26 +76,22 @@ export class PrinterService {
 
   /**
    * Get list of available Bluetooth devices
-   * TODO: Implement device discovery
+   * Note: You need to pair Bluetooth devices in Android system settings first.
+   * Use the device's Bluetooth address when calling connect().
    */
   async listDevices(): Promise<any[]> {
     if (!this.isAvailable()) {
       throw new Error('Printer service only available on native platforms');
     }
 
-    try {
-      // TODO: Implement device listing
-      console.log('Listing Bluetooth devices');
-      return [];
-    } catch (error) {
-      console.error('Error listing devices:', error);
-      throw error;
-    }
+    // capacitor-thermal-printer doesn't provide device discovery
+    // Users must pair devices via Android settings and provide the address
+    console.log('Please pair Bluetooth printer in Android Settings and use its address');
+    return [];
   }
 
   /**
-   * Print text
-   * TODO: Implement actual printing
+   * Print text using the high-performance builder pattern
    */
   async printText(text: string): Promise<void> {
     if (!this.isAvailable()) {
@@ -109,8 +103,10 @@ export class PrinterService {
     }
 
     try {
-      // TODO: Implement actual print command
-      console.log('Printing text:', text);
+      await CapacitorThermalPrinter
+        .begin()
+        .text(text)
+        .write();
     } catch (error) {
       console.error('Print error:', error);
       throw error;
@@ -118,12 +114,13 @@ export class PrinterService {
   }
 
   /**
-   * Print formatted receipt
+   * Print formatted receipt with enhanced styling
    */
   async printReceipt(receiptData: {
     header: string;
     items: Array<{ label: string; value: string }>;
     footer?: string;
+    logo?: string; // Optional base64 image
   }): Promise<void> {
     if (!this.isAvailable()) {
       throw new Error('Printer service only available on native platforms');
@@ -134,26 +131,37 @@ export class PrinterService {
     }
 
     try {
-      let receipt = '';
-      
+      const builder = CapacitorThermalPrinter.begin().align('center');
+
+      // Print logo if provided
+      if (receiptData.logo) {
+        builder.image(receiptData.logo);
+      }
+
       // Header
-      receipt += `${receiptData.header}\n`;
-      receipt += '--------------------------------\n';
-      
+      builder
+        .bold()
+        .underline()
+        .text(`${receiptData.header}\n`)
+        .clearFormatting()
+        .text('--------------------------------\n')
+        .align('left');
+
       // Items
       receiptData.items.forEach(item => {
-        receipt += `${item.label}: ${item.value}\n`;
+        builder.text(`${item.label}: ${item.value}\n`);
       });
-      
+
       // Footer
       if (receiptData.footer) {
-        receipt += '--------------------------------\n';
-        receipt += `${receiptData.footer}\n`;
+        builder
+          .text('--------------------------------\n')
+          .align('center')
+          .text(`${receiptData.footer}\n`);
       }
-      
-      receipt += '\n\n\n'; // Add spacing for paper cut
 
-      await this.printText(receipt);
+      // Cut paper and print
+      await builder.cutPaper().write();
     } catch (error) {
       console.error('Receipt print error:', error);
       throw error;
