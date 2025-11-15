@@ -11,7 +11,7 @@ import SignatureCanvas from "react-signature-canvas";
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { Capacitor } from "@capacitor/core";
-import { Camera as CapCamera, CameraResultType } from "@capacitor/camera";
+import { BarcodeScanner } from "@capacitor-community/barcode-scanner";
 import { MobileInput } from "@/components/mobile/MobileInput";
 import { printerService } from "@/lib/printerService";
 import { Card } from "@/components/ui/card";
@@ -64,18 +64,54 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
   const handleCamera = async () => {
     try {
-      if (Capacitor.isNativePlatform()) {
-        const image = await CapCamera.getPhoto({
-          quality: 90,
-          allowEditing: false,
-          resultType: CameraResultType.Uri
-        });
-        toast({ title: "Photo captured", description: "QR code scanning from camera coming soon. For now, please enter QR manually or select client." });
-      } else {
-        toast({ title: "Camera not available", description: "Camera is only available on mobile devices. Use file upload instead.", variant: "destructive" });
+      if (!Capacitor.isNativePlatform()) {
+        toast({ title: "Camera not available", description: "Camera is only available on mobile devices.", variant: "destructive" });
+        return;
+      }
+
+      // Check camera permission
+      const status = await BarcodeScanner.checkPermission({ force: true });
+      
+      if (!status.granted) {
+        toast({ title: "Permission denied", description: "Camera permission is required to scan QR codes.", variant: "destructive" });
+        return;
+      }
+
+      // Prepare scanner
+      await BarcodeScanner.prepare();
+      
+      // Hide background to show camera
+      document.body.classList.add('scanner-active');
+      
+      // Start scanning
+      const result = await BarcodeScanner.startScan();
+      
+      // Show background again
+      document.body.classList.remove('scanner-active');
+      
+      if (result.hasContent) {
+        setQrInput(result.content || "");
+        toast({ title: "QR Code Scanned", description: "Looking up client..." });
+        
+        // Auto-lookup the client
+        const { data, error } = await supabase
+          .from("clients")
+          .select("*")
+          .eq("qr_code", result.content)
+          .single();
+          
+        if (error || !data) {
+          toast({ title: "Client not found", description: "No client matches this QR code.", variant: "destructive" });
+          return;
+        }
+        
+        await loadResources();
+        setClientData(data);
+        toast({ title: "Client Found", description: `Loaded: ${data.name}` });
       }
     } catch (error: any) {
-      toast({ title: "Camera Error", description: error.message, variant: "destructive" });
+      document.body.classList.remove('scanner-active');
+      toast({ title: "Scanner Error", description: error.message, variant: "destructive" });
     }
   };
 
