@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Camera } from "lucide-react";
+import { Camera, X } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
@@ -15,6 +15,8 @@ import { BarcodeScanner } from "@capacitor-community/barcode-scanner";
 import { MobileInput } from "@/components/mobile/MobileInput";
 import { printerService } from "@/lib/printerService";
 import { Card } from "@/components/ui/card";
+import { Html5QrcodeScanner } from "html5-qrcode";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const wasteTypes = ["Municipal Solid Waste", "Food Waste", "Construction Waste", "Special Hauling"];
 const units = ["kg", "cbm", "truck load"];
@@ -40,11 +42,57 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     { waste_type: "", quantity: 0, unit: "kg" }
   ]);
   const [signedBy, setSignedBy] = useState("");
+  const [showWebScanner, setShowWebScanner] = useState(false);
   const sigCanvas = useRef<SignatureCanvas>(null);
+  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
 
   useEffect(() => {
     loadClients();
   }, []);
+
+  useEffect(() => {
+    if (showWebScanner && !Capacitor.isNativePlatform()) {
+      const scanner = new Html5QrcodeScanner(
+        "qr-reader",
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        false
+      );
+      
+      scanner.render(
+        async (decodedText) => {
+          setQrInput(decodedText);
+          toast({ title: "QR Code Scanned", description: "Looking up client..." });
+          
+          // Auto-lookup the client
+          const { data, error } = await supabase
+            .from("clients")
+            .select("*")
+            .eq("qr_code", decodedText)
+            .single();
+            
+          if (error || !data) {
+            toast({ title: "Client not found", description: "No client matches this QR code.", variant: "destructive" });
+          } else {
+            await loadResources();
+            setClientData(data);
+            toast({ title: "Client Found", description: `Loaded: ${data.name}` });
+          }
+          
+          scanner.clear();
+          setShowWebScanner(false);
+        },
+        (errorMessage) => {
+          // Ignore scanning errors, they happen continuously
+        }
+      );
+      
+      scannerRef.current = scanner;
+      
+      return () => {
+        scanner.clear();
+      };
+    }
+  }, [showWebScanner]);
 
   const loadClients = async () => {
     const { data } = await supabase.from("clients").select("*").order("name");
@@ -65,7 +113,8 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const handleCamera = async () => {
     try {
       if (!Capacitor.isNativePlatform()) {
-        toast({ title: "Camera not available", description: "Camera is only available on mobile devices.", variant: "destructive" });
+        // Desktop: use web-based scanner
+        setShowWebScanner(true);
         return;
       }
 
@@ -390,9 +439,22 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <Label>Select Client</Label>
+    <>
+      <Dialog open={showWebScanner} onOpenChange={setShowWebScanner}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Scan QR Code</DialogTitle>
+          </DialogHeader>
+          <div id="qr-reader" className="w-full"></div>
+          <Button variant="outline" onClick={() => setShowWebScanner(false)}>
+            Cancel
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      <div className="space-y-4">
+        <div>
+          <Label>Select Client</Label>
         <Select onValueChange={handleClientSelect}>
           <SelectTrigger><SelectValue placeholder="Choose from database" /></SelectTrigger>
           <SelectContent>
@@ -503,7 +565,8 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
           </Button>
         </>
       )}
-    </div>
+      </div>
+    </>
   )
 };
 
