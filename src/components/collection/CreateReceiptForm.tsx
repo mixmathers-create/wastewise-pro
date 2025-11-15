@@ -11,11 +11,11 @@ import SignatureCanvas from "react-signature-canvas";
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { Capacitor } from "@capacitor/core";
-import { BarcodeScanner } from "@capacitor-community/barcode-scanner";
+import { BarcodeScanner, BarcodeFormat } from "@capacitor-mlkit/barcode-scanning";
 import { MobileInput } from "@/components/mobile/MobileInput";
 import { printerService } from "@/lib/printerService";
 import { Card } from "@/components/ui/card";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { useZxing } from "react-zxing";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const wasteTypes = ["Municipal Solid Waste", "Food Waste", "Construction Waste", "Special Hauling"];
@@ -43,69 +43,39 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   ]);
   const [signedBy, setSignedBy] = useState("");
   const [showWebScanner, setShowWebScanner] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
   const sigCanvas = useRef<SignatureCanvas>(null);
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
 
   useEffect(() => {
     loadClients();
   }, []);
 
-  useEffect(() => {
-    if (showWebScanner && !Capacitor.isNativePlatform()) {
-      // Wait for dialog to fully render before initializing scanner
-      const timeoutId = setTimeout(() => {
-        const element = document.getElementById("qr-reader");
-        if (!element) {
-          console.error("QR reader element not found");
-          return;
-        }
-
-        const scanner = new Html5QrcodeScanner(
-          "qr-reader",
-          { fps: 10, qrbox: { width: 250, height: 250 } },
-          false
-        );
-        
-        scanner.render(
-          async (decodedText) => {
-            setQrInput(decodedText);
-            toast({ title: "QR Code Scanned", description: "Looking up client..." });
-            
-            // Auto-lookup the client
-            const { data, error } = await supabase
-              .from("clients")
-              .select("*")
-              .eq("qr_code", decodedText)
-              .single();
-              
-            if (error || !data) {
-              toast({ title: "Client not found", description: "No client matches this QR code.", variant: "destructive" });
-            } else {
-              await loadResources();
-              setClientData(data);
-              toast({ title: "Client Found", description: `Loaded: ${data.name}` });
-            }
-            
-            scanner.clear();
-            setShowWebScanner(false);
-          },
-          (errorMessage) => {
-            // Ignore scanning errors, they happen continuously
-          }
-        );
-        
-        scannerRef.current = scanner;
-      }, 100);
+  const handleQRDetected = async (decodedText: string) => {
+    setQrInput(decodedText);
+    setShowWebScanner(false);
+    setIsScanning(false);
+    toast({ title: "QR Code Scanned", description: "Looking up client..." });
+    
+    await loadResources();
+    const { data, error } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("qr_code", decodedText)
+      .single();
       
-      return () => {
-        clearTimeout(timeoutId);
-        if (scannerRef.current) {
-          scannerRef.current.clear().catch(() => {});
-          scannerRef.current = null;
-        }
-      };
+    if (error || !data) {
+      toast({ title: "Client not found", description: "No client matches this QR code.", variant: "destructive" });
+    } else {
+      setClientData(data);
+      toast({ title: "Client Found", description: `Loaded: ${data.name}` });
     }
-  }, [showWebScanner]);
+  };
+
+  const { ref: zxingRef } = useZxing({
+    onDecodeResult(result) {
+      handleQRDetected(result.getText());
+    },
+  });
 
   const loadClients = async () => {
     const { data } = await supabase.from("clients").select("*").order("name");
@@ -126,54 +96,55 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const handleCamera = async () => {
     try {
       if (!Capacitor.isNativePlatform()) {
-        // Desktop: use web-based scanner
         setShowWebScanner(true);
         return;
       }
 
-      // Check camera permission
-      const status = await BarcodeScanner.checkPermission({ force: true });
-      
-      if (!status.granted) {
+      // Request camera permissions
+      const { camera } = await BarcodeScanner.requestPermissions();
+      if (camera !== 'granted') {
         toast({ title: "Permission denied", description: "Camera permission is required to scan QR codes.", variant: "destructive" });
         return;
       }
 
-      // Prepare scanner
-      await BarcodeScanner.prepare();
-      
-      // Hide background to show camera
+      // Hide web content
       document.body.classList.add('scanner-active');
-      
-      // Start scanning
-      const result = await BarcodeScanner.startScan();
-      
-      // Show background again
-      document.body.classList.remove('scanner-active');
-      
-      if (result.hasContent) {
-        setQrInput(result.content || "");
-        toast({ title: "QR Code Scanned", description: "Looking up client..." });
-        
-        // Auto-lookup the client
-        const { data, error } = await supabase
-          .from("clients")
-          .select("*")
-          .eq("qr_code", result.content)
-          .single();
-          
-        if (error || !data) {
-          toast({ title: "Client not found", description: "No client matches this QR code.", variant: "destructive" });
-          return;
-        }
-        
-        await loadResources();
-        setClientData(data);
-        toast({ title: "Client Found", description: `Loaded: ${data.name}` });
+      setIsScanning(true);
+
+      // Scan single barcode
+      const result = await new Promise<string | null>(async (resolve) => {
+        const listener = await BarcodeScanner.addListener(
+          'barcodeScanned' as any,
+          async (event: any) => {
+            await listener.remove();
+            document.body.classList.remove('scanner-active');
+            setIsScanning(false);
+            await BarcodeScanner.stopScan();
+            resolve(event.barcode?.displayValue || null);
+          }
+        );
+
+        await BarcodeScanner.startScan({
+          formats: [BarcodeFormat.QrCode]
+        });
+      });
+
+      if (result) {
+        await handleQRDetected(result);
       }
     } catch (error: any) {
       document.body.classList.remove('scanner-active');
+      setIsScanning(false);
       toast({ title: "Scanner Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const stopScanning = async () => {
+    if (Capacitor.isNativePlatform() && isScanning) {
+      document.body.classList.remove('scanner-active');
+      await BarcodeScanner.removeAllListeners();
+      await BarcodeScanner.stopScan();
+      setIsScanning(false);
     }
   };
 
@@ -453,29 +424,37 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
   return (
     <>
-      <Dialog open={showWebScanner} onOpenChange={(open) => {
-        if (!open && scannerRef.current) {
-          scannerRef.current.clear().catch(() => {});
-          scannerRef.current = null;
-        }
-        setShowWebScanner(open);
-      }}>
+      {/* Web Scanner Dialog */}
+      <Dialog open={showWebScanner} onOpenChange={setShowWebScanner}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Scan QR Code</DialogTitle>
           </DialogHeader>
-          <div id="qr-reader" className="w-full min-h-[300px]"></div>
-          <Button variant="outline" onClick={() => {
-            if (scannerRef.current) {
-              scannerRef.current.clear().catch(() => {});
-              scannerRef.current = null;
-            }
-            setShowWebScanner(false);
-          }}>
+          <div className="relative">
+            <video ref={zxingRef} className="w-full rounded-md" />
+          </div>
+          <Button variant="outline" onClick={() => setShowWebScanner(false)}>
             Cancel
           </Button>
         </DialogContent>
       </Dialog>
+
+      {/* Mobile Scanner Overlay */}
+      {isScanning && (
+        <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center">
+          <div className="text-white text-center p-4 mb-8">
+            <p className="text-xl font-semibold mb-2">Scan QR Code</p>
+            <p className="text-sm text-gray-300">Point camera at QR code</p>
+          </div>
+          <Button 
+            variant="outline" 
+            onClick={stopScanning}
+            className="absolute bottom-8 left-1/2 transform -translate-x-1/2"
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
 
       <div className="space-y-4">
         <div>
