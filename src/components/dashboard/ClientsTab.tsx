@@ -1,17 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import AddClientDialog from "./AddClientDialog";
 import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
+import { Download, Upload } from "lucide-react";
 import QRCode from "qrcode";
+import { generateCSV, downloadCSV, parseCSV } from "@/lib/csvUtils";
+import { useToast } from "@/hooks/use-toast";
 
 const ClientsTab = ({ profile }: { profile: any }) => {
+  const { toast } = useToast();
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = profile?.role === "admin";
 
   const fetchClients = async () => {
@@ -41,6 +45,40 @@ const ClientsTab = ({ profile }: { profile: any }) => {
     }
   };
 
+  const downloadTemplate = () => {
+    const csv = generateCSV([], ['name', 'industry', 'address', 'contact_info']);
+    downloadCSV(csv, 'clients-template.csv');
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const text = await file.text();
+    const rows = parseCSV(text);
+
+    try {
+      const clientsToInsert = rows.map(row => ({
+        name: row.name,
+        industry: row.industry,
+        address: row.address || null,
+        contact_info: row.contact_info || null,
+        qr_code: `CLIENT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        team_id: profile?.team_id || ''
+      }));
+
+      const { error } = await supabase.from("clients").insert(clientsToInsert);
+      if (error) throw error;
+
+      toast({ title: "Success", description: `Imported ${clientsToInsert.length} clients` });
+      fetchClients();
+    } catch (err: any) {
+      toast({ title: "Import Error", description: err.message, variant: "destructive" });
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -49,7 +87,24 @@ const ClientsTab = ({ profile }: { profile: any }) => {
             <CardTitle>Clients</CardTitle>
             <CardDescription>Manage your client database</CardDescription>
           </div>
-          {isAdmin && <AddClientDialog profile={profile} onAdded={fetchClients} />}
+          {isAdmin && (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                <Download className="h-4 w-4 mr-2" />Template
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="h-4 w-4 mr-2" />Import CSV
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleImport}
+                className="hidden"
+              />
+              <AddClientDialog profile={profile} onAdded={fetchClients} />
+            </div>
+          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -71,21 +126,24 @@ const ClientsTab = ({ profile }: { profile: any }) => {
                 <TableHead>QR Code</TableHead>
                 <TableHead>Address</TableHead>
                 <TableHead>Industry</TableHead>
-                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {clients.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell className="font-mono text-xs">{c.qr_code}</TableCell>
-                  <TableCell>{c.address}</TableCell>
-                  <TableCell>{c.industry}</TableCell>
                   <TableCell>
-                    <Button size="sm" variant="outline" onClick={() => downloadQR(c.qr_code, c.name)}>
-                      <Download className="h-4 w-4" />
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      onClick={() => downloadQR(c.qr_code, c.name)}
+                      className="p-1"
+                    >
+                      <QRCodeImage qrCode={c.qr_code} />
                     </Button>
                   </TableCell>
+                  <TableCell>{c.address}</TableCell>
+                  <TableCell>{c.industry}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -94,6 +152,16 @@ const ClientsTab = ({ profile }: { profile: any }) => {
       </CardContent>
     </Card>
   );
+};
+
+const QRCodeImage = ({ qrCode }: { qrCode: string }) => {
+  const [url, setUrl] = useState("");
+
+  useEffect(() => {
+    QRCode.toDataURL(qrCode, { width: 64 }).then(setUrl);
+  }, [qrCode]);
+
+  return url ? <img src={url} alt="QR" className="w-16 h-16" /> : <Skeleton className="w-16 h-16" />;
 };
 
 export default ClientsTab;

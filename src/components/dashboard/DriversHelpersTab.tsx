@@ -1,16 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import AddDriverDialog from "./AddDriverDialog";
 import AddHelperDialog from "./AddHelperDialog";
+import { Button } from "@/components/ui/button";
+import { Download, Upload } from "lucide-react";
+import { generateCSV, downloadCSV, parseCSV } from "@/lib/csvUtils";
+import { useToast } from "@/hooks/use-toast";
 
 const DriversHelpersTab = ({ profile }: { profile: any }) => {
+  const { toast } = useToast();
   const [drivers, setDrivers] = useState<any[]>([]);
   const [helpers, setHelpers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const driverFileRef = useRef<HTMLInputElement>(null);
+  const helperFileRef = useRef<HTMLInputElement>(null);
   const isAdmin = profile?.role === "admin";
 
   const fetchAll = async () => {
@@ -26,9 +33,66 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
     setLoading(false);
   };
 
-  useEffect(() => {
-    fetchAll();
-  }, []);
+  const downloadDriverTemplate = () => {
+    const csv = generateCSV([], ['name', 'license_number']);
+    downloadCSV(csv, 'drivers-template.csv');
+  };
+
+  const downloadHelperTemplate = () => {
+    const csv = generateCSV([], ['name']);
+    downloadCSV(csv, 'helpers-template.csv');
+  };
+
+  const handleDriverImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const text = await file.text();
+    const rows = parseCSV(text);
+
+    try {
+      const driversToInsert = rows.map(row => ({
+        name: row.name,
+        license_number: row.license_number || null,
+        team_id: profile?.team_id || ''
+      }));
+
+      const { error } = await supabase.from("drivers").insert(driversToInsert);
+      if (error) throw error;
+
+      toast({ title: "Success", description: `Imported ${driversToInsert.length} drivers` });
+      fetchAll();
+    } catch (err: any) {
+      toast({ title: "Import Error", description: err.message, variant: "destructive" });
+    }
+
+    if (driverFileRef.current) driverFileRef.current.value = '';
+  };
+
+  const handleHelperImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const text = await file.text();
+    const rows = parseCSV(text);
+
+    try {
+      const helpersToInsert = rows.map(row => ({
+        name: row.name,
+        team_id: profile?.team_id || ''
+      }));
+
+      const { error } = await supabase.from("helpers").insert(helpersToInsert);
+      if (error) throw error;
+
+      toast({ title: "Success", description: `Imported ${helpersToInsert.length} helpers` });
+      fetchAll();
+    } catch (err: any) {
+      toast({ title: "Import Error", description: err.message, variant: "destructive" });
+    }
+
+    if (helperFileRef.current) helperFileRef.current.value = '';
+  };
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -39,7 +103,24 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
               <CardTitle>Drivers</CardTitle>
               <CardDescription>Licensed vehicle operators</CardDescription>
             </div>
-            {isAdmin && <AddDriverDialog profile={profile} onAdded={fetchAll} />}
+            {isAdmin && (
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={downloadDriverTemplate}>
+                  <Download className="h-4 w-4 mr-2" />Template
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => driverFileRef.current?.click()}>
+                  <Upload className="h-4 w-4 mr-2" />Import CSV
+                </Button>
+                <input
+                  ref={driverFileRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleDriverImport}
+                  className="hidden"
+                />
+                <AddDriverDialog profile={profile} onAdded={fetchAll} />
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -77,41 +158,25 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
               <CardTitle>Helpers</CardTitle>
               <CardDescription>Collection assistants</CardDescription>
             </div>
-            {isAdmin && <AddHelperDialog profile={profile} onAdded={fetchAll} />}
+            {isAdmin && (
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={downloadHelperTemplate}>
+                  <Download className="h-4 w-4 mr-2" />Template
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => helperFileRef.current?.click()}>
+                  <Upload className="h-4 w-4 mr-2" />Import CSV
+                </Button>
+                <input
+                  ref={helperFileRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleHelperImport}
+                  className="hidden"
+                />
+                <AddHelperDialog profile={profile} onAdded={fetchAll} />
+              </div>
+            )}
           </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
-          ) : error ? (
-            <p className="text-destructive">{error}</p>
-          ) : drivers.length === 0 ? (
-            <p className="text-muted-foreground">No drivers yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>License</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {drivers.map((d) => (
-                  <TableRow key={d.id}>
-                    <TableCell className="font-medium">{d.name}</TableCell>
-                    <TableCell>{d.license_number}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Helpers</CardTitle>
-          <CardDescription>Collection assistants</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
