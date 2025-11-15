@@ -12,12 +12,10 @@ const TrucksTab = ({ profile }: { profile: any }) => {
   const isAdmin = profile?.role === "admin";
 
   const fetchTrucks = async () => {
-    if (!profile?.team_id) return;
     setLoading(true);
     const { data, error } = await supabase
       .from("trucks")
       .select("id,code,type")
-      .eq("team_id", profile.team_id)
       .order("code");
     if (error) setError(error.message);
     setTrucks(data || []);
@@ -26,7 +24,7 @@ const TrucksTab = ({ profile }: { profile: any }) => {
 
   useEffect(() => {
     fetchTrucks();
-  }, [profile?.team_id]);
+  }, []);
 
   return (
     <Card>

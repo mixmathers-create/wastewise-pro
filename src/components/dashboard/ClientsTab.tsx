@@ -15,12 +15,10 @@ const ClientsTab = ({ profile }: { profile: any }) => {
   const isAdmin = profile?.role === "admin";
 
   const fetchClients = async () => {
-    if (!profile?.team_id) return;
     setLoading(true);
     const { data, error } = await supabase
       .from("clients")
-      .select("id,name,industry,address,contact_info,qr_code")
-      .eq("team_id", profile.team_id)
+      .select("id,name,industry,address,qr_code")
       .order("name");
     if (error) setError(error.message);
     setClients(data || []);
@@ -29,7 +27,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
 
   useEffect(() => {
     fetchClients();
-  }, [profile?.team_id]);
+  }, []);
 
   const downloadQR = async (qrCode: string, clientName: string) => {
     try {
@@ -70,10 +68,9 @@ const ClientsTab = ({ profile }: { profile: any }) => {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Industry</TableHead>
-                <TableHead>Address</TableHead>
-                <TableHead>Contact</TableHead>
                 <TableHead>QR Code</TableHead>
+                <TableHead>Address</TableHead>
+                <TableHead>Industry</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -81,10 +78,9 @@ const ClientsTab = ({ profile }: { profile: any }) => {
               {clients.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell>{c.industry}</TableCell>
-                  <TableCell>{c.address}</TableCell>
-                  <TableCell>{c.contact_info}</TableCell>
                   <TableCell className="font-mono text-xs">{c.qr_code}</TableCell>
+                  <TableCell>{c.address}</TableCell>
+                  <TableCell>{c.industry}</TableCell>
                   <TableCell>
                     <Button size="sm" variant="outline" onClick={() => downloadQR(c.qr_code, c.name)}>
                       <Download className="h-4 w-4" />
