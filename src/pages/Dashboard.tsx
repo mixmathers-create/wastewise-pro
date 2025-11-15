@@ -106,7 +106,7 @@ const Dashboard = () => {
 
       <main className="container mx-auto p-4">
         <Tabs defaultValue="collections" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className={`grid w-full ${window.innerWidth >= 1024 ? 'grid-cols-7' : 'grid-cols-6'}`}>
             <TabsTrigger value="collections">
               <QrCode className="mr-2 h-4 w-4" />
               Collections
@@ -123,10 +123,12 @@ const Dashboard = () => {
               <UserCog className="mr-2 h-4 w-4" />
               Drivers & Helpers
             </TabsTrigger>
-            <TabsTrigger value="scheduling">
-              <Calendar className="mr-2 h-4 w-4" />
-              Scheduling
-            </TabsTrigger>
+            {window.innerWidth >= 1024 && (
+              <TabsTrigger value="scheduling">
+                <Calendar className="mr-2 h-4 w-4" />
+                Scheduling
+              </TabsTrigger>
+            )}
             <TabsTrigger value="analytics">
               <BarChart3 className="mr-2 h-4 w-4" />
               Analytics
