@@ -1,10 +1,10 @@
 import { Capacitor } from '@capacitor/core';
 import html2canvas from 'html2canvas';
 
-// Access the lidta-capacitor-bl-printer plugin dynamically (safe on Capacitor 7)
+// Access the custom BluetoothPrinter plugin
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const LidtaCapacitorBlPrinter: any = (typeof window !== 'undefined' && (window as any).Capacitor && (window as any).Capacitor.Plugins && (window as any).Capacitor.Plugins.LidtaCapacitorBlPrinter)
-  ? (window as any).Capacitor.Plugins.LidtaCapacitorBlPrinter
+const BluetoothPrinter: any = (typeof window !== 'undefined' && (window as any).Capacitor && (window as any).Capacitor.Plugins && (window as any).Capacitor.Plugins.BluetoothPrinter)
+  ? (window as any).Capacitor.Plugins.BluetoothPrinter
   : null;
 
 interface PrinterConnection {
@@ -13,8 +13,8 @@ interface PrinterConnection {
 }
 
 /**
- * Bluetooth Printer Service for Lidta Capacitor BL Printer
- * Uses html2canvas to convert HTML content to base64 images for printing
+ * Bluetooth Printer Service for Android POS devices
+ * Supports ESC/POS thermal printers with direct text and image printing
  */
 export class PrinterService {
   private static instance: PrinterService;
@@ -33,11 +33,11 @@ export class PrinterService {
    * Check if printer plugin is available
    */
   isAvailable(): boolean {
-    return LidtaCapacitorBlPrinter !== null;
+    return BluetoothPrinter !== null && Capacitor.isNativePlatform();
   }
 
   /**
-   * Connect to a Bluetooth printer by address
+   * Connect to a Bluetooth printer by MAC address
    * @param address - Bluetooth MAC address (e.g., "00:11:22:33:44:55")
    */
   async connect(address: string): Promise<boolean> {
@@ -45,10 +45,19 @@ export class PrinterService {
       throw new Error('Printer service only available on native platforms');
     }
 
+    // Validate MAC address format
+    const macRegex = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
+    if (!macRegex.test(address)) {
+      throw new Error('Invalid MAC address format. Expected format: XX:XX:XX:XX:XX:XX');
+    }
+
     try {
-      const result = await LidtaCapacitorBlPrinter!.connect({ address });
-      if (result.value) {
-        this.connectedPrinter = { address, name: 'Connected Printer' };
+      const result = await BluetoothPrinter.connect({ address });
+      if (result.success) {
+        this.connectedPrinter = { 
+          address, 
+          name: result.name || 'Thermal Printer' 
+        };
         return true;
       }
       return false;
@@ -67,7 +76,7 @@ export class PrinterService {
     }
 
     try {
-      await LidtaCapacitorBlPrinter!.disconnect();
+      await BluetoothPrinter.disconnect();
       this.connectedPrinter = null;
     } catch (error) {
       console.error('Printer disconnection error:', error);
@@ -90,21 +99,28 @@ export class PrinterService {
   }
 
   /**
-   * List available Bluetooth devices
-   * Note: Users must pair Bluetooth printer in Android Settings first
+   * List paired Bluetooth devices
    */
   async listDevices(): Promise<any[]> {
-    console.log('Please pair Bluetooth printer in Android Settings');
-    console.log('Then use the Bluetooth MAC address with connect() method');
-    return [];
+    if (!this.isAvailable()) {
+      throw new Error('Printer service only available on native platforms');
+    }
+
+    try {
+      const result = await BluetoothPrinter.listPairedDevices();
+      return result.devices || [];
+    } catch (error) {
+      console.error('List devices error:', error);
+      return [];
+    }
   }
 
   /**
-   * Print text by converting it to an image
+   * Print text directly to thermal printer
    * @param text - Text content to print
    * @param align - Alignment (0=left, 1=center, 2=right)
    */
-  async printText(text: string, align: number = 1): Promise<void> {
+  async printText(text: string, align: number = 0): Promise<void> {
     if (!this.isAvailable()) {
       throw new Error('Printer service only available on native platforms');
     }
@@ -114,21 +130,12 @@ export class PrinterService {
     }
 
     try {
-      // Create a temporary HTML element
-      const tempDiv = document.createElement('div');
-      tempDiv.style.cssText = `
-        width: 380px;
-        padding: 20px;
-        font-family: monospace;
-        font-size: 14px;
-        background: white;
-        color: black;
-        text-align: ${align === 0 ? 'left' : align === 1 ? 'center' : 'right'};
-      `;
-      tempDiv.textContent = text;
-      document.body.appendChild(tempDiv);
-
-      // Convert to canvas and then base64
+      await BluetoothPrinter.printText({ text, align });
+    } catch (error) {
+      console.error('Print text error:', error);
+      throw error;
+    }
+  }
       const canvas = await html2canvas(tempDiv, {
         backgroundColor: '#ffffff',
         scale: 2
