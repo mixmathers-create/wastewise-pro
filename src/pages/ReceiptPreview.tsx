@@ -78,15 +78,6 @@ const ReceiptPreview = () => {
       return;
     }
 
-    if (!printerService.isConnected()) {
-      toast({ 
-        title: "Printer Not Connected", 
-        description: "Please connect to a printer in Settings first", 
-        variant: "destructive" 
-      });
-      return;
-    }
-
     try {
       setPrinting(true);
       

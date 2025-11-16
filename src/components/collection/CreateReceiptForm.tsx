@@ -11,7 +11,7 @@ import SignatureCanvas from "react-signature-canvas";
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { Capacitor } from "@capacitor/core";
-import { BarcodeScanner } from "@capacitor-community/barcode-scanner";
+import { BarcodeScanner } from "@capacitor-mlkit/barcode-scanning";
 import { MobileInput } from "@/components/mobile/MobileInput";
 import { printerService } from "@/lib/printerService";
 import { Card } from "@/components/ui/card";
@@ -95,9 +95,9 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
         return;
       }
 
-      // Check permission
-      const status = await BarcodeScanner.checkPermission({ force: true });
-      if (!status.granted) {
+      // Request camera permission
+      const { camera } = await BarcodeScanner.requestPermissions();
+      if (camera !== 'granted') {
         toast({ 
           title: "Permission denied", 
           description: "Camera permission is required to scan QR codes", 
@@ -107,25 +107,18 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       }
 
       setIsScanning(true);
+
+      // Start scanning and wait for result
+      const { barcodes } = await BarcodeScanner.scan();
       
-      // Make background transparent and start scanning
-      document.body.classList.add('scanner-active');
-      await BarcodeScanner.hideBackground();
-      
-      const result = await BarcodeScanner.startScan();
-      
-      if (result.hasContent) {
-        await handleQRDetected(result.content);
+      if (barcodes && barcodes.length > 0) {
+        const qrCode = barcodes[0].rawValue;
+        await handleQRDetected(qrCode);
       }
       
-      // Clean up
-      document.body.classList.remove('scanner-active');
-      await BarcodeScanner.showBackground();
       setIsScanning(false);
     } catch (error) {
       console.error("Camera error:", error);
-      document.body.classList.remove('scanner-active');
-      await BarcodeScanner.showBackground();
       toast({ title: "Camera Error", description: "Could not access camera", variant: "destructive" });
       setIsScanning(false);
     }
@@ -134,11 +127,10 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const stopScanning = async () => {
     try {
       await BarcodeScanner.stopScan();
-      document.body.classList.remove('scanner-active');
-      await BarcodeScanner.showBackground();
       setIsScanning(false);
     } catch (error) {
       console.error("Error stopping scanner:", error);
+      setIsScanning(false);
     }
   };
 
@@ -216,12 +208,18 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
     setLoading(true);
     try {
-      // Get authenticated user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({ title: "Error", description: "User not authenticated", variant: "destructive" });
-        setLoading(false);
-        return;
+      // Get authenticated user - for mobile app, use profile's user_id
+      let userId: string;
+      
+      if (Capacitor.isNativePlatform()) {
+        // Use the profile's user_id which should be set from login
+        userId = profile.user_id;
+      } else {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          throw new Error('User not authenticated');
+        }
+        userId = user.id;
       }
 
       const receiptQR = `RECEIPT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -239,7 +237,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
           qr_code: receiptQR,
           signed_by: signedBy,
           signature_data: signatureData,
-          created_by: user.id,
+          created_by: userId,
         })
         .select()
         .single();
