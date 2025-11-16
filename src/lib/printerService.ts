@@ -136,23 +136,66 @@ export class PrinterService {
       throw error;
     }
   }
-      const canvas = await html2canvas(tempDiv, {
-        backgroundColor: '#ffffff',
-        scale: 2
-      });
-      
-      const base64 = canvas.toDataURL('image/png').split(',')[1];
-      
-      // Clean up
-      document.body.removeChild(tempDiv);
 
-      // Print
-      await LidtaCapacitorBlPrinter!.printBase64({
-        msg: base64,
-        align: align
-      });
+  /**
+   * Print image from base64 data
+   * @param base64Image - Base64 encoded image
+   * @param align - Alignment (0=left, 1=center, 2=right)
+   */
+  async printImage(base64Image: string, align: number = 1): Promise<void> {
+    if (!this.isAvailable()) {
+      throw new Error('Printer service only available on native platforms');
+    }
+
+    if (!this.isConnected()) {
+      throw new Error('Printer not connected');
+    }
+
+    try {
+      await BluetoothPrinter.printImage({ image: base64Image, align });
     } catch (error) {
-      console.error('Print error:', error);
+      console.error('Print image error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Feed paper lines
+   * @param lines - Number of lines to feed
+   */
+  async feedLine(lines: number = 1): Promise<void> {
+    if (!this.isAvailable()) {
+      throw new Error('Printer service only available on native platforms');
+    }
+
+    if (!this.isConnected()) {
+      throw new Error('Printer not connected');
+    }
+
+    try {
+      await BluetoothPrinter.feedLine({ lines });
+    } catch (error) {
+      console.error('Feed line error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cut paper
+   */
+  async cutPaper(): Promise<void> {
+    if (!this.isAvailable()) {
+      throw new Error('Printer service only available on native platforms');
+    }
+
+    if (!this.isConnected()) {
+      throw new Error('Printer not connected');
+    }
+
+    try {
+      await BluetoothPrinter.cutPaper();
+    } catch (error) {
+      console.error('Cut paper error:', error);
       throw error;
     }
   }
@@ -176,74 +219,34 @@ export class PrinterService {
     }
 
     try {
-      // Create HTML receipt
-      const tempDiv = document.createElement('div');
-      tempDiv.style.cssText = `
-        width: 380px;
-        padding: 20px;
-        font-family: monospace;
-        font-size: 12px;
-        background: white;
-        color: black;
-      `;
+      // Print header (centered, bold)
+      await this.printText(receiptData.header, 1);
+      await this.printText('--------------------------------', 1);
+      await this.feedLine(1);
 
-      let html = `
-        <div style="text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 20px;">
-          ${receiptData.header}
-        </div>
-        <div style="border-top: 2px dashed black; margin: 10px 0;"></div>
-      `;
+      // Print items
+      for (const item of receiptData.items) {
+        const line = `${item.label.padEnd(20)}${item.value.padStart(12)}`;
+        await this.printText(line, 0);
+      }
 
-      // Add items
-      receiptData.items.forEach(item => {
-        html += `
-          <div style="display: flex; justify-content: space-between; margin: 5px 0;">
-            <span>${item.label}</span>
-            <span>${item.value}</span>
-          </div>
-        `;
-      });
+      await this.feedLine(1);
+      await this.printText('--------------------------------', 1);
 
-      html += `<div style="border-top: 2px dashed black; margin: 10px 0;"></div>`;
-
-      // Add QR code if provided
+      // Print QR code if provided
       if (receiptData.qrCode) {
-        html += `
-          <div style="text-align: center; margin: 20px 0;">
-            <img src="${receiptData.qrCode}" style="width: 150px; height: 150px;" />
-          </div>
-        `;
+        await this.feedLine(1);
+        await this.printImage(receiptData.qrCode, 1);
       }
 
-      // Add footer
+      // Print footer
       if (receiptData.footer) {
-        html += `
-          <div style="text-align: center; font-size: 10px; margin-top: 20px;">
-            ${receiptData.footer}
-          </div>
-        `;
+        await this.feedLine(1);
+        await this.printText(receiptData.footer, 1);
       }
 
-      tempDiv.innerHTML = html;
-      document.body.appendChild(tempDiv);
-
-      // Convert to canvas and then base64
-      const canvas = await html2canvas(tempDiv, {
-        backgroundColor: '#ffffff',
-        scale: 2,
-        logging: false
-      });
-      
-      const base64 = canvas.toDataURL('image/png').split(',')[1];
-      
-      // Clean up
-      document.body.removeChild(tempDiv);
-
-      // Print
-      await LidtaCapacitorBlPrinter!.printBase64({
-        msg: base64,
-        align: 1 // Center alignment
-      });
+      await this.feedLine(3);
+      await this.cutPaper();
     } catch (error) {
       console.error('Receipt print error:', error);
       throw error;
@@ -251,7 +254,7 @@ export class PrinterService {
   }
 
   /**
-   * Print HTML element directly
+   * Print HTML element as image
    * @param element - HTML element to print
    * @param align - Alignment (0=left, 1=center, 2=right)
    */
@@ -272,11 +275,7 @@ export class PrinterService {
       });
       
       const base64 = canvas.toDataURL('image/png').split(',')[1];
-
-      await LidtaCapacitorBlPrinter!.printBase64({
-        msg: base64,
-        align: align
-      });
+      await this.printImage(base64, align);
     } catch (error) {
       console.error('Element print error:', error);
       throw error;
