@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import MobileDashboard from "./pages/MobileDashboard";
+import ReceiptPreview from "./pages/ReceiptPreview";
 import NotFound from "./pages/NotFound";
 import { isNativePlatform } from "@/lib/capacitorUtils";
 
@@ -34,6 +35,7 @@ const App = () => {
             <Route path="/signup" element={<Signup />} />
             <Route path="/dashboard" element={<DashboardComponent />} />
             <Route path="/mobile" element={<MobileDashboard />} />
+            <Route path="/receipt-preview" element={<ReceiptPreview />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
