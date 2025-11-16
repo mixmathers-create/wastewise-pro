@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
@@ -27,6 +28,7 @@ interface CreateReceiptFormProps {
 
 const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [qrInput, setQrInput] = useState("");
   const [clientData, setClientData] = useState<any>(null);
@@ -268,7 +270,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       
       // Navigate to receipt preview on mobile
       if (Capacitor.isNativePlatform()) {
-        window.location.href = `#/receipt-preview?id=${insertedReceipt.id}`;
+        navigate(`/receipt-preview?id=${insertedReceipt.id}`);
       } else {
         await generatePDF(receiptQR, clientData, null);
       }
