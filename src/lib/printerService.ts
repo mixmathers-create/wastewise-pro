@@ -1,11 +1,19 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import html2canvas from 'html2canvas';
 
-// Access the custom BluetoothPrinter plugin
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const BluetoothPrinter: any = (typeof window !== 'undefined' && (window as any).Capacitor && (window as any).Capacitor.Plugins && (window as any).Capacitor.Plugins.BluetoothPrinter)
-  ? (window as any).Capacitor.Plugins.BluetoothPrinter
-  : null;
+// Define the plugin interface
+interface BluetoothPrinterPlugin {
+  connect(options: { address: string }): Promise<{ success: boolean; name?: string }>;
+  disconnect(): Promise<void>;
+  listPairedDevices(): Promise<{ devices: any[] }>;
+  printText(options: { text: string; align: number }): Promise<void>;
+  printImage(options: { base64Image: string; align: number }): Promise<void>;
+  cutPaper(): Promise<void>;
+  feedLine(options: { lines: number }): Promise<void>;
+}
+
+// Register the custom BluetoothPrinter plugin
+const BluetoothPrinter = registerPlugin<BluetoothPrinterPlugin>('BluetoothPrinter');
 
 interface PrinterConnection {
   address: string;
@@ -33,7 +41,7 @@ export class PrinterService {
    * Check if printer plugin is available
    */
   isAvailable(): boolean {
-    return BluetoothPrinter !== null && Capacitor.isNativePlatform();
+    return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
   }
 
   /**
@@ -152,7 +160,7 @@ export class PrinterService {
     }
 
     try {
-      await BluetoothPrinter.printImage({ image: base64Image, align });
+      await BluetoothPrinter.printImage({ base64Image, align });
     } catch (error) {
       console.error('Print image error:', error);
       throw error;

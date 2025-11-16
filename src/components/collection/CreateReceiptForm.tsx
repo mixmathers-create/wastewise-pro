@@ -216,6 +216,14 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
     setLoading(true);
     try {
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({ title: "Error", description: "User not authenticated", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
       const receiptQR = `RECEIPT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const signatureData = sigCanvas.current.toDataURL();
 
@@ -231,7 +239,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
           qr_code: receiptQR,
           signed_by: signedBy,
           signature_data: signatureData,
-          created_by: profile?.user_id || "",
+          created_by: user.id,
         })
         .select()
         .single();
@@ -507,20 +515,39 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
           <div>
             <Label>Items</Label>
-            {items.map((item, idx) => (
-              <div key={idx} className="flex gap-2 mt-2">
-                <Select value={item.waste_type} onValueChange={(v) => updateItem(idx, "waste_type", v)}>
+            {/* Static input area */}
+            <div className="sticky top-0 bg-background z-10 p-3 border rounded-md mt-2 mb-3">
+              <div className="flex gap-2">
+                <Select value={items[0]?.waste_type || ""} onValueChange={(v) => updateItem(0, "waste_type", v)}>
                   <SelectTrigger className="flex-1"><SelectValue placeholder="Waste type" /></SelectTrigger>
                   <SelectContent>{wasteTypes.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
                 </Select>
-                <Input type="number" placeholder="Qty" value={item.quantity} onChange={(e) => updateItem(idx, "quantity", parseFloat(e.target.value) || 0)} className="w-24" />
-                <Select value={item.unit} onValueChange={(v) => updateItem(idx, "unit", v)}>
+                <Input type="number" placeholder="Qty" value={items[0]?.quantity || 0} onChange={(e) => updateItem(0, "quantity", parseFloat(e.target.value) || 0)} className="w-24" />
+                <Select value={items[0]?.unit || "kg"} onValueChange={(v) => updateItem(0, "unit", v)}>
                   <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
                   <SelectContent>{units.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-            ))}
-            <Button type="button" variant="outline" size="sm" onClick={addItem} className="mt-2">Add Item</Button>
+              <Button type="button" variant="outline" size="sm" onClick={addItem} className="mt-2 w-full">Add Item</Button>
+            </div>
+
+            {/* List of added items */}
+            {items.length > 0 && (
+              <div className="space-y-2 mb-3">
+                <p className="text-sm font-semibold">Added Items:</p>
+                {items.map((item, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-2 bg-muted rounded-md">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{item.waste_type || "Not specified"}</p>
+                      <p className="text-xs text-muted-foreground">{item.quantity} {item.unit}</p>
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setItems(items.filter((_, i) => i !== idx))}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
