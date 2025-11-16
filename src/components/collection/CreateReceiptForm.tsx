@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, X } from "lucide-react";
-import SignatureCanvas from "react-signature-canvas";
+
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { Capacitor } from "@capacitor/core";
@@ -37,12 +37,10 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const [selectedTruck, setSelectedTruck] = useState("");
   const [selectedDriver, setSelectedDriver] = useState("");
   const [selectedHelpers, setSelectedHelpers] = useState<string[]>([]);
-  const [items, setItems] = useState<{ waste_type: string; quantity: number; unit: string }[]>([
-    { waste_type: "", quantity: 0, unit: "kg" }
-  ]);
+  const [items, setItems] = useState<{ waste_type: string; quantity: number; unit: string }[]>([]);
+  const [newItem, setNewItem] = useState({ waste_type: "", quantity: 0, unit: "kg" });
   const [signedBy, setSignedBy] = useState("");
   const [isScanning, setIsScanning] = useState(false);
-  const sigCanvas = useRef<SignatureCanvas>(null);
 
   useEffect(() => {
     loadClients();
@@ -186,8 +184,35 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     }
   };
 
-  const addItem = () => {
-    setItems([...items, { waste_type: "", quantity: 0, unit: "kg" }]);
+  const handleAddItem = () => {
+    if (!newItem.quantity || newItem.quantity <= 0) {
+      toast({ title: "Invalid Quantity", description: "Please enter a valid quantity", variant: "destructive" });
+      return;
+    }
+
+    const wasteType = newItem.waste_type || "Not specified";
+    
+    // Check if item with same waste_type and unit already exists
+    const existingItemIndex = items.findIndex(
+      item => item.waste_type === wasteType && item.unit === newItem.unit
+    );
+
+    if (existingItemIndex !== -1) {
+      // Sum the quantities
+      const updatedItems = [...items];
+      updatedItems[existingItemIndex].quantity += newItem.quantity;
+      setItems(updatedItems);
+    } else {
+      // Add new item
+      const item = {
+        waste_type: wasteType,
+        quantity: newItem.quantity,
+        unit: newItem.unit,
+      };
+      setItems([...items, item]);
+    }
+
+    setNewItem({ waste_type: "", quantity: 0, unit: "kg" });
   };
 
   const updateItem = (idx: number, field: string, value: any) => {
@@ -199,10 +224,6 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const handleSubmit = async () => {
     if (!clientData || !selectedTruck || !selectedDriver || selectedHelpers.length === 0 || !signedBy) {
       toast({ title: "Missing fields", description: "Please complete all fields", variant: "destructive" });
-      return;
-    }
-    if (!sigCanvas.current || sigCanvas.current.isEmpty()) {
-      toast({ title: "Signature required", description: "Please sign the receipt", variant: "destructive" });
       return;
     }
 
@@ -223,7 +244,6 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       }
 
       const receiptQR = `RECEIPT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const signatureData = sigCanvas.current.toDataURL();
 
       const { data: insertedReceipt, error } = await supabase
         .from("collection_receipts")
@@ -236,7 +256,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
           waste_types: items.map((i) => i.waste_type),
           qr_code: receiptQR,
           signed_by: signedBy,
-          signature_data: signatureData,
+          signature_data: null,
           created_by: userId,
         })
         .select()
@@ -250,7 +270,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       if (Capacitor.isNativePlatform()) {
         window.location.href = `#/receipt-preview?id=${insertedReceipt.id}`;
       } else {
-        await generatePDF(receiptQR, clientData, signatureData);
+        await generatePDF(receiptQR, clientData, null);
       }
 
       resetForm();
@@ -410,9 +430,9 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     setSelectedTruck("");
     setSelectedDriver("");
     setSelectedHelpers([]);
-    setItems([{ waste_type: "", quantity: 0, unit: "kg" }]);
+    setItems([]);
+    setNewItem({ waste_type: "", quantity: 0, unit: "kg" });
     setSignedBy("");
-    sigCanvas.current?.clear();
   };
 
   return (
@@ -516,17 +536,23 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
             {/* Static input area */}
             <div className="sticky top-0 bg-background z-10 p-3 border rounded-md mt-2 mb-3">
               <div className="flex gap-2">
-                <Select value={items[0]?.waste_type || ""} onValueChange={(v) => updateItem(0, "waste_type", v)}>
+                <Select value={newItem.waste_type} onValueChange={(v) => setNewItem({ ...newItem, waste_type: v })}>
                   <SelectTrigger className="flex-1"><SelectValue placeholder="Waste type" /></SelectTrigger>
                   <SelectContent>{wasteTypes.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
                 </Select>
-                <Input type="number" placeholder="Qty" value={items[0]?.quantity || 0} onChange={(e) => updateItem(0, "quantity", parseFloat(e.target.value) || 0)} className="w-24" />
-                <Select value={items[0]?.unit || "kg"} onValueChange={(v) => updateItem(0, "unit", v)}>
+                <Input type="number" placeholder="Qty" value={newItem.quantity || ""} onChange={(e) => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) || 0 })} className="w-24" />
+                <Select value={newItem.unit} onValueChange={(v) => setNewItem({ ...newItem, unit: v })}>
                   <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
                   <SelectContent>{units.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={addItem} className="mt-2 w-full">Add Item</Button>
+              <Button type="button" variant="outline" size="sm" onClick={handleAddItem} className="mt-2 w-full">Add Item</Button>
+            </div>
+
+            {/* Signed By field */}
+            <div className="mb-3">
+              <Label>Signed By (Name)</Label>
+              <Input value={signedBy} onChange={(e) => setSignedBy(e.target.value)} placeholder="Client representative name" />
             </div>
 
             {/* List of added items */}
@@ -546,19 +572,6 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
                 ))}
               </div>
             )}
-          </div>
-
-          <div>
-            <Label>Client Signature</Label>
-            <div className="border rounded-md">
-              <SignatureCanvas ref={sigCanvas} canvasProps={{ className: "w-full h-32" }} />
-            </div>
-            <Button type="button" variant="ghost" size="sm" onClick={() => sigCanvas.current?.clear()} className="mt-1">Clear</Button>
-          </div>
-
-          <div>
-            <Label>Signed By (Name)</Label>
-            <Input value={signedBy} onChange={(e) => setSignedBy(e.target.value)} placeholder="Client representative name" />
           </div>
 
           <Button onClick={handleSubmit} disabled={loading} className="w-full">
