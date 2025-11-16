@@ -213,43 +213,36 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       toast({ title: "Signature required", description: "Please sign the receipt", variant: "destructive" });
       return;
     }
-    if (printerService.isConnected()) {
-      await printerService.printReceipt({
-        header: "WasteWise Collection Receipt",
-        items: [
-          { label: "Client", value: clientData.name },
-          { label: "Date", value: new Date().toLocaleDateString() },
-          { label: "QR Code", value: clientData.qr_code },
-          { label: "Weight", value: `${items.reduce((acc, i) => acc + i.quantity, 0)} kg` }
-        ],
-        footer: "Thank you for using WasteWise!"
-      });
-    }
 
     setLoading(true);
     try {
       const receiptQR = `RECEIPT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const signatureData = sigCanvas.current.toDataURL();
 
-      const { error } = await supabase.from("collection_receipts").insert({
-        client_id: clientData.id,
-        truck_id: selectedTruck,
-        driver_id: selectedDriver,
-        helper_ids: selectedHelpers,
-        items,
-        waste_types: items.map((i) => i.waste_type),
-        qr_code: receiptQR,
-        signed_by: signedBy,
-        signature_data: signatureData,
-        created_by: profile?.user_id || "",
-      });
+      const { data: insertedReceipt, error } = await supabase
+        .from("collection_receipts")
+        .insert({
+          client_id: clientData.id,
+          truck_id: selectedTruck,
+          driver_id: selectedDriver,
+          helper_ids: selectedHelpers,
+          items,
+          waste_types: items.map((i) => i.waste_type),
+          qr_code: receiptQR,
+          signed_by: signedBy,
+          signature_data: signatureData,
+          created_by: profile?.user_id || "",
+        })
+        .select()
+        .single();
 
       if (error) throw error;
 
       toast({ title: "Receipt Created", description: "Collection receipt saved successfully" });
       
+      // Navigate to receipt preview on mobile
       if (Capacitor.isNativePlatform()) {
-        toast({ title: "Print", description: "Printer integration will be available soon" });
+        window.location.href = `#/receipt-preview?id=${insertedReceipt.id}`;
       } else {
         await generatePDF(receiptQR, clientData, signatureData);
       }
