@@ -24,20 +24,6 @@ const MobileDashboard = () => {
   }, []);
 
   const checkUser = async () => {
-    // Skip authentication check on native platforms
-    if (Capacitor.isNativePlatform()) {
-      // Set a default profile for native app
-      setProfile({
-        id: 'mobile-user',
-        user_id: 'mobile-user',
-        email: 'mobile@app.local',
-        full_name: 'Mobile User',
-        role: 'user'
-      });
-      setLoading(false);
-      return;
-    }
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
