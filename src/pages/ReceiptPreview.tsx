@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { printerService } from "@/lib/printerService";
 import { ArrowLeft, Printer } from "lucide-react";
 import QRCode from "qrcode";
+import SignatureCanvas from "react-signature-canvas";
+import { Label } from "@/components/ui/label";
 
 const ReceiptPreview = () => {
   const [searchParams] = useSearchParams();
@@ -22,6 +24,8 @@ const ReceiptPreview = () => {
   const [qrCodeUrl, setQrCodeUrl] = useState("");
   const [printing, setPrinting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [hasSignature, setHasSignature] = useState(false);
+  const signatureRef = useRef<SignatureCanvas>(null);
 
   useEffect(() => {
     if (receiptId) {
@@ -59,6 +63,9 @@ const ReceiptPreview = () => {
       // Generate QR code
       const qrUrl = await QRCode.toDataURL(receiptData.qr_code, { width: 300 });
       setQrCodeUrl(qrUrl);
+      
+      // Check if signature exists
+      setHasSignature(!!receiptData.signature_data);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -66,8 +73,47 @@ const ReceiptPreview = () => {
     }
   };
 
+  const handleSaveSignature = async () => {
+    if (!signatureRef.current || signatureRef.current.isEmpty()) {
+      toast({ title: "Missing Signature", description: "Please provide a signature", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const signatureData = signatureRef.current.toDataURL();
+      
+      const { error } = await supabase
+        .from("collection_receipts")
+        .update({ signature_data: signatureData })
+        .eq("id", receiptId);
+
+      if (error) throw error;
+
+      setHasSignature(true);
+      setReceipt({ ...receipt, signature_data: signatureData });
+      toast({ title: "Success", description: "Signature saved successfully" });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleClearSignature = () => {
+    if (signatureRef.current) {
+      signatureRef.current.clear();
+    }
+  };
+
   const handlePrint = async () => {
     if (!receipt || !client) return;
+
+    if (!hasSignature) {
+      toast({ 
+        title: "Missing Signature", 
+        description: "Please add signature before printing", 
+        variant: "destructive" 
+      });
+      return;
+    }
 
     if (!printerService.isAvailable()) {
       toast({ 
@@ -104,7 +150,7 @@ const ReceiptPreview = () => {
           { label: "", value: "---" },
           { label: "Signed By", value: receipt.signed_by }
         ],
-        qrCode: qrCodeUrl.split(',')[1], // Remove data:image/png;base64, prefix
+        qrCode: qrCodeUrl.split(',')[1],
         footer: "Thank you for choosing WasteWise!\nwww.wastewise.com"
       });
 
@@ -223,8 +269,39 @@ const ReceiptPreview = () => {
               </div>
             )}
 
-            {/* Signature */}
-            {receipt.signature_data && (
+            {/* Signature Section */}
+            {!hasSignature ? (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-lg font-bold">Client Signature</Label>
+                  <div className="border-2 rounded-lg bg-white">
+                    <SignatureCanvas
+                      ref={signatureRef}
+                      canvasProps={{
+                        className: "w-full h-48 touch-none"
+                      }}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleClearSignature}
+                      className="flex-1"
+                    >
+                      Clear
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handleSaveSignature}
+                      className="flex-1"
+                    >
+                      Save Signature
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
               <div className="space-y-2">
                 <h3 className="font-bold text-sm">Signature</h3>
                 <img src={receipt.signature_data} alt="Signature" className="border rounded h-24 w-full object-contain bg-gray-50" />
@@ -240,17 +317,19 @@ const ReceiptPreview = () => {
         </Card>
       </div>
 
-      {/* Fixed Print Button */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background border-t p-4 shadow-lg">
-        <Button 
-          onClick={handlePrint} 
-          disabled={printing}
-          className="w-full h-14 text-lg"
-        >
-          <Printer className="h-5 w-5 mr-2" />
-          {printing ? "Printing..." : "Print Receipt"}
-        </Button>
-      </div>
+      {/* Fixed Print Button - Only show if signature is saved */}
+      {hasSignature && (
+        <div className="fixed bottom-0 left-0 right-0 bg-background border-t p-4 shadow-lg">
+          <Button 
+            onClick={handlePrint} 
+            disabled={printing}
+            className="w-full h-14 text-lg"
+          >
+            <Printer className="h-5 w-5 mr-2" />
+            {printing ? "Printing..." : "Print Receipt"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
