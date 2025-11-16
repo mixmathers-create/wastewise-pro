@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { bluetoothService } from "@/lib/bluetoothService";
+import { printerService } from "@/lib/printerService";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const SettingsTab = ({ profile }: { profile: any }) => {
@@ -20,14 +20,19 @@ const SettingsTab = ({ profile }: { profile: any }) => {
   useEffect(() => {
     const savedLogo = localStorage.getItem("receipt_logo");
     if (savedLogo) setLogoUrl(savedLogo);
+    
+    // Check if printer is already connected
+    if (printerService.isConnected()) {
+      setPrinterConnected(true);
+    }
   }, []);
 
   const handleConnectPrinter = async () => {
     try {
-      if (!bluetoothService.isAvailable()) {
+      if (!printerService.isAvailable()) {
         toast({ 
           title: "Bluetooth Not Available", 
-          description: "Bluetooth scanning is only available on the Android app. Please pair your printer in Android Settings first.",
+          description: "Bluetooth printer is only available on the Android app.",
           variant: "destructive" 
         });
         return;
@@ -35,16 +40,8 @@ const SettingsTab = ({ profile }: { profile: any }) => {
 
       setScanning(true);
       
-      // Request permissions first (Android 12+)
-      const hasPermission = await bluetoothService.requestPermissions();
-      if (!hasPermission) {
-        toast({ title: "Permission Required", description: "Bluetooth permissions are needed to scan for printers.", variant: "destructive" });
-        setScanning(false);
-        return;
-      }
-
       // List paired devices
-      const pairedDevices = await bluetoothService.listPairedDevices();
+      const pairedDevices = await printerService.listDevices();
       setDevices(pairedDevices);
       setShowDeviceDialog(true);
       setScanning(false);
@@ -63,7 +60,7 @@ const SettingsTab = ({ profile }: { profile: any }) => {
 
   const handleDeviceSelect = async (device: any) => {
     try {
-      const connected = await bluetoothService.connect(device.address);
+      const connected = await printerService.connect(device.address);
       if (connected) {
         setPrinterConnected(true);
         setShowDeviceDialog(false);
@@ -159,7 +156,7 @@ const SettingsTab = ({ profile }: { profile: any }) => {
           </Button>
           {printerConnected && (
             <p className="text-sm text-muted-foreground mt-2">
-              Connected to: {bluetoothService.getConnectedDevice()?.name}
+              Connected to: {printerService.getConnectedPrinter()?.name}
             </p>
           )}
         </CardContent>
