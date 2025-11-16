@@ -22,11 +22,10 @@ interface PrinterConnection {
 
 /**
  * Bluetooth Printer Service for Android POS devices
- * Supports ESC/POS thermal printers with direct text and image printing
+ * Automatically finds and prints to "innerprinter" device
  */
 export class PrinterService {
   private static instance: PrinterService;
-  private connectedPrinter: PrinterConnection | null = null;
 
   private constructor() {}
 
@@ -45,65 +44,34 @@ export class PrinterService {
   }
 
   /**
-   * Connect to a Bluetooth printer by MAC address
-   * @param address - Bluetooth MAC address (e.g., "00:11:22:33:44:55")
+   * Find "innerprinter" from paired Bluetooth devices
    */
-  async connect(address: string): Promise<boolean> {
+  async findInnerPrinter(): Promise<{ address: string; name: string } | null> {
     if (!this.isAvailable()) {
       throw new Error('Printer service only available on native platforms');
     }
 
-    // Validate MAC address format
-    const macRegex = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
-    if (!macRegex.test(address)) {
-      throw new Error('Invalid MAC address format. Expected format: XX:XX:XX:XX:XX:XX');
-    }
-
     try {
-      const result = await BluetoothPrinter.connect({ address });
-      if (result.success) {
-        this.connectedPrinter = { 
-          address, 
-          name: result.name || 'Thermal Printer' 
+      const result = await BluetoothPrinter.listPairedDevices();
+      const devices = result.devices || [];
+      
+      // Find device with name "innerprinter" (case-insensitive)
+      const innerPrinter = devices.find((device: any) => 
+        device.name && device.name.toLowerCase().includes('innerprinter')
+      );
+      
+      if (innerPrinter) {
+        return {
+          address: innerPrinter.address,
+          name: innerPrinter.name
         };
-        return true;
       }
-      return false;
+      
+      return null;
     } catch (error) {
-      console.error('Printer connection error:', error);
+      console.error('Find printer error:', error);
       throw error;
     }
-  }
-
-  /**
-   * Disconnect from the printer
-   */
-  async disconnect(): Promise<void> {
-    if (!this.isAvailable()) {
-      throw new Error('Printer service only available on native platforms');
-    }
-
-    try {
-      await BluetoothPrinter.disconnect();
-      this.connectedPrinter = null;
-    } catch (error) {
-      console.error('Printer disconnection error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Check if printer is connected
-   */
-  isConnected(): boolean {
-    return this.connectedPrinter !== null;
-  }
-
-  /**
-   * Get current connected printer info
-   */
-  getConnectedPrinter(): PrinterConnection | null {
-    return this.connectedPrinter;
   }
 
   /**
@@ -124,92 +92,64 @@ export class PrinterService {
   }
 
   /**
-   * Print text directly to thermal printer
-   * @param text - Text content to print
-   * @param align - Alignment (0=left, 1=center, 2=right)
+   * Connect to printer and execute print commands
+   * @param address - Bluetooth MAC address
+   * @param printCallback - Function that executes print commands
    */
-  async printText(text: string, align: number = 0): Promise<void> {
-    if (!this.isAvailable()) {
-      throw new Error('Printer service only available on native platforms');
-    }
-
-    if (!this.isConnected()) {
-      throw new Error('Printer not connected');
-    }
-
+  private async connectAndPrint(address: string, printCallback: () => Promise<void>): Promise<void> {
     try {
-      await BluetoothPrinter.printText({ text, align });
+      // Connect to printer
+      const result = await BluetoothPrinter.connect({ address });
+      if (!result.success) {
+        throw new Error('Failed to connect to printer');
+      }
+
+      // Execute print commands
+      await printCallback();
+
+      // Disconnect
+      await BluetoothPrinter.disconnect();
     } catch (error) {
-      console.error('Print text error:', error);
+      // Try to disconnect on error
+      try {
+        await BluetoothPrinter.disconnect();
+      } catch (e) {
+        // Ignore disconnect errors
+      }
       throw error;
     }
   }
 
   /**
-   * Print image from base64 data
-   * @param base64Image - Base64 encoded image
-   * @param align - Alignment (0=left, 1=center, 2=right)
+   * Print text directly to thermal printer (internal method)
    */
-  async printImage(base64Image: string, align: number = 1): Promise<void> {
-    if (!this.isAvailable()) {
-      throw new Error('Printer service only available on native platforms');
-    }
-
-    if (!this.isConnected()) {
-      throw new Error('Printer not connected');
-    }
-
-    try {
-      await BluetoothPrinter.printImage({ base64Image, align });
-    } catch (error) {
-      console.error('Print image error:', error);
-      throw error;
-    }
+  private async printTextInternal(text: string, align: number = 0): Promise<void> {
+    await BluetoothPrinter.printText({ text, align });
   }
 
   /**
-   * Feed paper lines
-   * @param lines - Number of lines to feed
+   * Print image from base64 data (internal method)
    */
-  async feedLine(lines: number = 1): Promise<void> {
-    if (!this.isAvailable()) {
-      throw new Error('Printer service only available on native platforms');
-    }
-
-    if (!this.isConnected()) {
-      throw new Error('Printer not connected');
-    }
-
-    try {
-      await BluetoothPrinter.feedLine({ lines });
-    } catch (error) {
-      console.error('Feed line error:', error);
-      throw error;
-    }
+  private async printImageInternal(base64Image: string, align: number = 1): Promise<void> {
+    await BluetoothPrinter.printImage({ base64Image, align });
   }
 
   /**
-   * Cut paper
+   * Feed paper lines (internal method)
    */
-  async cutPaper(): Promise<void> {
-    if (!this.isAvailable()) {
-      throw new Error('Printer service only available on native platforms');
-    }
-
-    if (!this.isConnected()) {
-      throw new Error('Printer not connected');
-    }
-
-    try {
-      await BluetoothPrinter.cutPaper();
-    } catch (error) {
-      console.error('Cut paper error:', error);
-      throw error;
-    }
+  private async feedLineInternal(lines: number = 1): Promise<void> {
+    await BluetoothPrinter.feedLine({ lines });
   }
 
   /**
-   * Print formatted receipt
+   * Cut paper (internal method)
+   */
+  private async cutPaperInternal(): Promise<void> {
+    await BluetoothPrinter.cutPaper();
+  }
+
+  /**
+   * Print formatted receipt - finds and prints to "innerprinter"
    * @param receiptData - Receipt data including header, items, and footer
    */
   async printReceipt(receiptData: {
@@ -222,47 +162,46 @@ export class PrinterService {
       throw new Error('Printer service only available on native platforms');
     }
 
-    if (!this.isConnected()) {
-      throw new Error('Printer not connected');
+    // Find innerprinter
+    const printer = await this.findInnerPrinter();
+    if (!printer) {
+      throw new Error('innerprinter device not found in paired Bluetooth devices');
     }
 
-    try {
+    await this.connectAndPrint(printer.address, async () => {
       // Print header (centered, bold)
-      await this.printText(receiptData.header, 1);
-      await this.printText('--------------------------------', 1);
-      await this.feedLine(1);
+      await this.printTextInternal(receiptData.header, 1);
+      await this.printTextInternal('--------------------------------', 1);
+      await this.feedLineInternal(1);
 
       // Print items
       for (const item of receiptData.items) {
         const line = `${item.label.padEnd(20)}${item.value.padStart(12)}`;
-        await this.printText(line, 0);
+        await this.printTextInternal(line, 0);
       }
 
-      await this.feedLine(1);
-      await this.printText('--------------------------------', 1);
+      await this.feedLineInternal(1);
+      await this.printTextInternal('--------------------------------', 1);
 
       // Print QR code if provided
       if (receiptData.qrCode) {
-        await this.feedLine(1);
-        await this.printImage(receiptData.qrCode, 1);
+        await this.feedLineInternal(1);
+        await this.printImageInternal(receiptData.qrCode, 1);
       }
 
       // Print footer
       if (receiptData.footer) {
-        await this.feedLine(1);
-        await this.printText(receiptData.footer, 1);
+        await this.feedLineInternal(1);
+        await this.printTextInternal(receiptData.footer, 1);
       }
 
-      await this.feedLine(3);
-      await this.cutPaper();
-    } catch (error) {
-      console.error('Receipt print error:', error);
-      throw error;
-    }
+      await this.feedLineInternal(3);
+      await this.cutPaperInternal();
+    });
   }
 
   /**
-   * Print HTML element as image
+   * Print HTML element as image - finds and prints to "innerprinter"
    * @param element - HTML element to print
    * @param align - Alignment (0=left, 1=center, 2=right)
    */
@@ -271,23 +210,25 @@ export class PrinterService {
       throw new Error('Printer service only available on native platforms');
     }
 
-    if (!this.isConnected()) {
-      throw new Error('Printer not connected');
+    // Find innerprinter
+    const printer = await this.findInnerPrinter();
+    if (!printer) {
+      throw new Error('innerprinter device not found in paired Bluetooth devices');
     }
 
-    try {
-      const canvas = await html2canvas(element, {
-        backgroundColor: '#ffffff',
-        scale: 2,
-        logging: false
-      });
-      
-      const base64 = canvas.toDataURL('image/png').split(',')[1];
-      await this.printImage(base64, align);
-    } catch (error) {
-      console.error('Element print error:', error);
-      throw error;
-    }
+    const canvas = await html2canvas(element, {
+      backgroundColor: '#ffffff',
+      scale: 2,
+      logging: false
+    });
+    
+    const base64 = canvas.toDataURL('image/png').split(',')[1];
+
+    await this.connectAndPrint(printer.address, async () => {
+      await this.printImageInternal(base64, align);
+      await this.feedLineInternal(3);
+      await this.cutPaperInternal();
+    });
   }
 }
 
