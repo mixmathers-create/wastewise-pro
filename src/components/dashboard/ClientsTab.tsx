@@ -9,6 +9,7 @@ import { Download, Upload } from "lucide-react";
 import QRCode from "qrcode";
 import { generateCSV, downloadCSV, parseCSV } from "@/lib/csvUtils";
 import { useToast } from "@/hooks/use-toast";
+import { Capacitor } from '@capacitor/core';
 
 const ClientsTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
@@ -17,6 +18,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = profile?.role === "admin";
+  const isMobile = Capacitor.isNativePlatform();
 
   const fetchClients = async () => {
     setLoading(true);
@@ -90,19 +92,23 @@ const ClientsTab = ({ profile }: { profile: any }) => {
           </div>
           {isAdmin && (
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={downloadTemplate}>
-                <Download className="h-4 w-4 mr-2" />Template
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-                <Upload className="h-4 w-4 mr-2" />Import CSV
-              </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv"
-                onChange={handleImport}
-                className="hidden"
-              />
+              {!isMobile && (
+                <>
+                  <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                    <Download className="h-4 w-4 mr-2" />Template
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                    <Upload className="h-4 w-4 mr-2" />Import CSV
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    onChange={handleImport}
+                    className="hidden"
+                  />
+                </>
+              )}
               <AddClientDialog profile={profile} onAdded={fetchClients} />
             </div>
           )}
