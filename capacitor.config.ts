@@ -4,8 +4,9 @@ const config: CapacitorConfig = {
   appId: 'app.lovable.d5da6030305c43408010d32b9004d074',
   appName: 'WasteWise',
   webDir: 'dist',
-  server: {
-    url: 'https://d5da6030-305c-4340-8010-d32b9004d074.lovableproject.com?forceHideBadge=true',
+  bundledWebRuntime: false,
+  cordova: {
+    preferences: {
     cleartext: true
   },
   plugins: {
