@@ -67,6 +67,8 @@
         </intent>
         <intent>
             <action android:name="recieptservice.com.recieptservice.PrinterInterface" />
+        <intent>
+            <action android:name="receiptservice.com.receiptservice.PrinterInterface" />
         </intent>
     </queries>
 

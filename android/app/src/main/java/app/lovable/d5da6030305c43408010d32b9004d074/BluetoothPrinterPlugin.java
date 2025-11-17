@@ -52,7 +52,6 @@ public class BluetoothPrinterPlugin extends Plugin {
             if (connectionLatch != null) {
                 connectionLatch.countDown();
             }
-            bindPrinterService();
             Log.d(TAG, "Printer service disconnected");
         }
     };
@@ -88,12 +87,55 @@ public class BluetoothPrinterPlugin extends Plugin {
                     Log.w(TAG, "Component bind failed for " + pkg + "/" + cls + ": " + ex.getMessage());
                 }
 
+            // Try explicit start first (may no-op if already running)
+            Intent startIntent = new Intent();
+            startIntent.setPackage("receiptservice.com.receiptservice");
+            startIntent.setAction("receiptservice.com.receiptservice.PrinterInterface");
+            try {
+                context.startService(startIntent);
+                Log.d(TAG, "Attempted to start printer service");
+            } catch (Exception e) {
+                Log.w(TAG, "Could not start service explicitly (may already be running): " + e.getMessage());
+            }
+
+            // First try implicit bind by action
+            Intent bindIntent = new Intent();
+            bindIntent.setPackage("receiptservice.com.receiptservice");
+            bindIntent.setAction("receiptservice.com.receiptservice.PrinterInterface");
+
+            android.content.pm.PackageManager pm = context.getPackageManager();
+            java.util.List<android.content.pm.ResolveInfo> services = pm.queryIntentServices(bindIntent, 0);
+            Log.d(TAG, "Available printer services found (implicit): " + services.size());
+            for (android.content.pm.ResolveInfo info : services) {
+                Log.d(TAG, "Service (implicit): " + info.serviceInfo.packageName + "/" + info.serviceInfo.name);
+            }
+
+            boolean bound = context.bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE);
+            if (bound) {
+                Log.d(TAG, "Successfully bound to printer service (implicit)");
+                return;
+            } else {
+                Log.w(TAG, "bindService (implicit) returned false - trying explicit component names");
+            }
+
+            // Fallback: try common explicit service class names
+            String[] candidateClasses = new String[] {
+                "receiptservice.com.receiptservice.PrinterService",
+                "receiptservice.com.receiptservice.InnerPrinterService",
+                "receiptservice.com.receiptservice.PrintService",
+                "receiptservice.com.receiptservice.ReceiptService"
+            };
+
                 // Fallback: include the AIDL action string for older firmware
                 try {
                     Intent withAction = new Intent(pkg + ".PrinterInterface");
                     withAction.setClassName(pkg, cls);
                     boolean ok = context.bindService(withAction, serviceConnection, Context.BIND_AUTO_CREATE);
                     Log.d(TAG, "Attempted bind to " + pkg + "/" + cls + " (with action) => " + ok);
+                    Intent explicit = new Intent();
+                    explicit.setComponent(new ComponentName("receiptservice.com.receiptservice", cls));
+                    boolean ok = context.bindService(explicit, serviceConnection, Context.BIND_AUTO_CREATE);
+                    Log.d(TAG, "Attempted explicit bind to " + cls + " => " + ok);
                     if (ok) {
                         Log.d(TAG, "Successfully bound to printer service using action: " + pkg + ".PrinterInterface");
                         return;
@@ -134,7 +176,7 @@ public class BluetoothPrinterPlugin extends Plugin {
         if (!isBound || printerInterface == null) {
             Log.d(TAG, "connect() called while not bound. Attempting to bind...");
             bindPrinterService();
-            boolean connected = waitForServiceConnection(CONNECTION_TIMEOUT_MS);
+            boolean connected = waitForServiceConnection(2000);
             if (!connected) {
                 result.put("success", false);
                 result.put("bound", isBound);
