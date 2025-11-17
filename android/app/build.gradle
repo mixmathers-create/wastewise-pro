@@ -3,6 +3,17 @@ apply plugin: 'com.android.application'
 android {
     namespace "app.lovable.d5da6030305c43408010d32b9004d074"
     compileSdk rootProject.ext.compileSdkVersion
+    
+    buildFeatures {
+        aidl true
+    }
+    
+    sourceSets {
+        main {
+            aidl.srcDirs = ['src/main/aidl']
+        }
+    }
+    
     defaultConfig {
         applicationId "app.lovable.d5da6030305c43408010d32b9004d074"
         minSdkVersion rootProject.ext.minSdkVersion
