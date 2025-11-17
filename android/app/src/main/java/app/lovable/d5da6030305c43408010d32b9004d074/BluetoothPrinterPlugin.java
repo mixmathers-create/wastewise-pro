@@ -10,6 +10,8 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Base64;
 import android.util.Log;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -24,6 +26,7 @@ public class BluetoothPrinterPlugin extends Plugin {
     private static final String TAG = "BluetoothPrinterPlugin";
     private PrinterInterface printerInterface;
     private boolean isBound = false;
+    private CountDownLatch connectionLatch;
 
     // Service connection for AIDL
     private ServiceConnection serviceConnection = new ServiceConnection() {
@@ -31,6 +34,9 @@ public class BluetoothPrinterPlugin extends Plugin {
         public void onServiceConnected(ComponentName name, IBinder service) {
             printerInterface = PrinterInterface.Stub.asInterface(service);
             isBound = true;
+            if (connectionLatch != null) {
+                connectionLatch.countDown();
+            }
             Log.d(TAG, "Printer service connected");
         }
 
@@ -38,6 +44,9 @@ public class BluetoothPrinterPlugin extends Plugin {
         public void onServiceDisconnected(ComponentName name) {
             printerInterface = null;
             isBound = false;
+            if (connectionLatch != null) {
+                connectionLatch.countDown();
+            }
             Log.d(TAG, "Printer service disconnected");
         }
     };
@@ -51,6 +60,7 @@ public class BluetoothPrinterPlugin extends Plugin {
     private void bindPrinterService() {
         try {
             Context context = getContext();
+            connectionLatch = new CountDownLatch(1);
 
             // Try explicit start first (may no-op if already running)
             Intent startIntent = new Intent();
@@ -107,8 +117,27 @@ public class BluetoothPrinterPlugin extends Plugin {
             }
 
             Log.e(TAG, "All attempts to bind to printer service failed");
+            if (connectionLatch != null) {
+                connectionLatch.countDown();
+            }
         } catch (Exception e) {
             Log.e(TAG, "Error binding to printer service", e);
+            if (connectionLatch != null) {
+                connectionLatch.countDown();
+            }
+        }
+    }
+
+    private boolean waitForServiceConnection(long timeoutMs) {
+        try {
+            if (connectionLatch != null) {
+                return connectionLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
+            }
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            Log.e(TAG, "Interrupted while waiting for printer service", e);
+            return false;
         }
     }
 
@@ -118,6 +147,14 @@ public class BluetoothPrinterPlugin extends Plugin {
         if (!isBound || printerInterface == null) {
             Log.d(TAG, "connect() called while not bound. Attempting to bind...");
             bindPrinterService();
+            boolean connected = waitForServiceConnection(2000);
+            if (!connected) {
+                result.put("success", false);
+                result.put("bound", isBound);
+                result.put("interface", printerInterface != null);
+                call.reject("Printer service not available. Check logcat for details.");
+                return;
+            }
         }
         if (isBound && printerInterface != null) {
             try {
