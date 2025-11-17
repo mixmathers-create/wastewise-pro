@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Bluetooth, Printer } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
+import { printerService } from "@/lib/printerService";
 
 const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
@@ -79,18 +80,15 @@ const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
     }
 
     try {
-      // Placeholder for lidta-capacitor-bl-printer integration
-      // The actual implementation would use the lidta-capacitor-bl-printer package
-      toast({ 
-        title: "Coming Soon", 
-        description: "Bluetooth printer pairing will be available in the next update" 
+      const result = await printerService.testConnection();
+      setPrinterConnected(result.success);
+
+      toast({
+        title: result.success ? "Printer Connected" : "Printer Not Available",
+        description: result.success
+          ? `Service version ${result.serviceVersion || "unknown"} ready`
+          : "Could not reach the H10 printer service"
       });
-      
-      // Future implementation:
-      // import { BluetoothPrinter } from 'lidta-capacitor-bl-printer';
-      // const devices = await BluetoothPrinter.scanDevices();
-      // await BluetoothPrinter.connect({ address: selectedDevice.address });
-      // setPrinterConnected(true);
     } catch (error: any) {
       toast({ title: "Connection Failed", description: error.message, variant: "destructive" });
     }
@@ -143,7 +141,8 @@ const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Bluetooth printer pairing is available on mobile devices. Use lidta-capacitor-bl-printer for 58mm thermal printers.
+            Bluetooth printing uses the built-in H10 service (`recieptservice.com.recieptservice`). Ensure the vendor app is
+            installed and running on the device.
           </p>
         </CardContent>
       </Card>
