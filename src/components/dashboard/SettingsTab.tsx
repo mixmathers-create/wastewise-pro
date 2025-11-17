@@ -25,13 +25,13 @@ const SettingsTab = ({ profile }: { profile: any }) => {
         setPrinterStatus('connected');
         toast({
           title: "Printer Connected",
-          description: result.name || "H10P Internal Printer ready",
+          description: `${result.name || 'H10P Internal Printer'} ready (${result.encoding || 'GB18030'})`,
         });
       } else {
         setPrinterStatus('error');
         toast({
           title: "Printer Not Ready",
-          description: "The H10P vendor printer service is not installed or not running. Please install the vendor's printer service APK.",
+          description: "The H10P vendor printer service is installed but not responding. Check device logs for details.",
           variant: "destructive"
         });
       }
@@ -40,7 +40,7 @@ const SettingsTab = ({ profile }: { profile: any }) => {
       console.error('Printer check error:', error);
       toast({
         title: "Connection Error",
-        description: error.message || "H10P vendor printer service not available. Ensure the vendor APK is installed.",
+        description: error.message || "Could not connect to printer service. Ensure the vendor service is running.",
         variant: "destructive"
       });
     }
@@ -84,10 +84,9 @@ const SettingsTab = ({ profile }: { profile: any }) => {
         <CardContent className="space-y-4">
           <Alert>
             <AlertDescription>
-              The H10P has an internal 58mm ESC/POS thermal printer. 
-              This requires the vendor's printer service APK to be installed on the device.
-              Click "Check Printer" to verify the connection to the internal printer service,
-              then use "Test Print" to print a test receipt.
+              The H10P has an internal 58mm ESC/POS thermal printer using GB18030 encoding. 
+              The vendor's printer service APK must be installed and running on the device.
+              Click "Check Printer" to verify the connection, then use "Test Print" to print a test receipt.
             </AlertDescription>
           </Alert>
 

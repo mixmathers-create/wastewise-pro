@@ -51,24 +51,40 @@ public class BluetoothPrinterPlugin extends Plugin {
 
     private void bindPrinterService() {
         try {
-            Intent intent = new Intent();
-            intent.setPackage("recieptservice.com.recieptservice");
-            intent.setAction("recieptservice.com.recieptservice.PrinterInterface");
-            
             Context context = getContext();
+            
+            // First try to start the service explicitly
+            Intent startIntent = new Intent();
+            startIntent.setPackage("recieptservice.com.recieptservice");
+            startIntent.setAction("recieptservice.com.recieptservice.PrinterInterface");
+            
+            try {
+                context.startService(startIntent);
+                Log.d(TAG, "Attempted to start printer service");
+            } catch (Exception e) {
+                Log.w(TAG, "Could not start service explicitly (may already be running): " + e.getMessage());
+            }
+            
+            // Now bind to the service
+            Intent bindIntent = new Intent();
+            bindIntent.setPackage("recieptservice.com.recieptservice");
+            bindIntent.setAction("recieptservice.com.recieptservice.PrinterInterface");
             
             // Log available services for debugging
             android.content.pm.PackageManager pm = context.getPackageManager();
-            java.util.List<android.content.pm.ResolveInfo> services = pm.queryIntentServices(intent, 0);
-            Log.d(TAG, "Available printer services: " + services.size());
+            java.util.List<android.content.pm.ResolveInfo> services = pm.queryIntentServices(bindIntent, 0);
+            Log.d(TAG, "Available printer services found: " + services.size());
             
-            boolean bound = context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
+            for (android.content.pm.ResolveInfo info : services) {
+                Log.d(TAG, "Service: " + info.serviceInfo.packageName + "/" + info.serviceInfo.name);
+            }
+            
+            boolean bound = context.bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE);
             
             if (bound) {
-                Log.d(TAG, "Binding to printer service...");
+                Log.d(TAG, "Successfully bound to printer service");
             } else {
-                Log.e(TAG, "Failed to bind to printer service - service may not be installed");
-                Log.e(TAG, "Make sure the H10P vendor printer service APK is installed");
+                Log.e(TAG, "bindService returned false - service may not be available");
             }
         } catch (Exception e) {
             Log.e(TAG, "Error binding to printer service", e);
@@ -79,13 +95,27 @@ public class BluetoothPrinterPlugin extends Plugin {
     public void connect(PluginCall call) {
         JSObject result = new JSObject();
         if (isBound && printerInterface != null) {
-            result.put("success", true);
-            result.put("name", "H10P Internal Printer");
-            call.resolve(result);
+            try {
+                // Initialize printer with GB18030 charset
+                printerInterface.setCode("GB18030");
+                Log.d(TAG, "Printer initialized with GB18030 encoding");
+                
+                result.put("success", true);
+                result.put("name", "H10P Internal Printer");
+                result.put("encoding", "GB18030");
+                call.resolve(result);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Error initializing printer", e);
+                result.put("success", false);
+                result.put("error", "Failed to initialize printer: " + e.getMessage());
+                call.reject("Failed to initialize printer", e);
+            }
         } else {
             result.put("success", false);
-            result.put("error", "Printer service not connected");
-            call.reject("Printer service not available");
+            result.put("bound", isBound);
+            result.put("interface", printerInterface != null);
+            Log.e(TAG, "Printer not available - isBound: " + isBound + ", interface: " + (printerInterface != null));
+            call.reject("Printer service not available. Check logcat for details.");
         }
     }
 
@@ -97,6 +127,7 @@ public class BluetoothPrinterPlugin extends Plugin {
     @PluginMethod
     public void printText(PluginCall call) {
         if (!isBound || printerInterface == null) {
+            Log.e(TAG, "printText failed - service not bound");
             call.reject("Printer service not available");
             return;
         }
@@ -105,11 +136,13 @@ public class BluetoothPrinterPlugin extends Plugin {
             String text = call.getString("text", "");
             Integer align = call.getInt("align", 0);
 
+            Log.d(TAG, "Printing text with alignment " + align + ": " + text);
+            
             // Set alignment: 0=left, 1=center, 2=right
             printerInterface.setAlignment(align);
             
-            // Print the text
-            printerInterface.printText(text + "\n");
+            // Print the text (already includes newline from calling code)
+            printerInterface.printText(text);
             
             call.resolve();
         } catch (RemoteException e) {
@@ -191,11 +224,13 @@ public class BluetoothPrinterPlugin extends Plugin {
     @PluginMethod
     public void beginWork(PluginCall call) {
         if (!isBound || printerInterface == null) {
+            Log.e(TAG, "beginWork failed - service not bound");
             call.reject("Printer service not available");
             return;
         }
 
         try {
+            Log.d(TAG, "Beginning print job");
             printerInterface.beginWork();
             call.resolve();
         } catch (RemoteException e) {
@@ -207,11 +242,13 @@ public class BluetoothPrinterPlugin extends Plugin {
     @PluginMethod
     public void endWork(PluginCall call) {
         if (!isBound || printerInterface == null) {
+            Log.e(TAG, "endWork failed - service not bound");
             call.reject("Printer service not available");
             return;
         }
 
         try {
+            Log.d(TAG, "Ending print job");
             printerInterface.endWork();
             call.resolve();
         } catch (RemoteException e) {

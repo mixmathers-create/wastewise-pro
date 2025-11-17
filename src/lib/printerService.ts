@@ -45,13 +45,14 @@ export class PrinterService {
   /**
    * Test printer connection
    */
-  async testConnection(): Promise<{ success: boolean; name?: string }> {
+  async testConnection(): Promise<{ success: boolean; name?: string; encoding?: string }> {
     if (!this.isAvailable()) {
       throw new Error('Printer service only available on Android');
     }
 
     try {
       const result = await BluetoothPrinter.connect();
+      console.log('Printer connection result:', result);
       return result;
     } catch (error) {
       console.error('Printer connection test failed:', error);
@@ -95,20 +96,20 @@ export class PrinterService {
       // Print header (centered, bold)
       await BluetoothPrinter.setTextBold({ bold: true });
       await BluetoothPrinter.setTextSize({ size: 28 });
-      await BluetoothPrinter.printText({ text: receiptData.header, align: 1 });
+      await BluetoothPrinter.printText({ text: receiptData.header + '\n', align: 1 });
       await BluetoothPrinter.setTextBold({ bold: false });
       await BluetoothPrinter.setTextSize({ size: 24 });
-      await BluetoothPrinter.printText({ text: '--------------------------------', align: 1 });
+      await BluetoothPrinter.printText({ text: '--------------------------------\n', align: 1 });
       await BluetoothPrinter.feedLine({ lines: 1 });
 
       // Print items
       for (const item of receiptData.items) {
-        const line = `${item.label.padEnd(20)}${item.value.padStart(12)}`;
+        const line = `${item.label.padEnd(20)}${item.value.padStart(12)}\n`;
         await BluetoothPrinter.printText({ text: line, align: 0 });
       }
 
       await BluetoothPrinter.feedLine({ lines: 1 });
-      await BluetoothPrinter.printText({ text: '--------------------------------', align: 1 });
+      await BluetoothPrinter.printText({ text: '--------------------------------\n', align: 1 });
 
       // Print QR code if provided
       if (receiptData.qrCode) {
@@ -124,7 +125,7 @@ export class PrinterService {
       // Print footer
       if (receiptData.footer) {
         await BluetoothPrinter.feedLine({ lines: 1 });
-        await BluetoothPrinter.printText({ text: receiptData.footer, align: 1 });
+        await BluetoothPrinter.printText({ text: receiptData.footer + '\n', align: 1 });
       }
 
       await BluetoothPrinter.feedLine({ lines: 3 });
@@ -166,18 +167,19 @@ export class PrinterService {
     await this.executePrintJob(async () => {
       await BluetoothPrinter.setTextBold({ bold: true });
       await BluetoothPrinter.setTextSize({ size: 32 });
-      await BluetoothPrinter.printText({ text: 'TEST PRINT', align: 1 });
+      await BluetoothPrinter.printText({ text: 'TEST PRINT\n', align: 1 });
       
       await BluetoothPrinter.setTextBold({ bold: false });
       await BluetoothPrinter.setTextSize({ size: 24 });
-      await BluetoothPrinter.printText({ text: '--------------------------------', align: 1 });
+      await BluetoothPrinter.printText({ text: '--------------------------------\n', align: 1 });
       await BluetoothPrinter.feedLine({ lines: 1 });
       
-      await BluetoothPrinter.printText({ text: 'H10P Internal Printer', align: 1 });
-      await BluetoothPrinter.printText({ text: 'Connection: OK', align: 1 });
+      await BluetoothPrinter.printText({ text: 'H10P Internal Printer\n', align: 1 });
+      await BluetoothPrinter.printText({ text: 'GB18030 Encoding\n', align: 1 });
+      await BluetoothPrinter.printText({ text: 'Connection: OK\n', align: 1 });
       await BluetoothPrinter.feedLine({ lines: 1 });
       
-      await BluetoothPrinter.printText({ text: new Date().toLocaleString(), align: 1 });
+      await BluetoothPrinter.printText({ text: new Date().toLocaleString() + '\n', align: 1 });
       await BluetoothPrinter.feedLine({ lines: 3 });
       await BluetoothPrinter.cutPaper();
     });
