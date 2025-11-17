@@ -19,7 +19,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
-import recieptservice.com.recieptservice.PrinterInterface;
+import receiptservice.com.receiptservice.PrinterInterface;
 
 @CapacitorPlugin(name = "BluetoothPrinter")
 public class BluetoothPrinterPlugin extends Plugin {
@@ -64,8 +64,8 @@ public class BluetoothPrinterPlugin extends Plugin {
 
             // Try explicit start first (may no-op if already running)
             Intent startIntent = new Intent();
-            startIntent.setPackage("recieptservice.com.recieptservice");
-            startIntent.setAction("recieptservice.com.recieptservice.PrinterInterface");
+            startIntent.setPackage("receiptservice.com.receiptservice");
+            startIntent.setAction("receiptservice.com.receiptservice.PrinterInterface");
             try {
                 context.startService(startIntent);
                 Log.d(TAG, "Attempted to start printer service");
@@ -75,8 +75,8 @@ public class BluetoothPrinterPlugin extends Plugin {
 
             // First try implicit bind by action
             Intent bindIntent = new Intent();
-            bindIntent.setPackage("recieptservice.com.recieptservice");
-            bindIntent.setAction("recieptservice.com.recieptservice.PrinterInterface");
+            bindIntent.setPackage("receiptservice.com.receiptservice");
+            bindIntent.setAction("receiptservice.com.receiptservice.PrinterInterface");
 
             android.content.pm.PackageManager pm = context.getPackageManager();
             java.util.List<android.content.pm.ResolveInfo> services = pm.queryIntentServices(bindIntent, 0);
@@ -95,16 +95,16 @@ public class BluetoothPrinterPlugin extends Plugin {
 
             // Fallback: try common explicit service class names
             String[] candidateClasses = new String[] {
-                "recieptservice.com.recieptservice.PrinterService",
-                "recieptservice.com.recieptservice.InnerPrinterService",
-                "recieptservice.com.recieptservice.PrintService",
-                "recieptservice.com.recieptservice.ReceiptService"
+                "receiptservice.com.receiptservice.PrinterService",
+                "receiptservice.com.receiptservice.InnerPrinterService",
+                "receiptservice.com.receiptservice.PrintService",
+                "receiptservice.com.receiptservice.ReceiptService"
             };
 
             for (String cls : candidateClasses) {
                 try {
                     Intent explicit = new Intent();
-                    explicit.setComponent(new ComponentName("recieptservice.com.recieptservice", cls));
+                    explicit.setComponent(new ComponentName("receiptservice.com.receiptservice", cls));
                     boolean ok = context.bindService(explicit, serviceConnection, Context.BIND_AUTO_CREATE);
                     Log.d(TAG, "Attempted explicit bind to " + cls + " => " + ok);
                     if (ok) {
@@ -159,12 +159,14 @@ public class BluetoothPrinterPlugin extends Plugin {
         if (isBound && printerInterface != null) {
             try {
                 // Initialize printer with GB18030 charset
+                String version = printerInterface.getServiceVersion();
                 printerInterface.setCode("GB18030");
-                Log.d(TAG, "Printer initialized with GB18030 encoding");
-                
+                Log.d(TAG, "Printer initialized with GB18030 encoding. Service version: " + version);
+
                 result.put("success", true);
                 result.put("name", "H10P Internal Printer");
                 result.put("encoding", "GB18030");
+                result.put("serviceVersion", version);
                 call.resolve(result);
             } catch (RemoteException e) {
                 Log.e(TAG, "Error initializing printer", e);

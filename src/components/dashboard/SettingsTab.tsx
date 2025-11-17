@@ -23,9 +23,10 @@ const SettingsTab = ({ profile }: { profile: any }) => {
       const result = await printerService.testConnection();
       if (result.success) {
         setPrinterStatus('connected');
+        const versionLabel = result.serviceVersion ? ` · v${result.serviceVersion}` : '';
         toast({
           title: "Printer Connected",
-          description: `${result.name || 'H10P Internal Printer'} ready (${result.encoding || 'GB18030'})`,
+          description: `${result.name || 'H10P Internal Printer'} ready (${result.encoding || 'GB18030'})${versionLabel}`,
         });
       } else {
         setPrinterStatus('error');
