@@ -100,6 +100,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const LANDFILL_LON = 123.92344575134916;
   const SERVICE_TIME_PER_MT = 40; // minutes per MT
   const AVERAGE_SPEED_KMH = 30; // average speed in traffic
+  const LANDFILL_DISPOSAL_TIME = 60; // minutes for disposal at landfill
   
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
@@ -1042,7 +1043,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                   }
                 }
                 
-                const totalHours = ((totalServiceTime + travelToLandfillTime) / 60).toFixed(1);
+                const totalHours = ((totalServiceTime + travelToLandfillTime + LANDFILL_DISPOSAL_TIME) / 60).toFixed(1);
                 
                 return (
                   <div key={schedule.id || idx} className="border rounded p-3 space-y-2">
@@ -1119,6 +1120,10 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                           <div className="flex justify-between text-muted-foreground">
                             <span>Travel to Landfill:</span>
                             <span>{(travelToLandfillTime / 60).toFixed(1)} hrs</span>
+                          </div>
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>Landfill Disposal:</span>
+                            <span>{(LANDFILL_DISPOSAL_TIME / 60).toFixed(1)} hrs</span>
                           </div>
                           <div className="flex justify-between font-medium">
                             <span>Total Shift Time:</span>
