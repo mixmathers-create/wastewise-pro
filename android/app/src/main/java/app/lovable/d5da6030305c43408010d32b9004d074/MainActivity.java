@@ -4,7 +4,7 @@ import android.os.Bundle;
 import android.util.Log;
 import com.getcapacitor.BridgeActivity;
 import com.capacitorjs.plugins.camera.CameraPlugin;
-import com.capacitor.mlkit.barcode.scanning.BarcodeScannerPlugin;
+
 
 public class MainActivity extends BridgeActivity {
   @Override

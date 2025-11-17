@@ -12,7 +12,6 @@ dependencies {
     implementation project(':capacitor-community-barcode-scanner')
     implementation project(':capacitor-mlkit-barcode-scanning')
     implementation project(':capacitor-camera')
-    implementation project(':capacitor-mlkit-barcode-scanning')
     implementation project(':lidta-capacitor-bl-printer')
 
 }
