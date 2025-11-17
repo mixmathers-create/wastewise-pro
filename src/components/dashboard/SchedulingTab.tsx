@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar as CalendarIcon, Edit2, Check, Wrench, Trash2, X, ChevronDown, ChevronUp, Download, Users } from "lucide-react";
+import { Calendar as CalendarIcon, Edit2, Check, Wrench, Trash2, X, ChevronDown, ChevronUp, Download, Users, AlertTriangle } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { format, addDays } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -446,6 +447,20 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
     }
   };
 
+  const clearAllSchedules = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.from("schedules").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      if (error) throw error;
+      toast({ title: "All schedules cleared" });
+      loadData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const toggleGroup = (key: string) => {
     setExpandedGroups(prev => {
       const newSet = new Set(prev);
@@ -610,6 +625,28 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                     <Download className="mr-1 h-3 w-3" />
                     Export PDF
                   </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="text-destructive border-destructive">
+                        <Trash2 className="mr-1 h-3 w-3" />
+                        Clear All
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Clear All Schedules?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will permanently delete all schedules (draft, scheduled, and approved). This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={clearAllSchedules} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                          Clear All Schedules
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button variant="outline" size="sm" className="text-xs">
