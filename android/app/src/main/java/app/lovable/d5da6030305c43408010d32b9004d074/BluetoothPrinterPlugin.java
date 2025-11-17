@@ -18,7 +18,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
-import recieptservice.com.recieptservicenpx.PrinterInterface;
+import recieptservice.com.recieptservice.PrinterInterface;
 
 @CapacitorPlugin(name = "BluetoothPrinter")
 public class BluetoothPrinterPlugin extends Plugin {
