@@ -69,4 +69,16 @@
             android:name="com.google.mlkit.vision.DEPENDENCIES"
             android:value="barcode_scanning" />
     </application>
+
+    <!-- Query for printer service -->
+    <queries>
+        <package android:name="recieptservice.com.recieptservice" />
+        <intent>
+            <action android:name="recieptservice.com.recieptservice.PrinterInterface" />
+        </intent>
+    </queries>
+
+    <!-- Permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 </manifest>
