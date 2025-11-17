@@ -31,7 +31,7 @@ const SettingsTab = ({ profile }: { profile: any }) => {
         setPrinterStatus('error');
         toast({
           title: "Printer Not Ready",
-          description: "Could not connect to internal printer",
+          description: "The H10P vendor printer service is not installed or not running. Please install the vendor's printer service APK.",
           variant: "destructive"
         });
       }
@@ -40,7 +40,7 @@ const SettingsTab = ({ profile }: { profile: any }) => {
       console.error('Printer check error:', error);
       toast({
         title: "Connection Error",
-        description: error.message || "Failed to connect to printer",
+        description: error.message || "H10P vendor printer service not available. Ensure the vendor APK is installed.",
         variant: "destructive"
       });
     }
@@ -85,6 +85,7 @@ const SettingsTab = ({ profile }: { profile: any }) => {
           <Alert>
             <AlertDescription>
               The H10P has an internal 58mm ESC/POS thermal printer. 
+              This requires the vendor's printer service APK to be installed on the device.
               Click "Check Printer" to verify the connection to the internal printer service,
               then use "Test Print" to print a test receipt.
             </AlertDescription>
@@ -120,6 +121,9 @@ const SettingsTab = ({ profile }: { profile: any }) => {
               <div className="p-3 border rounded-lg bg-red-50 dark:bg-red-950">
                 <p className="text-sm font-medium text-red-700 dark:text-red-300">
                   ✗ Printer service not available
+                </p>
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                  Please ensure the H10P vendor printer service APK is installed on this device
                 </p>
               </div>
             )}

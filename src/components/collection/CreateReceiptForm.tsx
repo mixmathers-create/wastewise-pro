@@ -100,7 +100,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       if (camera !== 'granted') {
         toast({ 
           title: "Permission denied", 
-          description: "Camera permission is required to scan QR codes", 
+          description: "Camera permission is required to scan QR codes. Please enable it in your device settings.", 
           variant: "destructive" 
         });
         return;
@@ -114,12 +114,22 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       if (barcodes && barcodes.length > 0) {
         const qrCode = barcodes[0].rawValue;
         await handleQRDetected(qrCode);
+      } else {
+        toast({ 
+          title: "No QR Code Found", 
+          description: "Please try again and ensure the QR code is clearly visible", 
+          variant: "destructive" 
+        });
       }
       
       setIsScanning(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Camera error:", error);
-      toast({ title: "Camera Error", description: "Could not access camera", variant: "destructive" });
+      toast({ 
+        title: "Camera Error", 
+        description: error.message || "Could not access camera. Ensure ML Kit is installed and camera permissions are granted.", 
+        variant: "destructive" 
+      });
       setIsScanning(false);
     }
   };
