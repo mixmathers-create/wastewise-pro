@@ -1,3 +1,4 @@
+import { calculateDistance } from "@/lib/locationUtils";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -93,6 +94,12 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const [maintenanceBlocks, setMaintenanceBlocks] = useState<MaintenanceBlock[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  
+  // Landfill location constants
+  const LANDFILL_LAT = 10.41404594740414;
+  const LANDFILL_LON = 123.92344575134916;
+  const SERVICE_TIME_PER_MT = 40; // minutes per MT
+  const AVERAGE_SPEED_KMH = 30; // average speed in traffic
   
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
@@ -468,6 +475,84 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const exportClientSchedule = (clientId: string) => {
+    const client = clients.find(c => c.id === clientId);
+    if (!client) return;
+
+    const doc = new jsPDF();
+    let yPos = 20;
+    
+    doc.setFontSize(18);
+    doc.text(`Collection Schedule for ${client.name}`, 14, yPos);
+    yPos += 10;
+    
+    doc.setFontSize(10);
+    doc.text(`Industry: ${client.industry}`, 14, yPos);
+    yPos += 5;
+    doc.text(`MT Requirement per Collection: ${client.mt_requirement} MT`, 14, yPos);
+    yPos += 5;
+    doc.text(`Estimated Service Time: ${(client.mt_requirement * SERVICE_TIME_PER_MT).toFixed(0)} minutes`, 14, yPos);
+    yPos += 10;
+
+    // Filter schedules that include this client
+    const clientSchedules = schedules.filter(s => s.client_ids?.includes(clientId));
+    
+    if (clientSchedules.length === 0) {
+      doc.text('No scheduled collections found.', 14, yPos);
+    } else {
+      doc.setFontSize(14);
+      doc.text('Scheduled Collections:', 14, yPos);
+      yPos += 8;
+
+      // Group by date
+      const groupedByDate = clientSchedules.reduce((acc, s) => {
+        if (!acc[s.date]) acc[s.date] = [];
+        acc[s.date].push(s);
+        return acc;
+      }, {} as Record<string, Schedule[]>);
+
+      Object.keys(groupedByDate).sort().forEach(date => {
+        if (yPos > 260) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        doc.setFontSize(12);
+        doc.text(format(new Date(date), 'EEEE, MMM dd, yyyy'), 14, yPos);
+        yPos += 6;
+
+        groupedByDate[date].forEach(schedule => {
+          const driver = drivers.find(d => d.id === schedule.driver_id);
+          const truck = trucks.find(t => t.id === schedule.truck_id);
+
+          doc.setFontSize(10);
+          doc.text(`  ${schedule.shift} Shift - Truck: ${truck?.code || 'N/A'}`, 18, yPos);
+          yPos += 5;
+          doc.text(`  Driver: ${driver?.name || 'N/A'}`, 18, yPos);
+          yPos += 5;
+
+          // Calculate other clients in same route
+          const otherClients = clients.filter(c => 
+            c.id !== clientId && schedule.client_ids?.includes(c.id)
+          );
+          
+          if (otherClients.length > 0) {
+            doc.setFontSize(9);
+            doc.text(`  Other stops: ${otherClients.map(c => c.name).join(', ')}`, 18, yPos);
+            yPos += 5;
+          }
+
+          yPos += 3;
+        });
+
+        yPos += 4;
+      });
+    }
+
+    doc.save(`${client.name.replace(/[^a-z0-9]/gi, '_')}_schedule.pdf`);
+    toast({ title: "Client schedule exported", description: `Schedule for ${client.name} has been downloaded` });
   };
 
   const toggleGroup = (key: string) => {
@@ -923,7 +1008,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
 
       {/* Peek Dialog */}
       <Dialog open={showPeekDialog} onOpenChange={setShowPeekDialog}>
-        <DialogContent className="max-w-2xl bg-background">
+        <DialogContent className="max-w-3xl bg-background">
           <DialogHeader>
             <DialogTitle className="text-base">Schedule Details</DialogTitle>
           </DialogHeader>
@@ -936,11 +1021,39 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                 const driver = drivers.find(d => d.id === schedule.driver_id);
                 const truck = trucks.find(t => t.id === schedule.truck_id);
                 const scheduleHelpers = helpers.filter(h => schedule.helper_ids.includes(h.id));
+                const scheduleClients = clients.filter(c => schedule.client_ids?.includes(c.id));
+                
+                // Calculate service time (1MT = 40 mins)
+                const totalServiceTime = scheduleClients.reduce((sum, c) => sum + (c.mt_requirement * SERVICE_TIME_PER_MT), 0);
+                
+                // Calculate travel time to landfill from last client
+                let travelToLandfillTime = 0;
+                if (scheduleClients.length > 0) {
+                  const lastClient = scheduleClients[scheduleClients.length - 1];
+                  if (lastClient.latitude && lastClient.longitude) {
+                    const distance = calculateDistance(
+                      lastClient.latitude,
+                      lastClient.longitude,
+                      LANDFILL_LAT,
+                      LANDFILL_LON
+                    );
+                    // Convert distance to time in minutes
+                    travelToLandfillTime = (distance / AVERAGE_SPEED_KMH) * 60;
+                  }
+                }
+                
+                const totalHours = ((totalServiceTime + travelToLandfillTime) / 60).toFixed(1);
+                
                 return (
                   <div key={schedule.id || idx} className="border rounded p-3 space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="font-medium text-sm">{truck?.code} - {truck?.type}</div>
-                      <Badge variant="outline" className="text-xs">{truck?.capacity}MT</Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">{truck?.capacity}MT</Badge>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingSchedule(schedule)}>
+                          <Edit2 className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                     <div className="text-sm">
                       <div className="flex items-center gap-2">
@@ -960,9 +1073,63 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                         )}
                       </div>
                     </div>
+                    {scheduleClients.length > 0 && (
+                      <div className="text-xs border-t pt-2 mt-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="text-muted-foreground font-medium">Clients to Service:</div>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="h-6 text-xs"
+                            onClick={() => {
+                              scheduleClients.forEach(c => exportClientSchedule(c.id));
+                            }}
+                          >
+                            <Download className="h-3 w-3 mr-1" />
+                            Export All
+                          </Button>
+                        </div>
+                        <div className="space-y-1">
+                          {scheduleClients.map(c => (
+                            <div key={c.id} className="flex items-center justify-between pl-2 py-1 bg-muted/30 rounded group">
+                              <div className="flex-1">
+                                <span className="font-medium">{c.name}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-muted-foreground">
+                                <span>{c.mt_requirement}MT</span>
+                                <span>·</span>
+                                <span>{(c.mt_requirement * SERVICE_TIME_PER_MT).toFixed(0)} mins</span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => exportClientSchedule(c.id)}
+                                >
+                                  <Download className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-2 pt-2 border-t space-y-1">
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>Total Service Time:</span>
+                            <span>{(totalServiceTime / 60).toFixed(1)} hrs</span>
+                          </div>
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>Travel to Landfill:</span>
+                            <span>{(travelToLandfillTime / 60).toFixed(1)} hrs</span>
+                          </div>
+                          <div className="flex justify-between font-medium">
+                            <span>Total Shift Time:</span>
+                            <span>{totalHours} hrs</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {schedule.mt_requirement && (
                       <div className="text-xs text-muted-foreground">
-                        MT Requirement: {schedule.mt_requirement.toFixed(1)} MT
+                        Total MT Requirement: {schedule.mt_requirement.toFixed(1)} MT
                       </div>
                     )}
                     {schedule.approved_by && (
