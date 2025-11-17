@@ -87,19 +87,30 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const handleCamera = async () => {
     try {
       if (!Capacitor.isNativePlatform()) {
-        toast({ 
-          title: "Camera not available", 
-          description: "Please use mobile app to scan QR codes", 
-          variant: "destructive" 
+        toast({
+          title: "Camera not available",
+          description: "Please use mobile app to scan QR codes",
+          variant: "destructive"
         });
         return;
+      }
+
+      const scannerAny = BarcodeScanner as any;
+      if (typeof scannerAny?.initialize === "function") {
+        await scannerAny.initialize();
+      }
+      if (typeof scannerAny?.isGoogleBarcodeScannerModuleAvailable === "function") {
+        const moduleReady = await scannerAny.isGoogleBarcodeScannerModuleAvailable();
+        if (!moduleReady && typeof scannerAny.installGoogleBarcodeScannerModule === "function") {
+          await scannerAny.installGoogleBarcodeScannerModule();
+        }
       }
 
       // Request camera permission
       const { camera } = await BarcodeScanner.requestPermissions();
       if (camera !== 'granted') {
-        toast({ 
-          title: "Permission denied", 
+        toast({
+          title: "Permission denied",
           description: "Camera permission is required to scan QR codes. Please enable it in your device settings.", 
           variant: "destructive" 
         });
