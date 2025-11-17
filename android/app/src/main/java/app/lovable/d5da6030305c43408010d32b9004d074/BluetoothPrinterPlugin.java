@@ -18,15 +18,17 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.JSArray;
 
-import receiptservice.com.receiptservice.PrinterInterface;
+import org.json.JSONException;
+
+import recieptservice.com.recieptservice.PrinterInterface;
 
 @CapacitorPlugin(name = "BluetoothPrinter")
 public class BluetoothPrinterPlugin extends Plugin {
     private static final String TAG = "BluetoothPrinterPlugin";
     private static final long CONNECTION_TIMEOUT_MS = 8000;
     private static final String[][] SERVICE_CANDIDATES = new String[][] {
-        {"receiptservice.com.receiptservice", "receiptservice.com.receiptservice.service.PrinterService"},
         {"recieptservice.com.recieptservice", "recieptservice.com.recieptservice.service.PrinterService"}
     };
     private PrinterInterface printerInterface;
@@ -49,9 +51,6 @@ public class BluetoothPrinterPlugin extends Plugin {
         public void onServiceDisconnected(ComponentName name) {
             printerInterface = null;
             isBound = false;
-            if (connectionLatch != null) {
-                connectionLatch.countDown();
-            }
             Log.d(TAG, "Printer service disconnected");
         }
     };
@@ -69,28 +68,10 @@ public class BluetoothPrinterPlugin extends Plugin {
             isBound = false;
             printerInterface = null;
 
-            for (String[] candidate : SERVICE_CANDIDATES) {
-                String pkg = candidate[0];
-                String cls = candidate[1];
-
-                // First attempt: explicit component only (matches supplier instructions)
-                try {
-                    Intent explicitComponent = new Intent();
-                    explicitComponent.setClassName(pkg, cls);
-                    boolean ok = context.bindService(explicitComponent, serviceConnection, Context.BIND_AUTO_CREATE);
-                    Log.d(TAG, "Attempted bind to " + pkg + "/" + cls + " (component only) => " + ok);
-                    if (ok) {
-                        Log.d(TAG, "Successfully bound to printer service: " + pkg + "/" + cls);
-                        return;
-                    }
-                } catch (Exception ex) {
-                    Log.w(TAG, "Component bind failed for " + pkg + "/" + cls + ": " + ex.getMessage());
-                }
-
             // Try explicit start first (may no-op if already running)
             Intent startIntent = new Intent();
-            startIntent.setPackage("receiptservice.com.receiptservice");
-            startIntent.setAction("receiptservice.com.receiptservice.PrinterInterface");
+            startIntent.setPackage("recieptservice.com.recieptservice");
+            startIntent.setAction("recieptservice.com.recieptservice.PrinterInterface");
             try {
                 context.startService(startIntent);
                 Log.d(TAG, "Attempted to start printer service");
@@ -100,8 +81,8 @@ public class BluetoothPrinterPlugin extends Plugin {
 
             // First try implicit bind by action
             Intent bindIntent = new Intent();
-            bindIntent.setPackage("receiptservice.com.receiptservice");
-            bindIntent.setAction("receiptservice.com.receiptservice.PrinterInterface");
+            bindIntent.setPackage("recieptservice.com.recieptservice");
+            bindIntent.setAction("recieptservice.com.recieptservice.PrinterInterface");
 
             android.content.pm.PackageManager pm = context.getPackageManager();
             java.util.List<android.content.pm.ResolveInfo> services = pm.queryIntentServices(bindIntent, 0);
@@ -120,28 +101,24 @@ public class BluetoothPrinterPlugin extends Plugin {
 
             // Fallback: try common explicit service class names
             String[] candidateClasses = new String[] {
-                "receiptservice.com.receiptservice.PrinterService",
-                "receiptservice.com.receiptservice.InnerPrinterService",
-                "receiptservice.com.receiptservice.PrintService",
-                "receiptservice.com.receiptservice.ReceiptService"
+                "recieptservice.com.recieptservice.PrinterService",
+                "recieptservice.com.recieptservice.InnerPrinterService",
+                "recieptservice.com.recieptservice.PrintService",
+                "recieptservice.com.recieptservice.ReceiptService"
             };
 
                 // Fallback: include the AIDL action string for older firmware
                 try {
-                    Intent withAction = new Intent(pkg + ".PrinterInterface");
-                    withAction.setClassName(pkg, cls);
-                    boolean ok = context.bindService(withAction, serviceConnection, Context.BIND_AUTO_CREATE);
-                    Log.d(TAG, "Attempted bind to " + pkg + "/" + cls + " (with action) => " + ok);
                     Intent explicit = new Intent();
-                    explicit.setComponent(new ComponentName("receiptservice.com.receiptservice", cls));
+                    explicit.setComponent(new ComponentName("recieptservice.com.recieptservice", cls));
                     boolean ok = context.bindService(explicit, serviceConnection, Context.BIND_AUTO_CREATE);
                     Log.d(TAG, "Attempted explicit bind to " + cls + " => " + ok);
                     if (ok) {
-                        Log.d(TAG, "Successfully bound to printer service using action: " + pkg + ".PrinterInterface");
+                        Log.d(TAG, "Successfully bound to printer service (explicit): " + cls);
                         return;
                     }
                 } catch (Exception ex) {
-                    Log.w(TAG, "Action bind failed for " + pkg + "/" + cls + ": " + ex.getMessage());
+                    Log.w(TAG, "Explicit bind failed for " + cls + ": " + ex.getMessage());
                 }
             }
 
@@ -176,14 +153,6 @@ public class BluetoothPrinterPlugin extends Plugin {
         if (!isBound || printerInterface == null) {
             Log.d(TAG, "connect() called while not bound. Attempting to bind...");
             bindPrinterService();
-            boolean connected = waitForServiceConnection(2000);
-            if (!connected) {
-                result.put("success", false);
-                result.put("bound", isBound);
-                result.put("interface", printerInterface != null);
-                call.reject("Printer service not available. Check logcat for details.");
-                return;
-            }
         }
         if (isBound && printerInterface != null) {
             try {
@@ -277,6 +246,30 @@ public class BluetoothPrinterPlugin extends Plugin {
         } catch (Exception e) {
             Log.e(TAG, "Error decoding image", e);
             call.reject("Failed to decode image: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void printBarcode(PluginCall call) {
+        if (!isBound || printerInterface == null) {
+            call.reject("Printer service not available");
+            return;
+        }
+
+        try {
+            String data = call.getString("data", "");
+            Integer symbology = call.getInt("symbology", 8); // Default CODE128
+            Integer height = call.getInt("height", 162); // Vendor default
+            Integer width = call.getInt("width", 2);
+            Integer align = call.getInt("align", 1);
+
+            printerInterface.setAlignment(align);
+            printerInterface.printBarCode(data, symbology, height, width);
+
+            call.resolve();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error printing barcode", e);
+            call.reject("Failed to print barcode: " + e.getMessage());
         }
     }
 
