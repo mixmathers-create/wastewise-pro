@@ -3,7 +3,7 @@ import html2canvas from 'html2canvas';
 
 // Define the plugin interface
 interface BluetoothPrinterPlugin {
-  connect(): Promise<{ success: boolean; name?: string }>;
+  connect(): Promise<{ success: boolean; name?: string; encoding?: string; serviceVersion?: string }>;
   disconnect(): Promise<void>;
   printText(options: { text: string; align: number }): Promise<void>;
   printImage(options: { base64Image: string; align: number }): Promise<void>;
@@ -45,7 +45,7 @@ export class PrinterService {
   /**
    * Test printer connection
    */
-  async testConnection(): Promise<{ success: boolean; name?: string; encoding?: string }> {
+  async testConnection(): Promise<{ success: boolean; name?: string; encoding?: string; serviceVersion?: string }> {
     if (!this.isAvailable()) {
       throw new Error('Printer service only available on Android');
     }
