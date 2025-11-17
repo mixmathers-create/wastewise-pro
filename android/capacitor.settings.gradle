@@ -7,3 +7,6 @@ project(':capacitor-camera').projectDir = new File('../node_modules/@capacitor/c
 
 include ':capacitor-mlkit-barcode-scanning'
 project(':capacitor-mlkit-barcode-scanning').projectDir = new File('../node_modules/@capacitor-mlkit/barcode-scanning/android')
+
+include ':capacitor-camera'
+project(':capacitor-camera').projectDir = new File('../node_modules/@capacitor/camera/android')
