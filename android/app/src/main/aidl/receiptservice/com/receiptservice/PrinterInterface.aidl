@@ -1,6 +1,6 @@
-package recieptservice.com.recieptservice;
+package receiptservice.com.receiptservice;
 
-import recieptservice.com.recieptservice.PSAMCallback;
+import receiptservice.com.receiptservice.PSAMCallback;
 import android.graphics.Bitmap;
 interface PrinterInterface {
      void printEpson(in byte []data);
