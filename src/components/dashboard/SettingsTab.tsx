@@ -11,6 +11,7 @@ const SettingsTab = ({ profile }: { profile: any }) => {
   const [availablePrinters, setAvailablePrinters] = useState<any[]>([]);
   const [scanning, setScanning] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [pairing, setPairing] = useState<string | null>(null);
 
   const handleScanPrinter = async () => {
     if (!printerService.isAvailable()) {
@@ -23,8 +24,25 @@ const SettingsTab = ({ profile }: { profile: any }) => {
     }
 
     setScanning(true);
+    setAvailablePrinters([]);
+    
     try {
-      const devices = await printerService.listDevices();
+      toast({
+        title: "Scanning...",
+        description: "Looking for nearby Bluetooth devices"
+      });
+
+      const devices = await printerService.scanForDevices((device) => {
+        // Real-time device updates as they're discovered
+        setAvailablePrinters(prev => {
+          const exists = prev.find(d => d.address === device.address);
+          if (!exists) {
+            return [...prev, device];
+          }
+          return prev;
+        });
+      });
+
       setAvailablePrinters(devices);
       
       // Check if innerprinter is found
@@ -35,19 +53,18 @@ const SettingsTab = ({ profile }: { profile: any }) => {
       if (innerPrinter) {
         toast({
           title: "innerprinter found!",
-          description: `Ready to print to ${innerPrinter.name}`
+          description: `Found ${innerPrinter.name} - ${innerPrinter.bonded ? 'Paired' : 'Not paired'}`
         });
       } else if (devices.length === 0) {
         toast({
           title: "No devices found",
-          description: "Make sure Bluetooth is enabled and devices are paired",
+          description: "Make sure Bluetooth is enabled on nearby devices",
           variant: "destructive"
         });
       } else {
         toast({
-          title: "innerprinter not found",
-          description: `Found ${devices.length} device(s) but no 'innerprinter'`,
-          variant: "destructive"
+          title: "Scan complete",
+          description: `Found ${devices.length} device(s)`
         });
       }
     } catch (error: any) {
@@ -58,6 +75,30 @@ const SettingsTab = ({ profile }: { profile: any }) => {
       });
     } finally {
       setScanning(false);
+    }
+  };
+
+  const handlePairDevice = async (address: string, name: string) => {
+    setPairing(address);
+    try {
+      const result = await printerService.pairDevice(address);
+      toast({
+        title: "Pairing initiated",
+        description: `Pairing with ${name}. Check your device for pairing request.`
+      });
+      
+      // Refresh device list after a short delay
+      setTimeout(() => {
+        handleScanPrinter();
+      }, 2000);
+    } catch (error: any) {
+      toast({
+        title: "Pairing failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setPairing(null);
     }
   };
 
@@ -137,19 +178,38 @@ const SettingsTab = ({ profile }: { profile: any }) => {
 
           {availablePrinters.length > 0 && (
             <div className="space-y-2">
-              <Label>Paired Devices ({availablePrinters.length})</Label>
-              <div className="max-h-48 overflow-y-auto space-y-2">
+              <Label>Discovered Devices ({availablePrinters.length})</Label>
+              <div className="max-h-64 overflow-y-auto space-y-2">
                 {availablePrinters.map((printer) => (
                   <div 
                     key={printer.address} 
-                    className={`p-3 border rounded ${
+                    className={`p-3 border rounded flex items-center justify-between ${
                       printer.name && printer.name.toLowerCase().includes('innerprinter')
                         ? 'bg-primary/10 border-primary'
                         : 'bg-card'
                     }`}
                   >
-                    <p className="font-medium">{printer.name || 'Unnamed Device'}</p>
-                    <p className="text-sm text-muted-foreground">{printer.address}</p>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{printer.name || 'Unnamed Device'}</p>
+                        {printer.bonded && (
+                          <span className="text-xs bg-green-500/20 text-green-700 dark:text-green-300 px-2 py-0.5 rounded">
+                            Paired
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">{printer.address}</p>
+                    </div>
+                    {!printer.bonded && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handlePairDevice(printer.address, printer.name)}
+                        disabled={pairing === printer.address}
+                      >
+                        {pairing === printer.address ? "Pairing..." : "Pair"}
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -158,7 +218,9 @@ const SettingsTab = ({ profile }: { profile: any }) => {
 
           <Alert>
             <AlertDescription>
-              The app will automatically find and print to "innerprinter" when you click Print on receipts.
+              1. Click "Scan for innerprinter" to discover nearby Bluetooth devices<br/>
+              2. If your printer isn't paired, click "Pair" next to it<br/>
+              3. Once paired, the app will automatically print to "innerprinter"
             </AlertDescription>
           </Alert>
         </CardContent>

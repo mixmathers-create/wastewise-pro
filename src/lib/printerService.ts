@@ -6,6 +6,9 @@ interface BluetoothPrinterPlugin {
   connect(options: { address: string }): Promise<{ success: boolean; name?: string }>;
   disconnect(): Promise<void>;
   listPairedDevices(): Promise<{ devices: any[] }>;
+  scanForDevices(): Promise<{ event: string; devices?: any[]; device?: any }>;
+  stopScan(): Promise<{ success: boolean }>;
+  pairDevice(options: { address: string }): Promise<{ success: boolean; message?: string }>;
   printText(options: { text: string; align: number }): Promise<void>;
   printImage(options: { base64Image: string; align: number }): Promise<void>;
   cutPaper(): Promise<void>;
@@ -88,6 +91,68 @@ export class PrinterService {
     } catch (error) {
       console.error('List devices error:', error);
       return [];
+    }
+  }
+
+  /**
+   * Scan for nearby Bluetooth devices (not just paired)
+   */
+  async scanForDevices(onDeviceFound?: (device: any) => void): Promise<any[]> {
+    if (!this.isAvailable()) {
+      throw new Error('Printer service only available on native platforms');
+    }
+
+    return new Promise((resolve, reject) => {
+      const discoveredDevices: any[] = [];
+      
+      BluetoothPrinter.scanForDevices()
+        .then((result) => {
+          if (result.event === 'deviceFound' && result.device) {
+            discoveredDevices.push(result.device);
+            if (onDeviceFound) {
+              onDeviceFound(result.device);
+            }
+          } else if (result.event === 'scanComplete') {
+            resolve(result.devices || discoveredDevices);
+          }
+        })
+        .catch((error) => {
+          console.error('Scan error:', error);
+          reject(error);
+        });
+    });
+  }
+
+  /**
+   * Stop Bluetooth device scanning
+   */
+  async stopScan(): Promise<void> {
+    if (!this.isAvailable()) {
+      throw new Error('Printer service only available on native platforms');
+    }
+
+    try {
+      await BluetoothPrinter.stopScan();
+    } catch (error) {
+      console.error('Stop scan error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Pair with a Bluetooth device
+   */
+  async pairDevice(address: string): Promise<{ success: boolean; message?: string }> {
+    if (!this.isAvailable()) {
+      throw new Error('Printer service only available on native platforms');
+    }
+
+    try {
+      const result = await BluetoothPrinter.pairDevice({ address });
+      return result;
+    } catch (error) {
+      console.error('Pairing error:', error);
+      throw error;
     }
   }
 
