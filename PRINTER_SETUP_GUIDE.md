@@ -2,22 +2,14 @@
 
 ## Quick Start
 
-Your WasteWise app now uses **`capacitor-thermal-printer`** - a modern, Capacitor 7-compatible library for ESC/POS thermal printers.
+The Android app now uses a custom **`BluetoothPrinter` Capacitor plugin** that binds directly to the vendor printer service `recieptservice.com.recieptservice` (DevCheck reports version **8.3.6** on H10 firmware). No third-party printer libraries are required.
 
-## Step 1: Fix NPM Install Error (If You Encountered It)
+## Step 1: Update and Sync Android
 
-If you got the `ERESOLVE` error, that's already fixed! The incompatible `lidta-capacitor-bl-printer` has been replaced with `capacitor-thermal-printer`.
-
-### What Changed:
-- ❌ Removed: `lidta-capacitor-bl-printer` (only supports Capacitor 6)
-- ✅ Added: `capacitor-thermal-printer` (supports Capacitor 7+)
-
-### Next Steps:
-1. Pull the latest changes from your repository
-2. Delete `node_modules` and `package-lock.json`
-3. Run `npm install` (it should work now!)
-4. Run `npm run build`
-5. Run `npx cap sync android`
+1. Pull the latest changes from your repository.
+2. Run `npm install` to refresh web dependencies.
+3. Run `npx cap sync android` to regenerate the native project without any external printer plugin modules.
+4. Open Android Studio with `npx cap open android` and let Gradle finish syncing.
 
 ## Step 2: Configure Android Permissions
 
