@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <!-- Camera Permission -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -18,6 +19,17 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+
+    <!-- Foreground service permission (printer) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- Query for printer service -->
+    <queries>
+        <package android:name="recieptservice.com.recieptservice" />
+        <intent>
+            <action android:name="recieptservice.com.recieptservice.PrinterInterface" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="true"
@@ -60,15 +72,9 @@
 
     <!-- Query for printer service -->
     <queries>
-        <package android:name="receiptservice.com.receiptservice" />
         <package android:name="recieptservice.com.recieptservice" />
         <intent>
-            <action android:name="receiptservice.com.receiptservice.PrinterInterface" />
-        </intent>
-        <intent>
             <action android:name="recieptservice.com.recieptservice.PrinterInterface" />
-        <intent>
-            <action android:name="receiptservice.com.receiptservice.PrinterInterface" />
         </intent>
     </queries>
 

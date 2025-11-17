@@ -89,6 +89,7 @@ const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
           ? `Service version ${result.serviceVersion || "unknown"} ready`
           : "Could not reach the H10 printer service"
       });
+
     } catch (error: any) {
       toast({ title: "Connection Failed", description: error.message, variant: "destructive" });
     }
@@ -141,7 +142,7 @@ const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Bluetooth printing uses the built-in H10 service (`receiptservice.com.receiptservice`). Ensure the vendor app is
+            Bluetooth printing uses the built-in H10 service (`recieptservice.com.recieptservice`). Ensure the vendor app is
             installed and running on the device.
           </p>
         </CardContent>

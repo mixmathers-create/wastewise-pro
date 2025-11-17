@@ -8,6 +8,7 @@ interface PrinterPlugin {
   disconnect(): Promise<void>;
   printText(options: { text: string; align: number }): Promise<void>;
   printImage(options: { base64Image: string; align: number }): Promise<void>;
+  printBarcode(options: { data: string; symbology: number; height: number; width: number; align: number }): Promise<void>;
   cutPaper(): Promise<void>;
   feedLine(options: { lines: number }): Promise<void>;
   beginWork(): Promise<void>;
@@ -15,6 +16,8 @@ interface PrinterPlugin {
   setTextBold(options: { bold: boolean }): Promise<void>;
   setTextSize(options: { size: number }): Promise<void>;
   printQRCode(options: { data: string; moduleSize: number; errorLevel: number; align: number }): Promise<void>;
+  printTableText(options: { text: string[]; weight: number[]; alignment: number[] }): Promise<void>;
+  printEpson(options: { data: string }): Promise<void>;
 }
 
 // Register the custom BluetoothPrinter plugin
@@ -115,11 +118,11 @@ export class PrinterService {
       // Print QR code if provided
       if (receiptData.qrCode) {
         await BluetoothPrinter.feedLine({ lines: 1 });
-        await BluetoothPrinter.printQRCode({ 
-          data: receiptData.qrCode, 
-          moduleSize: 8, 
+        await BluetoothPrinter.printQRCode({
+          data: receiptData.qrCode,
+          moduleSize: 8,
           errorLevel: 3,
-          align: 1 
+          align: 1,
         });
       }
 
@@ -183,6 +186,64 @@ export class PrinterService {
       await BluetoothPrinter.printText({ text: new Date().toLocaleString() + '\n', align: 1 });
       await BluetoothPrinter.feedLine({ lines: 3 });
       await BluetoothPrinter.cutPaper();
+    });
+  }
+
+  /**
+   * Print a standalone barcode using the vendor symbology/size parameters
+   */
+  async printBarcode(options: {
+    data: string;
+    symbology?: number;
+    height?: number;
+    width?: number;
+    align?: number;
+  }): Promise<void> {
+    if (!this.isAvailable()) {
+      throw new Error('Printer service only available on Android');
+    }
+
+    await this.executePrintJob(async () => {
+      await BluetoothPrinter.printBarcode({
+        data: options.data,
+        symbology: options.symbology ?? 8,
+        height: options.height ?? 162,
+        width: options.width ?? 2,
+        align: options.align ?? 1,
+      });
+      await BluetoothPrinter.feedLine({ lines: 2 });
+    });
+  }
+
+  /**
+   * Print tabular rows using the vendor-supplied column widths and alignments
+   */
+  async printTable(options: { text: string[]; weight: number[]; alignment: number[] }): Promise<void> {
+    if (!this.isAvailable()) {
+      throw new Error('Printer service only available on Android');
+    }
+
+    await this.executePrintJob(async () => {
+      await BluetoothPrinter.printTableText({
+        text: options.text,
+        weight: options.weight,
+        alignment: options.alignment,
+      });
+      await BluetoothPrinter.feedLine({ lines: 1 });
+    });
+  }
+
+  /**
+   * Send raw ESC/POS commands using the vendor "printEpson" bridge
+   */
+  async printRawEpson(base64Data: string): Promise<void> {
+    if (!this.isAvailable()) {
+      throw new Error('Printer service only available on Android');
+    }
+
+    await this.executePrintJob(async () => {
+      await BluetoothPrinter.printEpson({ data: base64Data });
+      await BluetoothPrinter.feedLine({ lines: 1 });
     });
   }
 }
