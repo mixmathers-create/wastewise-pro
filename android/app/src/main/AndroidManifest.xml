@@ -60,9 +60,9 @@
 
     <!-- Query for printer service -->
     <queries>
-        <package android:name="recieptservice.com.recieptservice" />
+        <package android:name="receiptservice.com.receiptservice" />
         <intent>
-            <action android:name="recieptservice.com.recieptservice.PrinterInterface" />
+            <action android:name="receiptservice.com.receiptservice.PrinterInterface" />
         </intent>
     </queries>
 

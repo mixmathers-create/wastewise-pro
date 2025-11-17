@@ -18,6 +18,28 @@ This guide will help you set up the WasteWise Android app for the Senraise H10 P
 
 ## Setup Instructions
 
+### Quick Update & Test (after pulling new commits)
+
+If you just want to test the latest Android changes in Android Studio:
+
+1. Pull the newest code:
+   ```bash
+   git pull
+   ```
+2. Install any new web dependencies:
+   ```bash
+   npm install
+   ```
+3. Sync native Android modules:
+   ```bash
+   npx cap sync android
+   ```
+4. Open the project in Android Studio and let Gradle finish syncing:
+   ```bash
+   npx cap open android
+   ```
+5. From Android Studio, select **Build > Make Project** and run on the H10 device to verify printer and camera changes.
+
 ### 1. Export and Clone Project
 1. Click "Export to Github" in Lovable
 2. Clone the repository to your local machine:
