@@ -4,8 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import AddClientDialog from "./AddClientDialog";
+import ClientEditDialog from "./ClientEditDialog";
 import { Button } from "@/components/ui/button";
-import { Download, Upload } from "lucide-react";
+import { Download, Upload, Pencil } from "lucide-react";
 import QRCode from "qrcode";
 import { generateCSV, downloadCSV, parseCSV } from "@/lib/csvUtils";
 import { useToast } from "@/hooks/use-toast";
@@ -16,6 +17,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingClient, setEditingClient] = useState<any | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = profile?.role === "admin";
   const isMobile = Capacitor.isNativePlatform();
@@ -24,7 +26,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
     setLoading(true);
     const { data, error } = await supabase
       .from("clients")
-      .select("id,name,industry,address,qr_code,contact_person,contact_number")
+      .select("id,name,industry,address,qr_code,contact_person,contact_number,mt_requirement,collection_days,collection_shift")
       .order("name");
     if (error) setError(error.message);
     setClients(data || []);
@@ -126,53 +128,52 @@ const ClientsTab = ({ profile }: { profile: any }) => {
         ) : clients.length === 0 ? (
           <p className="text-muted-foreground">No clients yet.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>QR Code</TableHead>
-                <TableHead>Address</TableHead>
-                <TableHead>Industry</TableHead>
-                <TableHead>Contact Person</TableHead>
-                <TableHead>Contact Number</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {clients.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell>
-                    <Button 
-                      size="sm" 
-                      variant="ghost" 
-                      onClick={() => downloadQR(c.qr_code, c.name)}
-                      className="p-1"
-                    >
-                      <QRCodeImage qrCode={c.qr_code} />
-                    </Button>
-                  </TableCell>
-                  <TableCell>{c.address || "—"}</TableCell>
-                  <TableCell>{c.industry}</TableCell>
-                  <TableCell>{c.contact_person || "—"}</TableCell>
-                  <TableCell>{c.contact_number || "—"}</TableCell>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Industry</TableHead>
+                  <TableHead>Contact Person</TableHead>
+                  <TableHead>Contact Number</TableHead>
+                  <TableHead>QR Code</TableHead>
+                  {!isMobile && <TableHead>Actions</TableHead>}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {clients.map((client) => (
+                  <TableRow key={client.id}>
+                    <TableCell className="font-medium">{client.name}</TableCell>
+                    <TableCell>{client.industry}</TableCell>
+                    <TableCell>{client.contact_person || "—"}</TableCell>
+                    <TableCell>{client.contact_number || "—"}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="sm" onClick={() => downloadQR(client.qr_code, client.name)}>
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                    {!isMobile && (
+                      <TableCell>
+                        <Button variant="ghost" size="sm" onClick={() => setEditingClient(client)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
         )}
       </CardContent>
+      {editingClient && (
+        <ClientEditDialog 
+          client={editingClient}
+          open={!!editingClient}
+          onOpenChange={(open) => !open && setEditingClient(null)}
+          onUpdated={fetchClients}
+        />
+      )}
     </Card>
   );
-};
-
-const QRCodeImage = ({ qrCode }: { qrCode: string }) => {
-  const [url, setUrl] = useState("");
-
-  useEffect(() => {
-    QRCode.toDataURL(qrCode, { width: 64 }).then(setUrl);
-  }, [qrCode]);
-
-  return url ? <img src={url} alt="QR" className="w-16 h-16" /> : <Skeleton className="w-16 h-16" />;
 };
 
 export default ClientsTab;
