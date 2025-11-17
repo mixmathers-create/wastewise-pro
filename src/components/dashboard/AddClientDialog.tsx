@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Plus } from "lucide-react";
 import QRCode from "qrcode";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => void }) => {
   const { toast } = useToast();
@@ -18,6 +20,17 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
   const [contact, setContact] = useState("");
   const [contactPerson, setContactPerson] = useState("");
   const [contactNumber, setContactNumber] = useState("");
+  const [mtRequirement, setMtRequirement] = useState("0");
+  const [collectionShift, setCollectionShift] = useState("AM");
+  const [collectionDays, setCollectionDays] = useState<string[]>(["Mon", "Tue", "Wed", "Thu", "Fri"]);
+
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  const toggleDay = (day: string) => {
+    setCollectionDays(prev => 
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +46,9 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
         contact_person: contactPerson,
         contact_number: contactNumber,
         qr_code: qrCode,
+        mt_requirement: parseFloat(mtRequirement) || 0,
+        collection_shift: collectionShift,
+        collection_days: collectionDays,
       });
 
       if (error) throw error;
@@ -45,6 +61,9 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
       setContact("");
       setContactPerson("");
       setContactNumber("");
+      setMtRequirement("0");
+      setCollectionShift("AM");
+      setCollectionDays(["Mon", "Tue", "Wed", "Thu", "Fri"]);
       onAdded();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -86,6 +105,43 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
           <div>
             <Label htmlFor="contactNumber">Contact Number</Label>
             <Input id="contactNumber" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="mtRequirement">MT Requirement (per collection)</Label>
+            <Input 
+              id="mtRequirement" 
+              type="number" 
+              step="0.01"
+              value={mtRequirement} 
+              onChange={(e) => setMtRequirement(e.target.value)} 
+            />
+          </div>
+          <div>
+            <Label htmlFor="collectionShift">Preferred Collection Shift</Label>
+            <Select value={collectionShift} onValueChange={setCollectionShift}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="AM">AM (Morning)</SelectItem>
+                <SelectItem value="PM">PM (Afternoon)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Collection Days</Label>
+            <div className="grid grid-cols-4 gap-2">
+              {days.map(day => (
+                <div key={day} className="flex items-center space-x-2">
+                  <Checkbox 
+                    id={day} 
+                    checked={collectionDays.includes(day)}
+                    onCheckedChange={() => toggleDay(day)}
+                  />
+                  <Label htmlFor={day} className="cursor-pointer">{day}</Label>
+                </div>
+              ))}
+            </div>
           </div>
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? "Adding..." : "Add Client"}

@@ -17,34 +17,43 @@ export type Database = {
       clients: {
         Row: {
           address: string | null
+          collection_days: string[] | null
+          collection_shift: string | null
           contact_info: string | null
           contact_number: string | null
           contact_person: string | null
           created_at: string
           id: string
           industry: string
+          mt_requirement: number | null
           name: string
           qr_code: string
         }
         Insert: {
           address?: string | null
+          collection_days?: string[] | null
+          collection_shift?: string | null
           contact_info?: string | null
           contact_number?: string | null
           contact_person?: string | null
           created_at?: string
           id?: string
           industry: string
+          mt_requirement?: number | null
           name: string
           qr_code: string
         }
         Update: {
           address?: string | null
+          collection_days?: string[] | null
+          collection_shift?: string | null
           contact_info?: string | null
           contact_number?: string | null
           contact_person?: string | null
           created_at?: string
           id?: string
           industry?: string
+          mt_requirement?: number | null
           name?: string
           qr_code?: string
         }
@@ -214,6 +223,7 @@ export type Database = {
         Row: {
           approved_at: string | null
           approved_by: string | null
+          client_ids: string[] | null
           created_at: string | null
           date: string
           device_fingerprint: string | null
@@ -231,6 +241,7 @@ export type Database = {
         Insert: {
           approved_at?: string | null
           approved_by?: string | null
+          client_ids?: string[] | null
           created_at?: string | null
           date: string
           device_fingerprint?: string | null
@@ -248,6 +259,7 @@ export type Database = {
         Update: {
           approved_at?: string | null
           approved_by?: string | null
+          client_ids?: string[] | null
           created_at?: string | null
           date?: string
           device_fingerprint?: string | null

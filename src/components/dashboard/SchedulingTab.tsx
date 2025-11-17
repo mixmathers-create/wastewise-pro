@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar as CalendarIcon, Edit2, Check, Wrench, Trash2, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Calendar as CalendarIcon, Edit2, Check, Wrench, Trash2, X, ChevronDown, ChevronUp, Download, Users } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,6 +18,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Badge } from "@/components/ui/badge";
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
 import { VisualScheduleChart } from "./VisualScheduleChart";
+import jsPDF from "jspdf";
 
 interface Driver {
   id: string;
@@ -52,6 +53,16 @@ interface Schedule {
   approved_by?: string;
   approved_at?: string;
   device_fingerprint?: string;
+  client_ids?: string[];
+}
+
+interface Client {
+  id: string;
+  name: string;
+  industry: string;
+  mt_requirement: number;
+  collection_days: string[];
+  collection_shift: string;
 }
 
 interface TruckDeployment {
@@ -75,6 +86,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const [helpers, setHelpers] = useState<Helper[]>([]);
   const [trucks, setTrucks] = useState<TruckType[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [maintenanceBlocks, setMaintenanceBlocks] = useState<MaintenanceBlock[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
@@ -127,10 +139,11 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [driversRes, helpersRes, trucksRes, schedulesRes, maintenanceRes, pendingRes] = await Promise.all([
+      const [driversRes, helpersRes, trucksRes, clientsRes, schedulesRes, maintenanceRes, pendingRes] = await Promise.all([
         supabase.from("drivers").select("*"),
         supabase.from("helpers").select("*"),
         supabase.from("trucks").select("*"),
+        supabase.from("clients").select("*"),
         supabase.from("schedules").select("*").in("status", ["approved", "scheduled"]),
         supabase.from("truck_maintenance_blocks").select("*"),
         supabase.from("schedules").select("*").eq("status", "draft")
@@ -139,6 +152,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
       if (driversRes.data) setDrivers(driversRes.data as any);
       if (helpersRes.data) setHelpers(helpersRes.data as any);
       if (trucksRes.data) setTrucks(trucksRes.data as any);
+      if (clientsRes.data) setClients(clientsRes.data as any);
       if (schedulesRes.data) setSchedules(schedulesRes.data);
       if (maintenanceRes.data) setMaintenanceBlocks(maintenanceRes.data);
       if (pendingRes.data) setPendingSchedules(pendingRes.data);
@@ -190,15 +204,29 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
       const dayIndex = new Date(dateStr).getDay();
       const dayName = daysOfWeek[(dayIndex + 6) % 7];
 
+      // Group clients by shift and day preference
+      const clientsForAM = clients.filter(c => 
+        c.collection_days?.includes(dayName) && 
+        c.collection_shift === "AM" &&
+        (c.mt_requirement || 0) > 0
+      );
+      
+      const clientsForPM = clients.filter(c => 
+        c.collection_days?.includes(dayName) && 
+        c.collection_shift === "PM" &&
+        (c.mt_requirement || 0) > 0
+      );
+
       const usedDriversAM = new Set<string>();
       const usedHelpersAM = new Set<string>();
 
       for (const shift of shifts) {
-        const deployment = truckDeployment[dateStr]?.[shift];
-        if (!deployment || deployment.mt === 0) continue;
+        const clientsForShift = shift === "AM" ? clientsForAM : clientsForPM;
+        if (clientsForShift.length === 0) continue;
 
-        const trucksNeeded = deployment.trucks;
-        const mtRequired = deployment.mt;
+        // Calculate total MT requirement for this shift
+        const totalMt = clientsForShift.reduce((sum, c) => sum + (c.mt_requirement || 0), 0);
+        const trucksNeeded = Math.ceil(totalMt / 3); // Assuming 3 MT average per truck
 
         const usedDriversInPreviousShift = shift === "PM" ? usedDriversAM : new Set<string>();
         const usedHelpersInPreviousShift = shift === "PM" ? usedHelpersAM : new Set<string>();
@@ -225,12 +253,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
           t.status === "available" && !isTruckUnderMaintenance(t.id, dateStr)
         );
         
-        const avgMtPerTruck = mtRequired / trucksNeeded;
-        if (avgMtPerTruck >= 3) {
-          availableTrucks.sort((a, b) => (b.capacity || 0) - (a.capacity || 0));
-        } else {
-          availableTrucks.sort((a, b) => (a.capacity || 0) - (b.capacity || 0));
-        }
+        availableTrucks.sort((a, b) => (b.capacity || 0) - (a.capacity || 0));
 
         if (availableDrivers.length < driversNeeded || availableHelpers.length < helpersNeeded || availableTrucks.length < trucksNeeded) {
           continue;
@@ -239,10 +262,18 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
         const usedDriversThisShift = new Set<string>();
         const usedHelpersThisShift = new Set<string>();
 
+        // Distribute clients among trucks
+        const clientsPerTruck: Client[][] = Array(trucksNeeded).fill(null).map(() => []);
+        clientsForShift.forEach((client, idx) => {
+          clientsPerTruck[idx % trucksNeeded].push(client);
+        });
+
         for (let i = 0; i < trucksNeeded; i++) {
           const driver = availableDrivers[i];
           const truckAssignment = availableTrucks[i];
           const assignedHelpers = availableHelpers.slice(i * helpersPerTruck, (i + 1) * helpersPerTruck);
+          const assignedClients = clientsPerTruck[i];
+          const truckMt = assignedClients.reduce((sum, c) => sum + (c.mt_requirement || 0), 0);
 
           newSchedules.push({
             date: dateStr,
@@ -252,7 +283,8 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
             truck_id: truckAssignment.id,
             status: "draft",
             is_backup: false,
-            mt_requirement: mtRequired
+            mt_requirement: truckMt,
+            client_ids: assignedClients.map(c => c.id)
           });
 
           usedDriversThisShift.add(driver.id);
@@ -267,19 +299,20 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
     }
 
     if (newSchedules.length === 0) {
-      toast({ title: "No schedules to generate", variant: "destructive" });
+      toast({ title: "No schedules generated", description: "Check client requirements, resource availability, and maintenance periods", variant: "destructive" });
       return;
     }
 
     setLoading(true);
     try {
-      const { error } = await supabase.from("schedules").insert(newSchedules);
+      const { error } = await supabase.from("schedules").insert(
+        newSchedules.map(s => ({ ...s, device_fingerprint: deviceFingerprint }))
+      );
       if (error) throw error;
-      toast({ title: "Schedule generated", description: `Created ${newSchedules.length} draft assignments` });
-      setShowDeploymentDialog(false);
+      toast({ title: `Generated ${newSchedules.length} draft schedules based on client requirements` });
       loadData();
     } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error creating schedules", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -425,6 +458,78 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
     });
   };
 
+  const exportScheduleAsPDF = () => {
+    const doc = new jsPDF();
+    let yPos = 20;
+    
+    doc.setFontSize(18);
+    doc.text('Live Schedule', 14, yPos);
+    yPos += 10;
+    
+    doc.setFontSize(10);
+    doc.text(`Generated: ${format(new Date(), 'MMM dd, yyyy HH:mm')}`, 14, yPos);
+    yPos += 10;
+
+    visibleDates.forEach(date => {
+      const dateSchedules = groupedSchedules[date];
+      
+      // Add page break if needed
+      if (yPos > 250) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(14);
+      doc.text(format(new Date(date), 'EEEE, MMM dd, yyyy'), 14, yPos);
+      yPos += 8;
+      
+      ['AM', 'PM'].forEach(shift => {
+        const scheduleList = dateSchedules[shift as 'AM' | 'PM'];
+        if (scheduleList.length > 0) {
+          doc.setFontSize(12);
+          doc.text(`${shift} Shift (${scheduleList.length} trucks)`, 14, yPos);
+          yPos += 6;
+          
+          scheduleList.forEach((s, idx) => {
+            if (yPos > 270) {
+              doc.addPage();
+              yPos = 20;
+            }
+            
+            const driver = drivers.find(d => d.id === s.driver_id);
+            const truck = trucks.find(t => t.id === s.truck_id);
+            const scheduleHelpers = helpers.filter(h => s.helper_ids.includes(h.id));
+            const scheduleClients = clients.filter(c => s.client_ids?.includes(c.id));
+            
+            doc.setFontSize(10);
+            doc.text(`${idx + 1}. ${truck?.code || 'N/A'} | ${driver?.name || 'N/A'}`, 18, yPos);
+            yPos += 5;
+            
+            if (scheduleHelpers.length > 0) {
+              doc.setFontSize(9);
+              doc.text(`   Helpers: ${scheduleHelpers.map(h => h.name).join(', ')}`, 18, yPos);
+              yPos += 4;
+            }
+            
+            if (scheduleClients.length > 0) {
+              doc.text(`   Clients (${s.mt_requirement || 0} MT): ${scheduleClients.map(c => c.name).join(', ')}`, 18, yPos);
+              yPos += 4;
+            }
+            
+            yPos += 2;
+          });
+          
+          yPos += 4;
+        }
+      });
+      
+      yPos += 6;
+    });
+    
+    doc.save(`schedule-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+    toast({ title: "PDF exported successfully" });
+  };
+
   const groupedSchedules = schedules.reduce((acc, s) => {
     if (!acc[s.date]) acc[s.date] = { AM: [], PM: [] };
     acc[s.date][s.shift as 'AM' | 'PM'].push(s);
@@ -500,17 +605,23 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                   <CardTitle className="text-base">Live Schedule</CardTitle>
                   <CardDescription className="text-xs">All approved assignments</CardDescription>
                 </div>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" className="text-xs">
-                      <CalendarIcon className="mr-1 h-3 w-3" />
-                      {format(selectedDate, "MMM dd, yyyy")}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent>
-                    <Calendar mode="single" selected={selectedDate} onSelect={(date) => date && setSelectedDate(date)} />
-                  </PopoverContent>
-                </Popover>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={exportScheduleAsPDF}>
+                    <Download className="mr-1 h-3 w-3" />
+                    Export PDF
+                  </Button>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="text-xs">
+                        <CalendarIcon className="mr-1 h-3 w-3" />
+                        {format(selectedDate, "MMM dd, yyyy")}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent>
+                      <Calendar mode="single" selected={selectedDate} onSelect={(date) => date && setSelectedDate(date)} />
+                    </PopoverContent>
+                  </Popover>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -559,9 +670,18 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                                   {shiftSchedules.map((s, i) => {
                                     const driver = drivers.find(d => d.id === s.driver_id);
                                     const truck = trucks.find(t => t.id === s.truck_id);
+                                    const scheduleClients = clients.filter(c => s.client_ids?.includes(c.id));
                                     return (
-                                      <div key={i} className="text-xs p-1.5 bg-muted/30 rounded">
-                                        <span className="font-medium">{truck?.code}</span> • {driver?.name}
+                                      <div key={i} className="text-xs p-1.5 bg-muted/30 rounded space-y-0.5">
+                                        <div>
+                                          <span className="font-medium">{truck?.code}</span> • {driver?.name}
+                                        </div>
+                                        {scheduleClients.length > 0 && (
+                                          <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                            <Users className="h-3 w-3" />
+                                            {scheduleClients.map(c => c.name).join(', ')} ({s.mt_requirement || 0} MT)
+                                          </div>
+                                        )}
                                       </div>
                                     );
                                   })}
@@ -584,7 +704,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Generate Schedule</CardTitle>
-              <CardDescription className="text-xs">Configure MT requirements</CardDescription>
+              <CardDescription className="text-xs">Auto-generate based on client requirements and collection schedules</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
@@ -608,64 +728,13 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                 </Popover>
               </div>
               
-              <Dialog open={showDeploymentDialog} onOpenChange={setShowDeploymentDialog}>
-                <DialogTrigger asChild>
-                  <Button size="sm" disabled={!startDate || !endDate} className="w-full">Configure</Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl max-h-[70vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle className="text-base">MT Requirements</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-2">
-                    {startDate && endDate && (() => {
-                      const dates: string[] = [];
-                      let current = new Date(startDate);
-                      while (current <= endDate) {
-                        dates.push(format(current, "yyyy-MM-dd"));
-                        current = addDays(current, 1);
-                      }
-                      return dates;
-                    })().map(date => (
-                      <div key={date} className="border rounded p-2">
-                        <div className="text-xs font-medium mb-2">{format(new Date(date), "EEE, MMM dd")}</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label className="text-xs">AM MT</Label>
-                            <Input 
-                              type="number" 
-                              step="0.1"
-                              className="h-7 text-xs"
-                              value={truckDeployment[date]?.AM?.mt || 0}
-                              onChange={(e) => {
-                                const mt = parseFloat(e.target.value) || 0;
-                                updateTruckDeployment(date, "AM", "mt", e.target.value);
-                                updateTruckDeployment(date, "AM", "trucks", Math.ceil(mt / 2).toString());
-                              }}
-                            />
-                            <p className="text-xs text-primary mt-0.5">→ {Math.ceil((truckDeployment[date]?.AM?.mt || 0) / 2)} trucks</p>
-                          </div>
-                          <div>
-                            <Label className="text-xs">PM MT</Label>
-                            <Input 
-                              type="number" 
-                              step="0.1"
-                              className="h-7 text-xs"
-                              value={truckDeployment[date]?.PM?.mt || 0}
-                              onChange={(e) => {
-                                const mt = parseFloat(e.target.value) || 0;
-                                updateTruckDeployment(date, "PM", "mt", e.target.value);
-                                updateTruckDeployment(date, "PM", "trucks", Math.ceil(mt / 2).toString());
-                              }}
-                            />
-                            <p className="text-xs text-primary mt-0.5">→ {Math.ceil((truckDeployment[date]?.PM?.mt || 0) / 2)} trucks</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    <Button onClick={generateWeekSchedule} disabled={loading} size="sm" className="w-full">Generate</Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+              <Button size="sm" disabled={!startDate || !endDate || loading} onClick={generateWeekSchedule} className="w-full">
+                {loading ? "Generating..." : "Generate from Client Requirements"}
+              </Button>
+              
+              <p className="text-xs text-muted-foreground">
+                Schedules will be auto-generated based on client MT requirements, collection days, and preferred shifts.
+              </p>
             </CardContent>
           </Card>
 
