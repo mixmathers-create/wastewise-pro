@@ -1,10 +1,10 @@
-package recieptservice.com.recieptservice;
+package receiptservice.com.receiptservice;
 
-import recieptservice.com.recieptservice.PSAMCallback;
+import receiptservice.com.receiptservice.PSAMCallback;
 import android.graphics.Bitmap;
 
 interface PrinterInterface {
-     void printEpson(in byte []data);
+     void printEpson(in byte[] data);
      String getServiceVersion();
      void printText(String text);
      void printBitmap(in Bitmap pic);
@@ -13,7 +13,7 @@ interface PrinterInterface {
      void setAlignment(int alignment);
      void setTextSize(float textSize);
      void nextLine(int line);
-     void printTableText(in String[] text,in int []weight,in int []alignment);
+     void printTableText(in String[] text, in int[] weight, in int[] alignment);
      void setTextBold(boolean bold);
      void beginWork();
      void endWork();
@@ -27,21 +27,21 @@ interface PrinterInterface {
      boolean getScannerStatus();
 
      /**
-     *   检卡接口
-     */
-     void checkPSAMCard(int timeout,in PSAMCallback callback);
+      *   检卡接口
+      */
+     void checkPSAMCard(int timeout, in PSAMCallback callback);
      /**
-     *   激活接口
-     */
-     void activatePSAMCard(int timeout,in PSAMCallback callback);
+      *   激活接口
+      */
+     void activatePSAMCard(int timeout, in PSAMCallback callback);
 
      /**
-     *   反激活接口
-     */
-     void deactivatePSAMCard(int timeout,in PSAMCallback callback);
+      *   反激活接口
+      */
+     void deactivatePSAMCard(int timeout, in PSAMCallback callback);
 
      /**
-     *   通信接口
-     */
-     void transmitPSAMCard(int timeout,in byte[] data, PSAMCallback callback);
+      *   通信接口
+      */
+     void transmitPSAMCard(int timeout, in byte[] data, PSAMCallback callback);
 }

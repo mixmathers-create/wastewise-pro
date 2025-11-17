@@ -3,7 +3,7 @@ import html2canvas from 'html2canvas';
 import Printerservice from 'android/app/src/main/java/com/h10p/printerservice/Printerservice'
 
 // Define the plugin interface
-interface PrinterPlugin {
+interface BluetoothPrinterPlugin {
   connect(): Promise<{ success: boolean; name?: string; encoding?: string; serviceVersion?: string }>;
   disconnect(): Promise<void>;
   printText(options: { text: string; align: number }): Promise<void>;
@@ -49,7 +49,7 @@ export class PrinterService {
   /**
    * Test printer connection
    */
-  async testConnection(): Promise<{ success: boolean; name?: string; encoding?: string }> {
+  async testConnection(): Promise<{ success: boolean; name?: string; encoding?: string; serviceVersion?: string }> {
     if (!this.isAvailable()) {
       throw new Error('Printer service only available on Android');
     }
@@ -122,7 +122,7 @@ export class PrinterService {
           data: receiptData.qrCode,
           moduleSize: 8,
           errorLevel: 3,
-          align: 1 
+          align: 1,
         });
       }
 
