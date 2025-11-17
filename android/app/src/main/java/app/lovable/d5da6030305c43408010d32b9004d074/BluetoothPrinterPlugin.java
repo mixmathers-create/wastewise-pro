@@ -51,40 +51,62 @@ public class BluetoothPrinterPlugin extends Plugin {
     private void bindPrinterService() {
         try {
             Context context = getContext();
-            
-            // First try to start the service explicitly
+
+            // Try explicit start first (may no-op if already running)
             Intent startIntent = new Intent();
             startIntent.setPackage("recieptservice.com.recieptservice");
             startIntent.setAction("recieptservice.com.recieptservice.PrinterInterface");
-            
             try {
                 context.startService(startIntent);
                 Log.d(TAG, "Attempted to start printer service");
             } catch (Exception e) {
                 Log.w(TAG, "Could not start service explicitly (may already be running): " + e.getMessage());
             }
-            
-            // Now bind to the service
+
+            // First try implicit bind by action
             Intent bindIntent = new Intent();
             bindIntent.setPackage("recieptservice.com.recieptservice");
             bindIntent.setAction("recieptservice.com.recieptservice.PrinterInterface");
-            
-            // Log available services for debugging
+
             android.content.pm.PackageManager pm = context.getPackageManager();
             java.util.List<android.content.pm.ResolveInfo> services = pm.queryIntentServices(bindIntent, 0);
-            Log.d(TAG, "Available printer services found: " + services.size());
-            
+            Log.d(TAG, "Available printer services found (implicit): " + services.size());
             for (android.content.pm.ResolveInfo info : services) {
-                Log.d(TAG, "Service: " + info.serviceInfo.packageName + "/" + info.serviceInfo.name);
+                Log.d(TAG, "Service (implicit): " + info.serviceInfo.packageName + "/" + info.serviceInfo.name);
             }
-            
+
             boolean bound = context.bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE);
-            
             if (bound) {
-                Log.d(TAG, "Successfully bound to printer service");
+                Log.d(TAG, "Successfully bound to printer service (implicit)");
+                return;
             } else {
-                Log.e(TAG, "bindService returned false - service may not be available");
+                Log.w(TAG, "bindService (implicit) returned false - trying explicit component names");
             }
+
+            // Fallback: try common explicit service class names
+            String[] candidateClasses = new String[] {
+                "recieptservice.com.recieptservice.PrinterService",
+                "recieptservice.com.recieptservice.InnerPrinterService",
+                "recieptservice.com.recieptservice.PrintService",
+                "recieptservice.com.recieptservice.ReceiptService"
+            };
+
+            for (String cls : candidateClasses) {
+                try {
+                    Intent explicit = new Intent();
+                    explicit.setComponent(new ComponentName("recieptservice.com.recieptservice", cls));
+                    boolean ok = context.bindService(explicit, serviceConnection, Context.BIND_AUTO_CREATE);
+                    Log.d(TAG, "Attempted explicit bind to " + cls + " => " + ok);
+                    if (ok) {
+                        Log.d(TAG, "Successfully bound to printer service (explicit): " + cls);
+                        return;
+                    }
+                } catch (Exception ex) {
+                    Log.w(TAG, "Explicit bind failed for " + cls + ": " + ex.getMessage());
+                }
+            }
+
+            Log.e(TAG, "All attempts to bind to printer service failed");
         } catch (Exception e) {
             Log.e(TAG, "Error binding to printer service", e);
         }
@@ -93,6 +115,10 @@ public class BluetoothPrinterPlugin extends Plugin {
     @PluginMethod
     public void connect(PluginCall call) {
         JSObject result = new JSObject();
+        if (!isBound || printerInterface == null) {
+            Log.d(TAG, "connect() called while not bound. Attempting to bind...");
+            bindPrinterService();
+        }
         if (isBound && printerInterface != null) {
             try {
                 // Initialize printer with GB18030 charset
