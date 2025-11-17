@@ -8,5 +8,4 @@ project(':capacitor-camera').projectDir = new File('../node_modules/@capacitor/c
 include ':capacitor-mlkit-barcode-scanning'
 project(':capacitor-mlkit-barcode-scanning').projectDir = new File('../node_modules/@capacitor-mlkit/barcode-scanning/android')
 
-include ':lidta-capacitor-bl-printer'
-project(':lidta-capacitor-bl-printer').projectDir = new File('../node_modules/lidta-capacitor-bl-printer/android')
+

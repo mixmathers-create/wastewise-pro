@@ -24,6 +24,11 @@ import receiptservice.com.receiptservice.PrinterInterface;
 @CapacitorPlugin(name = "BluetoothPrinter")
 public class BluetoothPrinterPlugin extends Plugin {
     private static final String TAG = "BluetoothPrinterPlugin";
+    private static final long CONNECTION_TIMEOUT_MS = 8000;
+    private static final String[][] SERVICE_CANDIDATES = new String[][] {
+        {"receiptservice.com.receiptservice", "receiptservice.com.receiptservice.service.PrinterService"},
+        {"recieptservice.com.recieptservice", "recieptservice.com.recieptservice.service.PrinterService"}
+    };
     private PrinterInterface printerInterface;
     private boolean isBound = false;
     private CountDownLatch connectionLatch;
@@ -61,6 +66,26 @@ public class BluetoothPrinterPlugin extends Plugin {
         try {
             Context context = getContext();
             connectionLatch = new CountDownLatch(1);
+            isBound = false;
+            printerInterface = null;
+
+            for (String[] candidate : SERVICE_CANDIDATES) {
+                String pkg = candidate[0];
+                String cls = candidate[1];
+
+                // First attempt: explicit component only (matches supplier instructions)
+                try {
+                    Intent explicitComponent = new Intent();
+                    explicitComponent.setClassName(pkg, cls);
+                    boolean ok = context.bindService(explicitComponent, serviceConnection, Context.BIND_AUTO_CREATE);
+                    Log.d(TAG, "Attempted bind to " + pkg + "/" + cls + " (component only) => " + ok);
+                    if (ok) {
+                        Log.d(TAG, "Successfully bound to printer service: " + pkg + "/" + cls);
+                        return;
+                    }
+                } catch (Exception ex) {
+                    Log.w(TAG, "Component bind failed for " + pkg + "/" + cls + ": " + ex.getMessage());
+                }
 
             // Try explicit start first (may no-op if already running)
             Intent startIntent = new Intent();
@@ -101,18 +126,22 @@ public class BluetoothPrinterPlugin extends Plugin {
                 "receiptservice.com.receiptservice.ReceiptService"
             };
 
-            for (String cls : candidateClasses) {
+                // Fallback: include the AIDL action string for older firmware
                 try {
+                    Intent withAction = new Intent(pkg + ".PrinterInterface");
+                    withAction.setClassName(pkg, cls);
+                    boolean ok = context.bindService(withAction, serviceConnection, Context.BIND_AUTO_CREATE);
+                    Log.d(TAG, "Attempted bind to " + pkg + "/" + cls + " (with action) => " + ok);
                     Intent explicit = new Intent();
                     explicit.setComponent(new ComponentName("receiptservice.com.receiptservice", cls));
                     boolean ok = context.bindService(explicit, serviceConnection, Context.BIND_AUTO_CREATE);
                     Log.d(TAG, "Attempted explicit bind to " + cls + " => " + ok);
                     if (ok) {
-                        Log.d(TAG, "Successfully bound to printer service (explicit): " + cls);
+                        Log.d(TAG, "Successfully bound to printer service using action: " + pkg + ".PrinterInterface");
                         return;
                     }
                 } catch (Exception ex) {
-                    Log.w(TAG, "Explicit bind failed for " + cls + ": " + ex.getMessage());
+                    Log.w(TAG, "Action bind failed for " + pkg + "/" + cls + ": " + ex.getMessage());
                 }
             }
 
