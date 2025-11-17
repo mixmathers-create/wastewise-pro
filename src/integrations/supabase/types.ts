@@ -25,6 +25,8 @@ export type Database = {
           created_at: string
           id: string
           industry: string
+          latitude: number | null
+          longitude: number | null
           mt_requirement: number | null
           name: string
           qr_code: string
@@ -39,6 +41,8 @@ export type Database = {
           created_at?: string
           id?: string
           industry: string
+          latitude?: number | null
+          longitude?: number | null
           mt_requirement?: number | null
           name: string
           qr_code: string
@@ -53,6 +57,8 @@ export type Database = {
           created_at?: string
           id?: string
           industry?: string
+          latitude?: number | null
+          longitude?: number | null
           mt_requirement?: number | null
           name?: string
           qr_code?: string

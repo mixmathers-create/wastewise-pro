@@ -23,6 +23,8 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
   const [mtRequirement, setMtRequirement] = useState("0");
   const [collectionShift, setCollectionShift] = useState("AM");
   const [collectionDays, setCollectionDays] = useState<string[]>(["Mon", "Tue", "Wed", "Thu", "Fri"]);
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
 
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -49,6 +51,8 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
         mt_requirement: parseFloat(mtRequirement) || 0,
         collection_shift: collectionShift,
         collection_days: collectionDays,
+        latitude: latitude ? parseFloat(latitude) : null,
+        longitude: longitude ? parseFloat(longitude) : null,
       });
 
       if (error) throw error;
@@ -64,6 +68,8 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
       setMtRequirement("0");
       setCollectionShift("AM");
       setCollectionDays(["Mon", "Tue", "Wed", "Thu", "Fri"]);
+      setLatitude("");
+      setLongitude("");
       onAdded();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -142,6 +148,28 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
                 </div>
               ))}
             </div>
+          </div>
+          <div>
+            <Label htmlFor="latitude">Latitude</Label>
+            <Input 
+              id="latitude" 
+              type="number" 
+              step="0.000001"
+              value={latitude} 
+              onChange={(e) => setLatitude(e.target.value)}
+              placeholder="e.g., 10.3181"
+            />
+          </div>
+          <div>
+            <Label htmlFor="longitude">Longitude</Label>
+            <Input 
+              id="longitude" 
+              type="number" 
+              step="0.000001"
+              value={longitude} 
+              onChange={(e) => setLongitude(e.target.value)}
+              placeholder="e.g., 123.9059"
+            />
           </div>
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? "Adding..." : "Add Client"}

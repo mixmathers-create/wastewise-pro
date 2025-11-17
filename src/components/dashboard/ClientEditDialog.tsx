@@ -19,6 +19,8 @@ interface Client {
   mt_requirement?: number;
   collection_days?: string[];
   collection_shift?: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 const ClientEditDialog = ({ 
@@ -68,6 +70,8 @@ const ClientEditDialog = ({
           mt_requirement: formData.mt_requirement || 0,
           collection_shift: formData.collection_shift || "AM",
           collection_days: formData.collection_days || [],
+          latitude: formData.latitude,
+          longitude: formData.longitude,
         })
         .eq("id", client.id);
 
@@ -118,6 +122,26 @@ const ClientEditDialog = ({
                 <SelectItem value="PM">PM</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <Label>Latitude</Label>
+            <Input 
+              type="number" 
+              step="0.000001"
+              value={formData.latitude || ""} 
+              onChange={(e) => setFormData({...formData, latitude: parseFloat(e.target.value) || null})} 
+              placeholder="e.g., 10.3181"
+            />
+          </div>
+          <div>
+            <Label>Longitude</Label>
+            <Input 
+              type="number" 
+              step="0.000001"
+              value={formData.longitude || ""} 
+              onChange={(e) => setFormData({...formData, longitude: parseFloat(e.target.value) || null})} 
+              placeholder="e.g., 123.9059"
+            />
           </div>
           <div className="space-y-2">
             <Label>Collection Days</Label>

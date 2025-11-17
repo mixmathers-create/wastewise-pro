@@ -64,6 +64,8 @@ interface Client {
   mt_requirement: number;
   collection_days: string[];
   collection_shift: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 interface TruckDeployment {
@@ -97,6 +99,8 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const [truckDeployment, setTruckDeployment] = useState<TruckDeployment>({});
   const [showDeploymentDialog, setShowDeploymentDialog] = useState(false);
   const [showMaintenanceDialog, setShowMaintenanceDialog] = useState(false);
+  const [showClientSelectionDialog, setShowClientSelectionDialog] = useState(false);
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   
   const [newMaintenance, setNewMaintenance] = useState<MaintenanceBlock>({
     truck_id: '',
@@ -192,6 +196,11 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
       return;
     }
 
+    if (selectedClientIds.length === 0) {
+      toast({ title: "No clients selected", description: "Please select at least one client to service", variant: "destructive" });
+      return;
+    }
+
     const dates: string[] = [];
     let currentDate = new Date(startDate);
     while (currentDate <= endDate) {
@@ -200,19 +209,20 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
     }
 
     const newSchedules: Schedule[] = [];
+    const selectedClients = clients.filter(c => selectedClientIds.includes(c.id));
 
     for (const dateStr of dates) {
       const dayIndex = new Date(dateStr).getDay();
       const dayName = daysOfWeek[(dayIndex + 6) % 7];
 
-      // Group clients by shift and day preference
-      const clientsForAM = clients.filter(c => 
+      // Group selected clients by shift and day preference
+      const clientsForAM = selectedClients.filter(c => 
         c.collection_days?.includes(dayName) && 
         c.collection_shift === "AM" &&
         (c.mt_requirement || 0) > 0
       );
       
-      const clientsForPM = clients.filter(c => 
+      const clientsForPM = selectedClients.filter(c => 
         c.collection_days?.includes(dayName) && 
         c.collection_shift === "PM" &&
         (c.mt_requirement || 0) > 0
@@ -225,16 +235,11 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
         const clientsForShift = shift === "AM" ? clientsForAM : clientsForPM;
         if (clientsForShift.length === 0) continue;
 
-        // Calculate total MT requirement for this shift
-        const totalMt = clientsForShift.reduce((sum, c) => sum + (c.mt_requirement || 0), 0);
-        const trucksNeeded = Math.ceil(totalMt / 3); // Assuming 3 MT average per truck
+        // Import location grouping utility
+        const { groupClientsByProximity } = await import("@/lib/locationUtils");
 
         const usedDriversInPreviousShift = shift === "PM" ? usedDriversAM : new Set<string>();
         const usedHelpersInPreviousShift = shift === "PM" ? usedHelpersAM : new Set<string>();
-
-        const driversNeeded = trucksNeeded;
-        const helpersPerTruck = 3;
-        const helpersNeeded = trucksNeeded * helpersPerTruck;
 
         const availableDrivers = drivers.filter((d) => {
           const avail = d.availability as any;
@@ -256,6 +261,14 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
         
         availableTrucks.sort((a, b) => (b.capacity || 0) - (a.capacity || 0));
 
+        // Group clients by proximity to minimize travel distance
+        const clientGroups = groupClientsByProximity(clientsForShift, availableTrucks[0]?.capacity || 3);
+        const trucksNeeded = clientGroups.length;
+
+        const helpersPerTruck = 3;
+        const driversNeeded = trucksNeeded;
+        const helpersNeeded = trucksNeeded * helpersPerTruck;
+
         if (availableDrivers.length < driversNeeded || availableHelpers.length < helpersNeeded || availableTrucks.length < trucksNeeded) {
           continue;
         }
@@ -263,17 +276,11 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
         const usedDriversThisShift = new Set<string>();
         const usedHelpersThisShift = new Set<string>();
 
-        // Distribute clients among trucks
-        const clientsPerTruck: Client[][] = Array(trucksNeeded).fill(null).map(() => []);
-        clientsForShift.forEach((client, idx) => {
-          clientsPerTruck[idx % trucksNeeded].push(client);
-        });
-
         for (let i = 0; i < trucksNeeded; i++) {
           const driver = availableDrivers[i];
           const truckAssignment = availableTrucks[i];
           const assignedHelpers = availableHelpers.slice(i * helpersPerTruck, (i + 1) * helpersPerTruck);
-          const assignedClients = clientsPerTruck[i];
+          const assignedClients = clientGroups[i];
           const truckMt = assignedClients.reduce((sum, c) => sum + (c.mt_requirement || 0), 0);
 
           newSchedules.push({
@@ -300,7 +307,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
     }
 
     if (newSchedules.length === 0) {
-      toast({ title: "No schedules generated", description: "Check client requirements, resource availability, and maintenance periods", variant: "destructive" });
+      toast({ title: "No schedules generated", description: "Check client requirements, resource availability, and maintenance periods. Ensure selected clients match the date range.", variant: "destructive" });
       return;
     }
 
@@ -310,7 +317,9 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
         newSchedules.map(s => ({ ...s, device_fingerprint: deviceFingerprint }))
       );
       if (error) throw error;
-      toast({ title: `Generated ${newSchedules.length} draft schedules based on client requirements` });
+      toast({ title: `Generated ${newSchedules.length} draft schedules for ${selectedClientIds.length} clients` });
+      setShowClientSelectionDialog(false);
+      setSelectedClientIds([]);
       loadData();
     } catch (error: any) {
       toast({ title: "Error creating schedules", description: error.message, variant: "destructive" });
@@ -765,8 +774,8 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                 </Popover>
               </div>
               
-              <Button size="sm" disabled={!startDate || !endDate || loading} onClick={generateWeekSchedule} className="w-full">
-                {loading ? "Generating..." : "Generate from Client Requirements"}
+              <Button size="sm" disabled={!startDate || !endDate || loading} onClick={() => setShowClientSelectionDialog(true)} className="w-full">
+                Select Clients to Service
               </Button>
               
               <p className="text-xs text-muted-foreground">
@@ -1031,6 +1040,77 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
             <div className="flex gap-2">
               <Button onClick={approveSchedules} disabled={loading} size="sm">Approve</Button>
               <Button variant="outline" size="sm" onClick={() => setShowApprovalDialog(false)}>Cancel</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Client Selection Dialog */}
+      <Dialog open={showClientSelectionDialog} onOpenChange={setShowClientSelectionDialog}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Select Clients to Service</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Choose which clients to include in the schedule generation for {startDate && endDate && `${format(startDate, "MMM dd")} - ${format(endDate, "MMM dd")}`}
+            </p>
+            <div className="flex gap-2 mb-3">
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={() => setSelectedClientIds(clients.map(c => c.id))}
+              >
+                Select All
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={() => setSelectedClientIds([])}
+              >
+                Clear All
+              </Button>
+            </div>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {clients.map(client => (
+                <div key={client.id} className="flex items-start space-x-3 p-2 border rounded hover:bg-muted/50">
+                  <Checkbox 
+                    id={`client-${client.id}`}
+                    checked={selectedClientIds.includes(client.id)}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedClientIds([...selectedClientIds, client.id]);
+                      } else {
+                        setSelectedClientIds(selectedClientIds.filter(id => id !== client.id));
+                      }
+                    }}
+                  />
+                  <div className="flex-1">
+                    <Label htmlFor={`client-${client.id}`} className="cursor-pointer font-medium">
+                      {client.name}
+                    </Label>
+                    <div className="text-xs text-muted-foreground">
+                      {client.industry} • {client.mt_requirement || 0} MT • {client.collection_shift} • {client.collection_days?.join(', ')}
+                      {client.latitude && client.longitude && ` • ${client.latitude.toFixed(4)}, ${client.longitude.toFixed(4)}`}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 pt-3">
+              <Button 
+                onClick={generateWeekSchedule} 
+                disabled={loading || selectedClientIds.length === 0}
+                className="flex-1"
+              >
+                {loading ? "Generating..." : `Generate Schedule (${selectedClientIds.length} clients)`}
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowClientSelectionDialog(false)}
+              >
+                Cancel
+              </Button>
             </div>
           </div>
         </DialogContent>
