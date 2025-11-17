@@ -55,12 +55,19 @@ public class BluetoothPrinterPlugin extends Plugin {
             intent.setAction("recieptservice.com.recieptservice.PrinterInterface");
             
             Context context = getContext();
+            
+            // Log available services for debugging
+            android.content.pm.PackageManager pm = context.getPackageManager();
+            java.util.List<android.content.pm.ResolveInfo> services = pm.queryIntentServices(intent, 0);
+            Log.d(TAG, "Available printer services: " + services.size());
+            
             boolean bound = context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
             
             if (bound) {
                 Log.d(TAG, "Binding to printer service...");
             } else {
-                Log.e(TAG, "Failed to bind to printer service");
+                Log.e(TAG, "Failed to bind to printer service - service may not be installed");
+                Log.e(TAG, "Make sure the H10P vendor printer service APK is installed");
             }
         } catch (Exception e) {
             Log.e(TAG, "Error binding to printer service", e);
