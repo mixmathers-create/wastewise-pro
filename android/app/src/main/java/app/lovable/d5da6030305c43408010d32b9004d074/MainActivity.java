@@ -16,7 +16,5 @@ public class MainActivity extends BridgeActivity {
         Log.d("MainActivity", "Registered BluetoothPrinterPlugin");
         registerPlugin(CameraPlugin.class);
         Log.d("MainActivity", "Registered CameraPlugin");
-        registerPlugin(BarcodeScannerPlugin.class);
-        Log.d("MainActivity", "Registered BarcodeScannerPlugin");
     }
 }
