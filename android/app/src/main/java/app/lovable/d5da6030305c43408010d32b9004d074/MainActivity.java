@@ -5,6 +5,7 @@ import android.util.Log;
 import com.getcapacitor.BridgeActivity;
 import com.capacitorjs.plugins.camera.CameraPlugin;
 
+
 public class MainActivity extends BridgeActivity {
   @Override
     public void onCreate(Bundle savedInstanceState) {

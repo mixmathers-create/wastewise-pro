@@ -6,6 +6,8 @@ The Android app now uses a custom **`BluetoothPrinter` Capacitor plugin** that b
 
 ## Step 1: Update and Sync Android
 
+## Step 1: Update and Sync Android
+
 1. Pull the latest changes from your repository.
 2. Run `npm install` to refresh web dependencies.
 3. Run `npx cap sync android` to regenerate the native project without any external printer plugin modules.
