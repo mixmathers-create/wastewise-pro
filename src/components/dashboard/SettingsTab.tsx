@@ -1,150 +1,74 @@
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { printerService } from "@/lib/printerService";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const SettingsTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
-  const [availablePrinters, setAvailablePrinters] = useState<any[]>([]);
-  const [scanning, setScanning] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [pairing, setPairing] = useState<string | null>(null);
+  const [printerStatus, setPrinterStatus] = useState<'unknown' | 'connected' | 'error'>('unknown');
 
-  const handleScanPrinter = async () => {
+  const handleCheckPrinter = async () => {
     if (!printerService.isAvailable()) {
       toast({
-        title: "Not available",
-        description: "Bluetooth printer is only available on Android app",
+        title: "Not Available",
+        description: "Printer service only available on Android devices",
         variant: "destructive"
       });
       return;
     }
 
-    setScanning(true);
-    setAvailablePrinters([]);
-    
     try {
-      toast({
-        title: "Scanning...",
-        description: "Looking for nearby Bluetooth devices"
-      });
-
-      const devices = await printerService.scanForDevices((device) => {
-        // Real-time device updates as they're discovered
-        setAvailablePrinters(prev => {
-          const exists = prev.find(d => d.address === device.address);
-          if (!exists) {
-            return [...prev, device];
-          }
-          return prev;
-        });
-      });
-
-      setAvailablePrinters(devices);
-      
-      // Check if innerprinter is found
-      const innerPrinter = devices.find(d => 
-        d.name && d.name.toLowerCase().includes('innerprinter')
-      );
-      
-      if (innerPrinter) {
+      const result = await printerService.testConnection();
+      if (result.success) {
+        setPrinterStatus('connected');
         toast({
-          title: "innerprinter found!",
-          description: `Found ${innerPrinter.name} - ${innerPrinter.bonded ? 'Paired' : 'Not paired'}`
-        });
-      } else if (devices.length === 0) {
-        toast({
-          title: "No devices found",
-          description: "Make sure Bluetooth is enabled on nearby devices",
-          variant: "destructive"
+          title: "Printer Connected",
+          description: result.name || "H10P Internal Printer ready",
         });
       } else {
+        setPrinterStatus('error');
         toast({
-          title: "Scan complete",
-          description: `Found ${devices.length} device(s)`
+          title: "Printer Not Ready",
+          description: "Could not connect to internal printer",
+          variant: "destructive"
         });
       }
     } catch (error: any) {
+      setPrinterStatus('error');
+      console.error('Printer check error:', error);
       toast({
-        title: "Scan failed",
-        description: error.message,
+        title: "Connection Error",
+        description: error.message || "Failed to connect to printer",
         variant: "destructive"
       });
-    } finally {
-      setScanning(false);
-    }
-  };
-
-  const handlePairDevice = async (address: string, name: string) => {
-    setPairing(address);
-    try {
-      const result = await printerService.pairDevice(address);
-      toast({
-        title: "Pairing initiated",
-        description: `Pairing with ${name}. Check your device for pairing request.`
-      });
-      
-      // Refresh device list after a short delay
-      setTimeout(() => {
-        handleScanPrinter();
-      }, 2000);
-    } catch (error: any) {
-      toast({
-        title: "Pairing failed",
-        description: error.message,
-        variant: "destructive"
-      });
-    } finally {
-      setPairing(null);
     }
   };
 
   const handleTestPrint = async () => {
     if (!printerService.isAvailable()) {
       toast({
-        title: "Not available",
-        description: "Bluetooth printer is only available on Android app",
+        title: "Not Available",
+        description: "Printer service only available on Android devices",
         variant: "destructive"
       });
       return;
     }
 
-    setConnecting(true);
     try {
-      const printer = await printerService.findInnerPrinter();
-      if (!printer) {
-        toast({
-          title: "innerprinter not found",
-          description: "Please pair 'innerprinter' device in Bluetooth settings",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      await printerService.printReceipt({
-        header: "TEST PRINT\nWasteWise Pro",
-        items: [
-          { label: "Date", value: new Date().toLocaleString() },
-          { label: "Status", value: "Connected" }
-        ],
-        footer: "Test completed successfully"
-      });
-
+      await printerService.printTest();
       toast({
-        title: "Print successful",
-        description: `Printed to ${printer.name}`
+        title: "Print Successful",
+        description: "Test receipt printed successfully",
       });
     } catch (error: any) {
+      console.error('Print error:', error);
       toast({
-        title: "Print failed",
-        description: error.message,
+        title: "Print Failed",
+        description: error.message || "Failed to print test receipt",
         variant: "destructive"
       });
-    } finally {
-      setConnecting(false);
     }
   };
 
@@ -158,71 +82,48 @@ const SettingsTab = ({ profile }: { profile: any }) => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-2">
-            <Button 
-              onClick={handleScanPrinter} 
-              disabled={scanning}
-              variant="outline"
-              className="flex-1"
-            >
-              {scanning ? "Scanning..." : "Scan for innerprinter"}
-            </Button>
-            <Button 
-              onClick={handleTestPrint} 
-              disabled={connecting}
-              variant="default"
-            >
-              {connecting ? "Printing..." : "Test Print"}
-            </Button>
-          </div>
-
-          {availablePrinters.length > 0 && (
-            <div className="space-y-2">
-              <Label>Discovered Devices ({availablePrinters.length})</Label>
-              <div className="max-h-64 overflow-y-auto space-y-2">
-                {availablePrinters.map((printer) => (
-                  <div 
-                    key={printer.address} 
-                    className={`p-3 border rounded flex items-center justify-between ${
-                      printer.name && printer.name.toLowerCase().includes('innerprinter')
-                        ? 'bg-primary/10 border-primary'
-                        : 'bg-card'
-                    }`}
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{printer.name || 'Unnamed Device'}</p>
-                        {printer.bonded && (
-                          <span className="text-xs bg-green-500/20 text-green-700 dark:text-green-300 px-2 py-0.5 rounded">
-                            Paired
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground">{printer.address}</p>
-                    </div>
-                    {!printer.bonded && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handlePairDevice(printer.address, printer.name)}
-                        disabled={pairing === printer.address}
-                      >
-                        {pairing === printer.address ? "Pairing..." : "Pair"}
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           <Alert>
             <AlertDescription>
-              1. Click "Scan for innerprinter" to discover nearby Bluetooth devices<br/>
-              2. If your printer isn't paired, click "Pair" next to it<br/>
-              3. Once paired, the app will automatically print to "innerprinter"
+              The H10P has an internal 58mm ESC/POS thermal printer. 
+              Click "Check Printer" to verify the connection to the internal printer service,
+              then use "Test Print" to print a test receipt.
             </AlertDescription>
           </Alert>
+
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Button 
+                onClick={handleCheckPrinter}
+                className="flex-1"
+                variant={printerStatus === 'connected' ? 'default' : 'outline'}
+              >
+                Check Printer
+              </Button>
+              <Button 
+                onClick={handleTestPrint} 
+                variant="outline"
+                disabled={printerStatus !== 'connected'}
+              >
+                Test Print
+              </Button>
+            </div>
+
+            {printerStatus === 'connected' && (
+              <div className="p-3 border rounded-lg bg-green-50 dark:bg-green-950">
+                <p className="text-sm font-medium text-green-700 dark:text-green-300">
+                  ✓ H10P Internal Printer Connected
+                </p>
+              </div>
+            )}
+            
+            {printerStatus === 'error' && (
+              <div className="p-3 border rounded-lg bg-red-50 dark:bg-red-950">
+                <p className="text-sm font-medium text-red-700 dark:text-red-300">
+                  ✗ Printer service not available
+                </p>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
