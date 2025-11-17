@@ -52,6 +52,10 @@ public class BluetoothPrinterPlugin extends Plugin {
         public void onServiceDisconnected(ComponentName name) {
             printerInterface = null;
             isBound = false;
+            if (connectionLatch != null) {
+                connectionLatch.countDown();
+            }
+            bindPrinterService();
             Log.d(TAG, "Printer service disconnected");
         }
     };
@@ -69,57 +73,36 @@ public class BluetoothPrinterPlugin extends Plugin {
             isBound = false;
             printerInterface = null;
 
-            // Try explicit start first (may no-op if already running)
-            Intent startIntent = new Intent();
-            startIntent.setPackage("recieptservice.com.recieptservice");
-            startIntent.setAction("recieptservice.com.recieptservice.PrinterInterface");
-            try {
-                context.startService(startIntent);
-                Log.d(TAG, "Attempted to start printer service");
-            } catch (Exception e) {
-                Log.w(TAG, "Could not start service explicitly (may already be running): " + e.getMessage());
-            }
+            for (String[] candidate : SERVICE_CANDIDATES) {
+                String pkg = candidate[0];
+                String cls = candidate[1];
 
-            // First try implicit bind by action
-            Intent bindIntent = new Intent();
-            bindIntent.setPackage("recieptservice.com.recieptservice");
-            bindIntent.setAction("recieptservice.com.recieptservice.PrinterInterface");
-
-            android.content.pm.PackageManager pm = context.getPackageManager();
-            java.util.List<android.content.pm.ResolveInfo> services = pm.queryIntentServices(bindIntent, 0);
-            Log.d(TAG, "Available printer services found (implicit): " + services.size());
-            for (android.content.pm.ResolveInfo info : services) {
-                Log.d(TAG, "Service (implicit): " + info.serviceInfo.packageName + "/" + info.serviceInfo.name);
-            }
-
-            boolean bound = context.bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE);
-            if (bound) {
-                Log.d(TAG, "Successfully bound to printer service (implicit)");
-                return;
-            } else {
-                Log.w(TAG, "bindService (implicit) returned false - trying explicit component names");
-            }
-
-            // Fallback: try common explicit service class names
-            String[] candidateClasses = new String[] {
-                "recieptservice.com.recieptservice.PrinterService",
-                "recieptservice.com.recieptservice.InnerPrinterService",
-                "recieptservice.com.recieptservice.PrintService",
-                "recieptservice.com.recieptservice.ReceiptService"
-            };
-
-                // Fallback: include the AIDL action string for older firmware
+                // First attempt: explicit component only (matches supplier instructions)
                 try {
-                    Intent explicit = new Intent();
-                    explicit.setComponent(new ComponentName("recieptservice.com.recieptservice", cls));
-                    boolean ok = context.bindService(explicit, serviceConnection, Context.BIND_AUTO_CREATE);
-                    Log.d(TAG, "Attempted explicit bind to " + cls + " => " + ok);
+                    Intent explicitComponent = new Intent();
+                    explicitComponent.setClassName(pkg, cls);
+                    boolean ok = context.bindService(explicitComponent, serviceConnection, Context.BIND_AUTO_CREATE);
+                    Log.d(TAG, "Attempted bind to " + pkg + "/" + cls + " (component only) => " + ok);
                     if (ok) {
-                        Log.d(TAG, "Successfully bound to printer service (explicit): " + cls);
+                        Log.d(TAG, "Successfully bound to printer service: " + pkg + "/" + cls);
                         return;
                     }
                 } catch (Exception ex) {
-                    Log.w(TAG, "Explicit bind failed for " + cls + ": " + ex.getMessage());
+                    Log.w(TAG, "Component bind failed for " + pkg + "/" + cls + ": " + ex.getMessage());
+                }
+
+                // Fallback: include the AIDL action string for older firmware
+                try {
+                    Intent withAction = new Intent(pkg + ".PrinterInterface");
+                    withAction.setClassName(pkg, cls);
+                    boolean ok = context.bindService(withAction, serviceConnection, Context.BIND_AUTO_CREATE);
+                    Log.d(TAG, "Attempted bind to " + pkg + "/" + cls + " (with action) => " + ok);
+                    if (ok) {
+                        Log.d(TAG, "Successfully bound to printer service using action: " + pkg + ".PrinterInterface");
+                        return;
+                    }
+                } catch (Exception ex) {
+                    Log.w(TAG, "Action bind failed for " + pkg + "/" + cls + ": " + ex.getMessage());
                 }
             }
 
@@ -154,6 +137,14 @@ public class BluetoothPrinterPlugin extends Plugin {
         if (!isBound || printerInterface == null) {
             Log.d(TAG, "connect() called while not bound. Attempting to bind...");
             bindPrinterService();
+            boolean connected = waitForServiceConnection(CONNECTION_TIMEOUT_MS);
+            if (!connected) {
+                result.put("success", false);
+                result.put("bound", isBound);
+                result.put("interface", printerInterface != null);
+                call.reject("Printer service not available. Check logcat for details.");
+                return;
+            }
         }
         if (isBound && printerInterface != null) {
             try {
@@ -398,6 +389,68 @@ public class BluetoothPrinterPlugin extends Plugin {
         } catch (RemoteException e) {
             Log.e(TAG, "Error printing QR code", e);
             call.reject("Failed to print QR code: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void printTableText(PluginCall call) {
+        if (!isBound || printerInterface == null) {
+            call.reject("Printer service not available");
+            return;
+        }
+
+        try {
+            JSArray textArray = call.getArray("text");
+            JSArray weightArray = call.getArray("weight");
+            JSArray alignmentArray = call.getArray("alignment");
+
+            if (textArray == null || weightArray == null || alignmentArray == null) {
+                call.reject("Missing table parameters");
+                return;
+            }
+
+            String[] text = new String[textArray.length()];
+            int[] weight = new int[weightArray.length()];
+            int[] alignment = new int[alignmentArray.length()];
+
+            for (int i = 0; i < textArray.length(); i++) {
+                text[i] = textArray.getString(i);
+            }
+            for (int i = 0; i < weightArray.length(); i++) {
+                weight[i] = weightArray.getInt(i);
+            }
+            for (int i = 0; i < alignmentArray.length(); i++) {
+                alignment[i] = alignmentArray.getInt(i);
+            }
+
+            printerInterface.printTableText(text, weight, alignment);
+            call.resolve();
+        } catch (RemoteException | JSONException e) {
+            Log.e(TAG, "Error printing table", e);
+            call.reject("Failed to print table: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void printEpson(PluginCall call) {
+        if (!isBound || printerInterface == null) {
+            call.reject("Printer service not available");
+            return;
+        }
+
+        try {
+            String base64Data = call.getString("data", "");
+            if (base64Data.isEmpty()) {
+                call.reject("No data provided");
+                return;
+            }
+
+            byte[] bytes = Base64.decode(base64Data, Base64.DEFAULT);
+            printerInterface.printEpson(bytes);
+            call.resolve();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error sending Epson commands", e);
+            call.reject("Failed to send Epson commands: " + e.getMessage());
         }
     }
 

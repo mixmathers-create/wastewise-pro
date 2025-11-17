@@ -3,7 +3,7 @@ import html2canvas from 'html2canvas';
 import Printerservice from 'android/app/src/main/java/com/h10p/printerservice/Printerservice'
 
 // Define the plugin interface
-interface PrinterPlugin {
+interface BluetoothPrinterPlugin {
   connect(): Promise<{ success: boolean; name?: string; encoding?: string; serviceVersion?: string }>;
   disconnect(): Promise<void>;
   printText(options: { text: string; align: number }): Promise<void>;

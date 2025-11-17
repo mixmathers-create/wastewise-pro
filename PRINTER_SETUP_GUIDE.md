@@ -2,9 +2,9 @@
 
 ## Quick Start
 
-Your WasteWise app now uses **`capacitor-thermal-printer`** - a modern, Capacitor 7-compatible library for ESC/POS thermal printers.
+The Android app now uses a custom **`BluetoothPrinter` Capacitor plugin** that binds directly to the vendor printer service `recieptservice.com.recieptservice` (DevCheck reports version **8.3.6** on H10 firmware). No third-party printer libraries are required.
 
-## Step 1: Fix NPM Install Error (If You Encountered It)
+## Step 1: Update and Sync Android
 
 ## Step 1: Update and Sync Android
 

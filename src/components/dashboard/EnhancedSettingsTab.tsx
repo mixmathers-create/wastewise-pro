@@ -89,7 +89,6 @@ const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
           ? `Service version ${result.serviceVersion || "unknown"} ready`
           : "Could not reach the H10 printer service"
       });
-
     } catch (error: any) {
       toast({ title: "Connection Failed", description: error.message, variant: "destructive" });
     }
