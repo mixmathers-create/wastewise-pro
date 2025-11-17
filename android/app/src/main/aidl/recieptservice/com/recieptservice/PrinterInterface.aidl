@@ -1,7 +1,8 @@
-package receiptservice.com.receiptservice;
+package recieptservice.com.recieptservice;
 
-import receiptservice.com.receiptservice.PSAMCallback;
+import recieptservice.com.recieptservice.PSAMCallback;
 import android.graphics.Bitmap;
+
 interface PrinterInterface {
      void printEpson(in byte []data);
      String getServiceVersion();

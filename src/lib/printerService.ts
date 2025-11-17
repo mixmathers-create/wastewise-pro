@@ -49,7 +49,7 @@ export class PrinterService {
   /**
    * Test printer connection
    */
-  async testConnection(): Promise<{ success: boolean; name?: string; encoding?: string; serviceVersion?: string }> {
+  async testConnection(): Promise<{ success: boolean; name?: string; encoding?: string }> {
     if (!this.isAvailable()) {
       throw new Error('Printer service only available on Android');
     }
@@ -122,7 +122,7 @@ export class PrinterService {
           data: receiptData.qrCode,
           moduleSize: 8,
           errorLevel: 3,
-          align: 1,
+          align: 1 
         });
       }
 

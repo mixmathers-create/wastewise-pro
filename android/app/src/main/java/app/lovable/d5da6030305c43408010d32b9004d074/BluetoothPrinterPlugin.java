@@ -108,7 +108,7 @@ public class BluetoothPrinterPlugin extends Plugin {
                 "recieptservice.com.recieptservice.ReceiptService"
             };
 
-                // Fallback: include the AIDL action string for older firmware
+            for (String cls : candidateClasses) {
                 try {
                     Intent explicit = new Intent();
                     explicit.setComponent(new ComponentName("recieptservice.com.recieptservice", cls));
@@ -160,12 +160,11 @@ public class BluetoothPrinterPlugin extends Plugin {
                 // Initialize printer with GB18030 charset
                 String version = printerInterface.getServiceVersion();
                 printerInterface.setCode("GB18030");
-                Log.d(TAG, "Printer initialized with GB18030 encoding. Service version: " + version);
-
+                Log.d(TAG, "Printer initialized with GB18030 encoding");
+                
                 result.put("success", true);
                 result.put("name", "H10P Internal Printer");
                 result.put("encoding", "GB18030");
-                result.put("serviceVersion", version);
                 call.resolve(result);
             } catch (RemoteException e) {
                 Log.e(TAG, "Error initializing printer", e);

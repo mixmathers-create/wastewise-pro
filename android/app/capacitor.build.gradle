@@ -7,7 +7,13 @@ android {
   }
 }
 
-apply from: "../capacitor-cordova-android-plugins/cordova.variables.gradle"
+// Apply Cordova variables only when the generated file exists to prevent build failures
+// in environments without cordova plugins.
+def cordovaVariablesFile = new File(rootProject.projectDir, "capacitor-cordova-android-plugins/cordova.variables.gradle")
+if (cordovaVariablesFile.exists()) {
+  apply from: cordovaVariablesFile
+}
+
 dependencies {
     implementation project(':capacitor-camera')
     implementation project(':capacitor-mlkit-barcode-scanning')
