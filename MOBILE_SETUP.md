@@ -8,7 +8,7 @@ This guide will help you set up the WasteWise Android app for the Senraise H10 P
 - **Clients Tab**: Client management and QR code viewing
 - **Settings Tab**: Account information and receipt customization
 - **Custom Numeric Keypad**: Touch-friendly input for number fields
-- **Bluetooth Printer Integration**: Ready for lidta-capacitor-bl-printer
+- **Bluetooth Printer Integration**: Uses the built-in AIDL printer service on the Senraise H10
 
 ## Prerequisites
 - Node.js and npm installed
@@ -17,6 +17,28 @@ This guide will help you set up the WasteWise Android app for the Senraise H10 P
 - Git access to your repository
 
 ## Setup Instructions
+
+### Quick Update & Test (after pulling new commits)
+
+If you just want to test the latest Android changes in Android Studio:
+
+1. Pull the newest code:
+   ```bash
+   git pull
+   ```
+2. Install any new web dependencies:
+   ```bash
+   npm install
+   ```
+3. Sync native Android modules:
+   ```bash
+   npx cap sync android
+   ```
+4. Open the project in Android Studio and let Gradle finish syncing:
+   ```bash
+   npx cap open android
+   ```
+5. From Android Studio, select **Build > Make Project** and run on the H10 device to verify printer and camera changes.
 
 ### 1. Export and Clone Project
 1. Click "Export to Github" in Lovable
@@ -213,7 +235,7 @@ if (printerService.isConnected()) {
 }
 ```
 
-**Note**: The printer service is fully implemented using `lidta-capacitor-bl-printer`. See `PRINTER_SETUP_GUIDE.md` for complete setup instructions.
+**Note**: The printer service now uses the built-in `BluetoothPrinter` Capacitor plugin that binds directly to `receiptservice.com.receiptservice` (version 8.3.6 on the H10). See `PRINTER_SETUP_GUIDE.md` for complete setup instructions.
 
 ## Display Optimization
 
@@ -367,7 +389,7 @@ await CapacitorThermalPrinter
 
 ### Printer Not Connecting
 - Verify Bluetooth permissions in AndroidManifest.xml
-- Check that lidta-capacitor-bl-printer is properly configured
+- Verify the H10 printer service package (`receiptservice.com.receiptservice`) is installed and running
 - Test Bluetooth connection manually on the device
 
 ## Production Build
@@ -393,5 +415,5 @@ For production deployment (without hot reload):
 ## Support Resources
 - [Capacitor Documentation](https://capacitorjs.com/docs)
 - [Lovable Mobile Development Guide](https://docs.lovable.dev)
-- [lidta-capacitor-bl-printer](https://www.npmjs.com/package/lidta-capacitor-bl-printer)
+- Vendor printer service package name: `receiptservice.com.receiptservice`
 - [Senraise H10 Documentation](https://www.senraise.com/)
