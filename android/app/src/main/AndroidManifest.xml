@@ -11,6 +11,7 @@
     <!-- Camera Permission -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <!-- WiFi Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -50,7 +51,20 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- ML Kit Barcode Scanning -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="barcode_scanning" />
     </application>
+
+    <!-- Query for printer service -->
+    <queries>
+        <package android:name="recieptservice.com.recieptservice" />
+        <intent>
+            <action android:name="recieptservice.com.recieptservice.PrinterInterface" />
+        </intent>
+    </queries>
 
     <!-- Permissions -->
 
