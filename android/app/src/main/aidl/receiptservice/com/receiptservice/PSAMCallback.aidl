@@ -1,4 +1,4 @@
-package recieptservice.com.recieptservice;
+package receiptservice.com.receiptservice;
 
 
 interface PSAMCallback {

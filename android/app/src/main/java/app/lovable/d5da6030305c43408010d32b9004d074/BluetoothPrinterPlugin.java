@@ -10,6 +10,8 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Base64;
 import android.util.Log;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
@@ -18,13 +20,14 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
-import recieptservice.com.recieptservice.PrinterInterface;
+import receiptservice.com.receiptservice.PrinterInterface;
 
 @CapacitorPlugin(name = "BluetoothPrinter")
 public class BluetoothPrinterPlugin extends Plugin {
     private static final String TAG = "BluetoothPrinterPlugin";
     private PrinterInterface printerInterface;
     private boolean isBound = false;
+    private CountDownLatch connectionLatch;
 
     // Service connection for AIDL
     private ServiceConnection serviceConnection = new ServiceConnection() {
@@ -32,6 +35,9 @@ public class BluetoothPrinterPlugin extends Plugin {
         public void onServiceConnected(ComponentName name, IBinder service) {
             printerInterface = PrinterInterface.Stub.asInterface(service);
             isBound = true;
+            if (connectionLatch != null) {
+                connectionLatch.countDown();
+            }
             Log.d(TAG, "Printer service connected");
         }
 
@@ -39,6 +45,9 @@ public class BluetoothPrinterPlugin extends Plugin {
         public void onServiceDisconnected(ComponentName name) {
             printerInterface = null;
             isBound = false;
+            if (connectionLatch != null) {
+                connectionLatch.countDown();
+            }
             Log.d(TAG, "Printer service disconnected");
         }
     };
@@ -52,11 +61,12 @@ public class BluetoothPrinterPlugin extends Plugin {
     private void bindPrinterService() {
         try {
             Context context = getContext();
+            connectionLatch = new CountDownLatch(1);
 
             // Try explicit start first (may no-op if already running)
             Intent startIntent = new Intent();
-            startIntent.setPackage("recieptservice.com.recieptservice");
-            startIntent.setAction("recieptservice.com.recieptservice.PrinterInterface");
+            startIntent.setPackage("receiptservice.com.receiptservice");
+            startIntent.setAction("receiptservice.com.receiptservice.PrinterInterface");
             try {
                 context.startService(startIntent);
                 Log.d(TAG, "Attempted to start printer service");
@@ -66,8 +76,8 @@ public class BluetoothPrinterPlugin extends Plugin {
 
             // First try implicit bind by action
             Intent bindIntent = new Intent();
-            bindIntent.setPackage("recieptservice.com.recieptservice");
-            bindIntent.setAction("recieptservice.com.recieptservice.PrinterInterface");
+            bindIntent.setPackage("receiptservice.com.receiptservice");
+            bindIntent.setAction("receiptservice.com.receiptservice.PrinterInterface");
 
             android.content.pm.PackageManager pm = context.getPackageManager();
             java.util.List<android.content.pm.ResolveInfo> services = pm.queryIntentServices(bindIntent, 0);
@@ -86,16 +96,16 @@ public class BluetoothPrinterPlugin extends Plugin {
 
             // Fallback: try common explicit service class names
             String[] candidateClasses = new String[] {
-                "recieptservice.com.recieptservice.PrinterService",
-                "recieptservice.com.recieptservice.InnerPrinterService",
-                "recieptservice.com.recieptservice.PrintService",
-                "recieptservice.com.recieptservice.ReceiptService"
+                "receiptservice.com.receiptservice.PrinterService",
+                "receiptservice.com.receiptservice.InnerPrinterService",
+                "receiptservice.com.receiptservice.PrintService",
+                "receiptservice.com.receiptservice.ReceiptService"
             };
 
             for (String cls : candidateClasses) {
                 try {
                     Intent explicit = new Intent();
-                    explicit.setComponent(new ComponentName("recieptservice.com.recieptservice", cls));
+                    explicit.setComponent(new ComponentName("receiptservice.com.receiptservice", cls));
                     boolean ok = context.bindService(explicit, serviceConnection, Context.BIND_AUTO_CREATE);
                     Log.d(TAG, "Attempted explicit bind to " + cls + " => " + ok);
                     if (ok) {
@@ -108,8 +118,27 @@ public class BluetoothPrinterPlugin extends Plugin {
             }
 
             Log.e(TAG, "All attempts to bind to printer service failed");
+            if (connectionLatch != null) {
+                connectionLatch.countDown();
+            }
         } catch (Exception e) {
             Log.e(TAG, "Error binding to printer service", e);
+            if (connectionLatch != null) {
+                connectionLatch.countDown();
+            }
+        }
+    }
+
+    private boolean waitForServiceConnection(long timeoutMs) {
+        try {
+            if (connectionLatch != null) {
+                return connectionLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
+            }
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            Log.e(TAG, "Interrupted while waiting for printer service", e);
+            return false;
         }
     }
 
@@ -119,16 +148,26 @@ public class BluetoothPrinterPlugin extends Plugin {
         if (!isBound || printerInterface == null) {
             Log.d(TAG, "connect() called while not bound. Attempting to bind...");
             bindPrinterService();
+            boolean connected = waitForServiceConnection(2000);
+            if (!connected) {
+                result.put("success", false);
+                result.put("bound", isBound);
+                result.put("interface", printerInterface != null);
+                call.reject("Printer service not available. Check logcat for details.");
+                return;
+            }
         }
         if (isBound && printerInterface != null) {
             try {
                 // Initialize printer with GB18030 charset
+                String version = printerInterface.getServiceVersion();
                 printerInterface.setCode("GB18030");
-                Log.d(TAG, "Printer initialized with GB18030 encoding");
-                
+                Log.d(TAG, "Printer initialized with GB18030 encoding. Service version: " + version);
+
                 result.put("success", true);
                 result.put("name", "H10P Internal Printer");
                 result.put("encoding", "GB18030");
+                result.put("serviceVersion", version);
                 call.resolve(result);
             } catch (RemoteException e) {
                 Log.e(TAG, "Error initializing printer", e);
