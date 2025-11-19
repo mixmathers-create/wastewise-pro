@@ -28,6 +28,7 @@ interface Driver {
   id: string;
   name: string;
   availability?: any;
+  license_expiry_date?: string | null;
 }
 
 interface Helper {
@@ -186,6 +187,13 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
       const end = new Date(block.end_date);
       return block.truck_id === truckId && checkDate >= start && checkDate <= end;
     });
+  };
+
+  const isDriverLicenseExpired = (driver: Driver): boolean => {
+    if (!driver.license_expiry_date) return false;
+    const today = new Date();
+    const expiryDate = new Date(driver.license_expiry_date);
+    return expiryDate < today;
   };
 
   const updateTruckDeployment = (date: string, shift: string, field: "trucks" | "mt", value: string) => {
@@ -413,6 +421,19 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   };
 
   const updateSchedule = async (schedule: Schedule) => {
+    // Validate driver license
+    if (schedule.driver_id) {
+      const selectedDriver = drivers.find(d => d.id === schedule.driver_id);
+      if (selectedDriver && isDriverLicenseExpired(selectedDriver)) {
+        toast({ 
+          title: "Cannot assign driver", 
+          description: "Driver's license has expired. Please update the license before assigning.", 
+          variant: "destructive" 
+        });
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const { error } = await supabase.from("schedules").update({
@@ -982,15 +1003,36 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
               <Label className="text-xs">Driver</Label>
               <Select 
                 value={editingSchedule?.driver_id || undefined}
-                onValueChange={(val) => setEditingSchedule({ ...editingSchedule!, driver_id: val })}
+                onValueChange={(val) => {
+                  const selectedDriver = drivers.find(d => d.id === val);
+                  if (selectedDriver && isDriverLicenseExpired(selectedDriver)) {
+                    toast({ 
+                      title: "Cannot assign driver", 
+                      description: `${selectedDriver.name}'s license has expired. Please update the license before assigning.`, 
+                      variant: "destructive" 
+                    });
+                    return;
+                  }
+                  setEditingSchedule({ ...editingSchedule!, driver_id: val });
+                }}
               >
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {drivers.map(d => (
-                    <SelectItem key={d.id} value={d.id} className="text-xs">{d.name}</SelectItem>
-                  ))}
+                  {drivers.map(d => {
+                    const isExpired = isDriverLicenseExpired(d);
+                    return (
+                      <SelectItem 
+                        key={d.id} 
+                        value={d.id} 
+                        className="text-xs"
+                        disabled={isExpired}
+                      >
+                        {d.name} {isExpired && <span className="text-destructive ml-1">(License Expired)</span>}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
