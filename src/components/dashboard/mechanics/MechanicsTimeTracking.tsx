@@ -249,34 +249,30 @@ export function MechanicsTimeTracking() {
           </Button>
         </div>
 
-        <Dialog open={showCamera} onOpenChange={setShowCamera}>
+        <Dialog open={showCamera || !!capturedPhoto} onOpenChange={handleCancel}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Capture Photo</DialogTitle>
+              <DialogTitle>Time In - Capture Photo</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              {!capturedPhoto ? (
-                <>
+              {showCamera && !capturedPhoto && (
+                <div className="relative">
                   <video ref={videoRef} autoPlay className="w-full rounded-lg" />
                   <canvas ref={canvasRef} className="hidden" />
-                  <div className="flex gap-2 justify-end">
+                  <div className="flex justify-center gap-2 mt-4">
+                    <Button onClick={capturePhoto}>Capture Photo</Button>
                     <Button variant="outline" onClick={handleCancel}>Cancel</Button>
-                    <Button onClick={capturePhoto}>
-                      <Camera className="h-4 w-4 mr-2" /> Capture
-                    </Button>
                   </div>
-                </>
-              ) : (
-                <>
+                </div>
+              )}
+              {capturedPhoto && (
+                <div>
                   <img src={capturedPhoto} alt="Captured" className="w-full rounded-lg" />
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="outline" onClick={() => {
-                      setCapturedPhoto(null);
-                      startCamera();
-                    }}>Retake</Button>
+                  <div className="flex justify-center gap-2 mt-4">
                     <Button onClick={handleTimeIn}>Confirm Time In</Button>
+                    <Button variant="outline" onClick={() => setCapturedPhoto(null)}>Retake</Button>
                   </div>
-                </>
+                </div>
               )}
             </div>
           </DialogContent>
@@ -288,6 +284,8 @@ export function MechanicsTimeTracking() {
               <TableHead>Mechanic</TableHead>
               <TableHead>Time In</TableHead>
               <TableHead>Time Out</TableHead>
+              <TableHead>Total Time</TableHead>
+              <TableHead>Photo</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
@@ -295,17 +293,31 @@ export function MechanicsTimeTracking() {
           <TableBody>
             {timeLogs.map((log) => (
               <TableRow key={log.id}>
-                <TableCell>{log.mechanics?.name}</TableCell>
-                <TableCell>{new Date(log.time_in).toLocaleString()}</TableCell>
+                <TableCell className="font-medium">{log.mechanics?.name}</TableCell>
+                <TableCell>{format(new Date(log.time_in), 'MMM dd, yyyy HH:mm')}</TableCell>
                 <TableCell>
-                  {log.time_out ? new Date(log.time_out).toLocaleString() : "—"}
+                  {log.time_out ? format(new Date(log.time_out), 'MMM dd, yyyy HH:mm') : '-'}
+                </TableCell>
+                <TableCell className="font-mono">
+                  {calculateTotalTime(log.time_in, log.time_out)}
                 </TableCell>
                 <TableCell>
-                  {log.latitude && log.longitude ? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}` : "N/A"}
+                  {log.photo_url && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setShowPhotoPreview(log.photo_url)}
+                    >
+                      <Camera className="h-4 w-4" />
+                    </Button>
+                  )}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {log.latitude && log.longitude ? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}` : '-'}
                 </TableCell>
                 <TableCell>
                   {!log.time_out && (
-                    <Button size="sm" variant="outline" onClick={() => handleTimeOut(log.id)}>
+                    <Button variant="outline" size="sm" onClick={() => handleTimeOut(log.id)}>
                       <Clock className="h-4 w-4 mr-2" /> Time Out
                     </Button>
                   )}
@@ -315,6 +327,22 @@ export function MechanicsTimeTracking() {
           </TableBody>
         </Table>
       </CardContent>
+
+      <Dialog open={!!showPhotoPreview} onOpenChange={() => setShowPhotoPreview(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle>Time In Photo</DialogTitle>
+              <Button variant="ghost" size="sm" onClick={() => setShowPhotoPreview(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </DialogHeader>
+          {showPhotoPreview && (
+            <img src={showPhotoPreview} alt="Time In" className="w-full rounded-lg" />
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
