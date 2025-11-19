@@ -111,7 +111,29 @@ export type Database = {
           truck_id?: string
           waste_types?: string[]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "collection_receipts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collection_receipts_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collection_receipts_truck_id_fkey"
+            columns: ["truck_id"]
+            isOneToOne: false
+            referencedRelation: "trucks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       drivers: {
         Row: {

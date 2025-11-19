@@ -13,12 +13,20 @@ const AddTruckDialog = ({ profile, onAdded }: { profile: any; onAdded: () => voi
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [code, setCode] = useState("");
-  const [type, setType] = useState("GC");
+  const [type, setType] = useState("Garbage Compactor");
   const [plateNumber, setPlateNumber] = useState("");
   const [capacity, setCapacity] = useState(4);
 
   useEffect(() => {
-    setCapacity(type === "GC" ? 4 : 2);
+    // Set default capacity based on truck type
+    const capacityMap: { [key: string]: number } = {
+      "Garbage Compactor": 4,
+      "Dumptruck": 2,
+      "Wingvan": 2,
+      "Closed Van": 2,
+      "Mini Dump Truck": 1.5
+    };
+    setCapacity(capacityMap[type] || 2);
   }, [type]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,7 +46,7 @@ const AddTruckDialog = ({ profile, onAdded }: { profile: any; onAdded: () => voi
       toast({ title: "Truck added successfully" });
       setOpen(false);
       setCode("");
-      setType("GC");
+      setType("Garbage Compactor");
       setPlateNumber("");
       setCapacity(4);
       onAdded();
@@ -73,9 +81,12 @@ const AddTruckDialog = ({ profile, onAdded }: { profile: any; onAdded: () => voi
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-background">
-                <SelectItem value="GC">GC - Garbage Collector (4 MT)</SelectItem>
-                <SelectItem value="DT">DT - Dump Truck (2 MT)</SelectItem>
+              <SelectContent className="bg-background z-50">
+                <SelectItem value="Garbage Compactor">Garbage Compactor</SelectItem>
+                <SelectItem value="Dumptruck">Dumptruck</SelectItem>
+                <SelectItem value="Wingvan">Wingvan</SelectItem>
+                <SelectItem value="Closed Van">Closed Van</SelectItem>
+                <SelectItem value="Mini Dump Truck">Mini Dump Truck</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -91,7 +102,7 @@ const AddTruckDialog = ({ profile, onAdded }: { profile: any; onAdded: () => voi
               required 
             />
             <p className="text-xs text-muted-foreground mt-1">
-              GC trucks typically carry 4 MT, DT trucks carry 2 MT
+              Capacity will auto-adjust based on truck type
             </p>
           </div>
           <Button type="submit" disabled={loading} className="w-full">
