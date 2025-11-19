@@ -90,6 +90,25 @@ const TrucksTab = ({ profile }: { profile: any }) => {
     if (selectedTrucks.size === 0) return;
 
     try {
+      // Check if any selected trucks are referenced in collection receipts
+      const { data: receipts, error: checkError } = await supabase
+        .from("collection_receipts")
+        .select("truck_id")
+        .in("truck_id", Array.from(selectedTrucks));
+
+      if (checkError) throw checkError;
+
+      if (receipts && receipts.length > 0) {
+        const referencedTruckIds = new Set(receipts.map(r => r.truck_id));
+        const referencedCount = referencedTruckIds.size;
+        toast({ 
+          title: "Cannot Delete", 
+          description: `${referencedCount} of the selected trucks have existing collection receipts and cannot be deleted.`,
+          variant: "destructive" 
+        });
+        return;
+      }
+
       const { error } = await supabase
         .from("trucks")
         .delete()
