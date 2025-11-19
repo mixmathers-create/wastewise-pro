@@ -222,6 +222,149 @@ export type Database = {
         }
         Relationships: []
       }
+      job_orders: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          job_number: string
+          mechanic_id: string | null
+          priority: string | null
+          scheduled_date: string | null
+          status: string | null
+          title: string
+          truck_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          job_number: string
+          mechanic_id?: string | null
+          priority?: string | null
+          scheduled_date?: string | null
+          status?: string | null
+          title: string
+          truck_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          job_number?: string
+          mechanic_id?: string | null
+          priority?: string | null
+          scheduled_date?: string | null
+          status?: string | null
+          title?: string
+          truck_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_orders_mechanic_id_fkey"
+            columns: ["mechanic_id"]
+            isOneToOne: false
+            referencedRelation: "mechanics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_orders_truck_id_fkey"
+            columns: ["truck_id"]
+            isOneToOne: false
+            referencedRelation: "trucks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mechanic_time_logs: {
+        Row: {
+          created_at: string
+          id: string
+          latitude: number | null
+          longitude: number | null
+          mechanic_id: string
+          photo_url: string | null
+          time_in: string
+          time_out: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          mechanic_id: string
+          photo_url?: string | null
+          time_in?: string
+          time_out?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          mechanic_id?: string
+          photo_url?: string | null
+          time_in?: string
+          time_out?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mechanic_time_logs_mechanic_id_fkey"
+            columns: ["mechanic_id"]
+            isOneToOne: false
+            referencedRelation: "mechanics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mechanics: {
+        Row: {
+          availability: Json | null
+          birthdate: string | null
+          contact_number: string | null
+          created_at: string
+          id: string
+          id_number: string | null
+          name: string
+          status: string | null
+          suspension_end_date: string | null
+          suspension_start_date: string | null
+        }
+        Insert: {
+          availability?: Json | null
+          birthdate?: string | null
+          contact_number?: string | null
+          created_at?: string
+          id?: string
+          id_number?: string | null
+          name: string
+          status?: string | null
+          suspension_end_date?: string | null
+          suspension_start_date?: string | null
+        }
+        Update: {
+          availability?: Json | null
+          birthdate?: string | null
+          contact_number?: string | null
+          created_at?: string
+          id?: string
+          id_number?: string | null
+          name?: string
+          status?: string | null
+          suspension_end_date?: string | null
+          suspension_start_date?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -320,6 +463,84 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      tool_checkouts: {
+        Row: {
+          checked_in_at: string | null
+          checked_out_at: string
+          created_at: string
+          id: string
+          mechanic_id: string
+          notes: string | null
+          status: string | null
+          tool_id: string
+        }
+        Insert: {
+          checked_in_at?: string | null
+          checked_out_at?: string
+          created_at?: string
+          id?: string
+          mechanic_id: string
+          notes?: string | null
+          status?: string | null
+          tool_id: string
+        }
+        Update: {
+          checked_in_at?: string | null
+          checked_out_at?: string
+          created_at?: string
+          id?: string
+          mechanic_id?: string
+          notes?: string | null
+          status?: string | null
+          tool_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tool_checkouts_mechanic_id_fkey"
+            columns: ["mechanic_id"]
+            isOneToOne: false
+            referencedRelation: "mechanics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tool_checkouts_tool_id_fkey"
+            columns: ["tool_id"]
+            isOneToOne: false
+            referencedRelation: "tools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tools: {
+        Row: {
+          category: string | null
+          code: string
+          condition: string | null
+          created_at: string
+          id: string
+          name: string
+          status: string | null
+        }
+        Insert: {
+          category?: string | null
+          code: string
+          condition?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          status?: string | null
+        }
+        Update: {
+          category?: string | null
+          code?: string
+          condition?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          status?: string | null
+        }
+        Relationships: []
       }
       truck_maintenance_blocks: {
         Row: {

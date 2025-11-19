@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Recycle, LogOut, QrCode, Users, Truck, UserCog, BarChart3, Settings, Calendar } from "lucide-react";
+import { Recycle, LogOut, QrCode, Users, Truck, UserCog, BarChart3, Settings, Calendar, Wrench } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import CollectionsTab from "@/components/dashboard/CollectionsTab";
 import ClientsTab from "@/components/dashboard/ClientsTab";
@@ -14,6 +14,7 @@ import SettingsTab from "@/components/dashboard/SettingsTab";
 import SchedulingTab from "@/components/dashboard/SchedulingTab";
 import EnhancedAnalyticsTab from "@/components/dashboard/EnhancedAnalyticsTab";
 import EnhancedSettingsTab from "@/components/dashboard/EnhancedSettingsTab";
+import { MechanicsTab } from "@/components/dashboard/MechanicsTab";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -106,7 +107,7 @@ const Dashboard = () => {
 
       <main className="container mx-auto p-4">
         <Tabs defaultValue="collections" className="space-y-4">
-          <TabsList className={`grid w-full ${window.innerWidth >= 1024 ? 'grid-cols-7' : 'grid-cols-6'}`}>
+          <TabsList className={`grid w-full ${window.innerWidth >= 1024 ? 'grid-cols-8' : 'grid-cols-7'}`}>
             <TabsTrigger value="collections">
               <QrCode className="mr-2 h-4 w-4" />
               Collections
@@ -122,6 +123,10 @@ const Dashboard = () => {
             <TabsTrigger value="drivers">
               <UserCog className="mr-2 h-4 w-4" />
               Drivers & Helpers
+            </TabsTrigger>
+            <TabsTrigger value="mechanics">
+              <Wrench className="mr-2 h-4 w-4" />
+              Mechanics
             </TabsTrigger>
             {window.innerWidth >= 1024 && (
               <TabsTrigger value="scheduling">
@@ -161,6 +166,10 @@ const Dashboard = () => {
 
           <TabsContent value="analytics">
             <EnhancedAnalyticsTab profile={profile} />
+          </TabsContent>
+
+          <TabsContent value="mechanics">
+            <MechanicsTab />
           </TabsContent>
 
           <TabsContent value="settings">
