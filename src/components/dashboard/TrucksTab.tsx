@@ -19,18 +19,36 @@ const TrucksTab = ({ profile }: { profile: any }) => {
   const [selectedTrucks, setSelectedTrucks] = useState<Set<string>>(new Set());
   const [editingTruck, setEditingTruck] = useState<any>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [maintenanceBlocks, setMaintenanceBlocks] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = profile?.role === "admin";
 
   const fetchTrucks = async () => {
     setLoading(true);
+    
+    // Fetch trucks
     const { data, error } = await supabase
       .from("trucks")
       .select("id,code,type,plate_number,capacity,status")
       .order("code");
     if (error) setError(error.message);
+    
+    // Fetch maintenance blocks for today
+    const today = new Date().toISOString().split('T')[0];
+    const { data: blocks } = await supabase
+      .from("truck_maintenance_blocks")
+      .select("truck_id, start_date, end_date")
+      .lte("start_date", today)
+      .gte("end_date", today);
+    
+    setMaintenanceBlocks(blocks || []);
     setTrucks(data || []);
     setLoading(false);
+  };
+
+  const getTruckStatus = (truck: any) => {
+    const isInMaintenance = maintenanceBlocks.some(block => block.truck_id === truck.id);
+    return isInMaintenance ? "For Maintenance" : truck.status;
   };
 
   useEffect(() => {
@@ -190,7 +208,22 @@ const TrucksTab = ({ profile }: { profile: any }) => {
                   <TableCell>{t.plate_number || "N/A"}</TableCell>
                   <TableCell>{t.type}</TableCell>
                   <TableCell>{t.capacity || 0} MT</TableCell>
-                  <TableCell><span className={`inline-flex px-2 py-1 text-xs rounded-full ${t.status === 'available' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{t.status}</span></TableCell>
+                  <TableCell>
+                    {(() => {
+                      const status = getTruckStatus(t);
+                      const isAvailable = status === 'available';
+                      const isInMaintenance = status === 'For Maintenance';
+                      return (
+                        <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
+                          isAvailable ? 'bg-green-100 text-green-800' : 
+                          isInMaintenance ? 'bg-yellow-100 text-yellow-800' : 
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {status}
+                        </span>
+                      );
+                    })()}
+                  </TableCell>
                   {isAdmin && (
                     <TableCell>
                       <Button

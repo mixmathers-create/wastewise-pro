@@ -49,6 +49,10 @@ const TRUCK_COLORS = [
   "#6366f1", // indigo
 ];
 
+// Unique colors for warehouse and landfill (not in TRUCK_COLORS)
+const WAREHOUSE_COLOR = "#92400e"; // brown
+const LANDFILL_COLOR = "#1f2937"; // dark gray
+
 // Helper function to calculate distance between two points (Haversine formula)
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   const R = 6371; // Earth's radius in km
@@ -148,13 +152,13 @@ export const RouteMapView = ({
         
         // Add warehouse marker after map is loaded
         if (map.current) {
-          new maplibregl.Marker({ color: "#059669" })
+          new maplibregl.Marker({ color: WAREHOUSE_COLOR })
             .setLngLat([WAREHOUSE_LON, WAREHOUSE_LAT])
             .setPopup(new maplibregl.Popup().setHTML("<strong>Warehouse/Dispatch</strong>"))
             .addTo(map.current);
           
           // Add landfill marker
-          new maplibregl.Marker({ color: "#ef4444" })
+          new maplibregl.Marker({ color: LANDFILL_COLOR })
             .setLngLat([landfillLon, landfillLat])
             .setPopup(new maplibregl.Popup().setHTML("<strong>Landfill</strong>"))
             .addTo(map.current);
@@ -315,11 +319,11 @@ export const RouteMapView = ({
         ))}
         <div className="border-t pt-2 mt-2">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#059669" }} />
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: WAREHOUSE_COLOR }} />
             <span className="text-sm">Warehouse</span>
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <div className="w-3 h-3 rounded-full bg-destructive" />
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: LANDFILL_COLOR }} />
             <span className="text-sm">Landfill</span>
           </div>
         </div>
