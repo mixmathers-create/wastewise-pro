@@ -20,6 +20,11 @@ interface Client {
   mt_requirement: number;
 }
 
+interface ClientMtAssignment {
+  clientId: string;
+  mt: number;
+}
+
 interface TruckType {
   id: string;
   code: string;
@@ -50,7 +55,7 @@ export const SpecialDispatchDialog = ({
 }: SpecialDispatchDialogProps) => {
   const { toast } = useToast();
   const [mtRequirement, setMtRequirement] = useState("");
-  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
+  const [clientMtAssignments, setClientMtAssignments] = useState<ClientMtAssignment[]>([]);
   const [collectionDate, setCollectionDate] = useState<Date>();
   const [shift, setShift] = useState<"AM" | "PM">("AM");
   const [truckAssignmentMode, setTruckAssignmentMode] = useState<"auto" | "manual">("auto");
@@ -107,6 +112,88 @@ export const SpecialDispatchDialog = ({
     return assignedTrucks;
   };
 
+  const isDriverAvailable = (driver: any, date: string) => {
+    if (driver.status !== "available") return false;
+    
+    const scheduledDate = new Date(date);
+    const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][scheduledDate.getDay()];
+    
+    if (driver.availability?.days && !driver.availability.days.includes(dayOfWeek)) {
+      return false;
+    }
+    
+    if (driver.availability?.shifts && !driver.availability.shifts.includes(shift)) {
+      return false;
+    }
+    
+    if (driver.license_expiry_date) {
+      const expiryDate = new Date(driver.license_expiry_date);
+      if (expiryDate < scheduledDate) return false;
+    }
+    
+    if (driver.suspension_start_date && driver.suspension_end_date) {
+      const suspensionStart = new Date(driver.suspension_start_date);
+      const suspensionEnd = new Date(driver.suspension_end_date);
+      if (scheduledDate >= suspensionStart && scheduledDate <= suspensionEnd) {
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  const isHelperAvailable = (helper: any, date: string) => {
+    if (helper.status !== "available") return false;
+    
+    const scheduledDate = new Date(date);
+    const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][scheduledDate.getDay()];
+    
+    if (helper.availability?.days && !helper.availability.days.includes(dayOfWeek)) {
+      return false;
+    }
+    
+    if (helper.availability?.shifts && !helper.availability.shifts.includes(shift)) {
+      return false;
+    }
+    
+    if (helper.suspension_start_date && helper.suspension_end_date) {
+      const suspensionStart = new Date(helper.suspension_start_date);
+      const suspensionEnd = new Date(helper.suspension_end_date);
+      if (scheduledDate >= suspensionStart && scheduledDate <= suspensionEnd) {
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  const autoAssignPersonnel = (dateStr: string, numTrucks: number) => {
+    const availableDrivers = drivers.filter(d => isDriverAvailable(d, dateStr));
+    const availableHelpers = helpers.filter(h => isHelperAvailable(h, dateStr));
+    
+    const assignments: Array<{ driverId: string | null; helperIds: string[] }> = [];
+    
+    for (let i = 0; i < numTrucks; i++) {
+      const driverId = availableDrivers[i]?.id || null;
+      const helperIds: string[] = [];
+      
+      // Assign 2 helpers per truck if available
+      const helperIndex1 = i * 2;
+      const helperIndex2 = i * 2 + 1;
+      
+      if (availableHelpers[helperIndex1]) {
+        helperIds.push(availableHelpers[helperIndex1].id);
+      }
+      if (availableHelpers[helperIndex2]) {
+        helperIds.push(availableHelpers[helperIndex2].id);
+      }
+      
+      assignments.push({ driverId, helperIds });
+    }
+    
+    return assignments;
+  };
+
   const handleGenerate = async () => {
     if (!collectionDate) {
       toast({ title: "Error", description: "Please select a collection date", variant: "destructive" });
@@ -119,8 +206,15 @@ export const SpecialDispatchDialog = ({
       return;
     }
 
-    if (selectedClientIds.length === 0) {
+    if (clientMtAssignments.length === 0) {
       toast({ title: "Error", description: "Please select at least one client", variant: "destructive" });
+      return;
+    }
+
+    // Validate that all selected clients have MT assigned
+    const totalClientMt = clientMtAssignments.reduce((sum, ca) => sum + ca.mt, 0);
+    if (totalClientMt === 0) {
+      toast({ title: "Error", description: "Please assign MT requirements to selected clients", variant: "destructive" });
       return;
     }
 
@@ -135,14 +229,17 @@ export const SpecialDispatchDialog = ({
     try {
       const dateStr = format(collectionDate, "yyyy-MM-dd");
       
+      // Auto-assign personnel
+      const personnelAssignments = autoAssignPersonnel(dateStr, trucksToAssign.length);
+      
       // Create schedule entries for each truck
-      const schedules = trucksToAssign.map((truckId) => ({
+      const schedules = trucksToAssign.map((truckId, index) => ({
         date: dateStr,
         shift,
         truck_id: truckId,
-        driver_id: null,
-        helper_ids: [],
-        client_ids: selectedClientIds,
+        driver_id: personnelAssignments[index]?.driverId || null,
+        helper_ids: personnelAssignments[index]?.helperIds || [],
+        client_ids: clientMtAssignments.map(ca => ca.clientId),
         mt_requirement: mt / trucksToAssign.length, // Distribute MT evenly
         status: "draft",
         is_backup: false
@@ -152,14 +249,17 @@ export const SpecialDispatchDialog = ({
       
       if (error) throw error;
 
+      const assignedDrivers = personnelAssignments.filter(p => p.driverId).length;
+      const assignedHelpers = personnelAssignments.reduce((sum, p) => sum + p.helperIds.length, 0);
+      
       toast({ 
         title: "Success", 
-        description: `Special dispatch created with ${trucksToAssign.length} truck${trucksToAssign.length > 1 ? 's' : ''}` 
+        description: `Special dispatch created with ${trucksToAssign.length} truck${trucksToAssign.length > 1 ? 's' : ''}, ${assignedDrivers} driver${assignedDrivers !== 1 ? 's' : ''}, and ${assignedHelpers} helper${assignedHelpers !== 1 ? 's' : ''}` 
       });
       
       // Reset form
       setMtRequirement("");
-      setSelectedClientIds([]);
+      setClientMtAssignments([]);
       setCollectionDate(undefined);
       setShift("AM");
       setTruckAssignmentMode("auto");
@@ -175,10 +275,20 @@ export const SpecialDispatchDialog = ({
   };
 
   const toggleClient = (clientId: string) => {
-    setSelectedClientIds(prev =>
-      prev.includes(clientId)
-        ? prev.filter(id => id !== clientId)
-        : [...prev, clientId]
+    setClientMtAssignments(prev => {
+      const exists = prev.find(ca => ca.clientId === clientId);
+      if (exists) {
+        return prev.filter(ca => ca.clientId !== clientId);
+      } else {
+        const client = clients.find(c => c.id === clientId);
+        return [...prev, { clientId, mt: client?.mt_requirement || 0 }];
+      }
+    });
+  };
+
+  const updateClientMt = (clientId: string, mt: number) => {
+    setClientMtAssignments(prev =>
+      prev.map(ca => ca.clientId === clientId ? { ...ca, mt } : ca)
     );
   };
 
@@ -191,9 +301,7 @@ export const SpecialDispatchDialog = ({
   };
 
   const requiredTrucks = calculateRequiredTrucks();
-  const totalSelectedMt = clients
-    .filter(c => selectedClientIds.includes(c.id))
-    .reduce((sum, c) => sum + c.mt_requirement, 0);
+  const totalClientMt = clientMtAssignments.reduce((sum, ca) => sum + ca.mt, 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -260,28 +368,53 @@ export const SpecialDispatchDialog = ({
           {/* Client Selection */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Select Clients *</Label>
+              <Label>Select Clients & Assign MT *</Label>
               <Badge variant="secondary">
-                {selectedClientIds.length} selected • {totalSelectedMt.toFixed(2)} MT
+                {clientMtAssignments.length} selected • {totalClientMt.toFixed(2)} MT
               </Badge>
             </div>
-            <div className="border rounded-lg p-4 max-h-48 overflow-y-auto space-y-2">
-              {clients.map((client) => (
-                <div key={client.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={client.id}
-                    checked={selectedClientIds.includes(client.id)}
-                    onCheckedChange={() => toggleClient(client.id)}
-                  />
-                  <label
-                    htmlFor={client.id}
-                    className="text-sm flex-1 cursor-pointer flex items-center justify-between"
-                  >
-                    <span>{client.name}</span>
-                    <span className="text-muted-foreground">{client.mt_requirement} MT</span>
-                  </label>
-                </div>
-              ))}
+            <div className="border rounded-lg p-4 max-h-64 overflow-y-auto space-y-3">
+              {clients.map((client) => {
+                const assignment = clientMtAssignments.find(ca => ca.clientId === client.id);
+                const isSelected = !!assignment;
+                
+                return (
+                  <div key={client.id} className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id={client.id}
+                        checked={isSelected}
+                        onCheckedChange={() => toggleClient(client.id)}
+                      />
+                      <label
+                        htmlFor={client.id}
+                        className="text-sm flex-1 cursor-pointer"
+                      >
+                        {client.name}
+                      </label>
+                    </div>
+                    {isSelected && (
+                      <div className="ml-6 flex items-center gap-2">
+                        <Label htmlFor={`mt-${client.id}`} className="text-xs whitespace-nowrap">
+                          MT for dispatch:
+                        </Label>
+                        <Input
+                          id={`mt-${client.id}`}
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={assignment.mt}
+                          onChange={(e) => updateClientMt(client.id, parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm"
+                        />
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          (usual: {client.mt_requirement} MT)
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
