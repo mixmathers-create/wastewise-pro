@@ -54,7 +54,7 @@ export class PrinterService {
     }
 
     try {
-      const result = await BluetoothPrinter.connect();
+      const result = await Printer.connect();
       console.log('Printer connection result:', result);
       return result;
     } catch (error) {
@@ -68,13 +68,13 @@ export class PrinterService {
    */
   private async executePrintJob(printCallback: () => Promise<void>): Promise<void> {
     try {
-      await BluetoothPrinter.beginWork();
+      await Printer.beginWork();
       await printCallback();
-      await BluetoothPrinter.endWork();
+      await Printer.endWork();
     } catch (error) {
       // Try to end work on error
       try {
-        await BluetoothPrinter.endWork();
+        await Printer.endWork();
       } catch (e) {
         // Ignore endWork errors
       }
@@ -97,27 +97,27 @@ export class PrinterService {
 
     await this.executePrintJob(async () => {
       // Print header (centered, bold)
-      await BluetoothPrinter.setTextBold({ bold: true });
-      await BluetoothPrinter.setTextSize({ size: 28 });
-      await BluetoothPrinter.printText({ text: receiptData.header + '\n', align: 1 });
-      await BluetoothPrinter.setTextBold({ bold: false });
-      await BluetoothPrinter.setTextSize({ size: 24 });
-      await BluetoothPrinter.printText({ text: '--------------------------------\n', align: 1 });
-      await BluetoothPrinter.feedLine({ lines: 1 });
+      await Printer.setTextBold({ bold: true });
+      await Printer.setTextSize({ size: 28 });
+      await Printer.printText({ text: receiptData.header + '\n', align: 1 });
+      await Printer.setTextBold({ bold: false });
+      await Printer.setTextSize({ size: 24 });
+      await Printer.printText({ text: '--------------------------------\n', align: 1 });
+      await Printer.feedLine({ lines: 1 });
 
       // Print items
       for (const item of receiptData.items) {
         const line = `${item.label.padEnd(20)}${item.value.padStart(12)}\n`;
-        await BluetoothPrinter.printText({ text: line, align: 0 });
+        await Printer.printText({ text: line, align: 0 });
       }
 
-      await BluetoothPrinter.feedLine({ lines: 1 });
-      await BluetoothPrinter.printText({ text: '--------------------------------\n', align: 1 });
+      await Printer.feedLine({ lines: 1 });
+      await Printer.printText({ text: '--------------------------------\n', align: 1 });
 
       // Print QR code if provided
       if (receiptData.qrCode) {
-        await BluetoothPrinter.feedLine({ lines: 1 });
-        await BluetoothPrinter.printQRCode({
+        await Printer.feedLine({ lines: 1 });
+        await Printer.printQRCode({
           data: receiptData.qrCode,
           moduleSize: 8,
           errorLevel: 3,
@@ -127,12 +127,12 @@ export class PrinterService {
 
       // Print footer
       if (receiptData.footer) {
-        await BluetoothPrinter.feedLine({ lines: 1 });
-        await BluetoothPrinter.printText({ text: receiptData.footer + '\n', align: 1 });
+        await Printer.feedLine({ lines: 1 });
+        await Printer.printText({ text: receiptData.footer + '\n', align: 1 });
       }
 
-      await BluetoothPrinter.feedLine({ lines: 3 });
-      await BluetoothPrinter.cutPaper();
+      await Printer.feedLine({ lines: 3 });
+      await Printer.cutPaper();
     });
   }
 
@@ -153,9 +153,9 @@ export class PrinterService {
     const base64 = canvas.toDataURL('image/png').split(',')[1];
 
     await this.executePrintJob(async () => {
-      await BluetoothPrinter.printImage({ base64Image: base64, align });
-      await BluetoothPrinter.feedLine({ lines: 3 });
-      await BluetoothPrinter.cutPaper();
+      await Printer.printImage({ base64Image: base64, align });
+      await Printer.feedLine({ lines: 3 });
+      await Printer.cutPaper();
     });
   }
 
@@ -168,23 +168,23 @@ export class PrinterService {
     }
 
     await this.executePrintJob(async () => {
-      await BluetoothPrinter.setTextBold({ bold: true });
-      await BluetoothPrinter.setTextSize({ size: 32 });
-      await BluetoothPrinter.printText({ text: 'TEST PRINT\n', align: 1 });
+      await Printer.setTextBold({ bold: true });
+      await Printer.setTextSize({ size: 32 });
+      await Printer.printText({ text: 'TEST PRINT\n', align: 1 });
       
-      await BluetoothPrinter.setTextBold({ bold: false });
-      await BluetoothPrinter.setTextSize({ size: 24 });
-      await BluetoothPrinter.printText({ text: '--------------------------------\n', align: 1 });
-      await BluetoothPrinter.feedLine({ lines: 1 });
+      await Printer.setTextBold({ bold: false });
+      await Printer.setTextSize({ size: 24 });
+      await Printer.printText({ text: '--------------------------------\n', align: 1 });
+      await Printer.feedLine({ lines: 1 });
       
-      await BluetoothPrinter.printText({ text: 'H10P Internal Printer\n', align: 1 });
-      await BluetoothPrinter.printText({ text: 'GB18030 Encoding\n', align: 1 });
-      await BluetoothPrinter.printText({ text: 'Connection: OK\n', align: 1 });
-      await BluetoothPrinter.feedLine({ lines: 1 });
+      await Printer.printText({ text: 'H10P Internal Printer\n', align: 1 });
+      await Printer.printText({ text: 'GB18030 Encoding\n', align: 1 });
+      await Printer.printText({ text: 'Connection: OK\n', align: 1 });
+      await Printer.feedLine({ lines: 1 });
       
-      await BluetoothPrinter.printText({ text: new Date().toLocaleString() + '\n', align: 1 });
-      await BluetoothPrinter.feedLine({ lines: 3 });
-      await BluetoothPrinter.cutPaper();
+      await Printer.printText({ text: new Date().toLocaleString() + '\n', align: 1 });
+      await Printer.feedLine({ lines: 3 });
+      await Printer.cutPaper();
     });
   }
 
@@ -203,14 +203,14 @@ export class PrinterService {
     }
 
     await this.executePrintJob(async () => {
-      await BluetoothPrinter.printBarcode({
+      await Printer.printBarcode({
         data: options.data,
         symbology: options.symbology ?? 8,
         height: options.height ?? 162,
         width: options.width ?? 2,
         align: options.align ?? 1,
       });
-      await BluetoothPrinter.feedLine({ lines: 2 });
+      await Printer.feedLine({ lines: 2 });
     });
   }
 
@@ -223,12 +223,12 @@ export class PrinterService {
     }
 
     await this.executePrintJob(async () => {
-      await BluetoothPrinter.printTableText({
+      await Printer.printTableText({
         text: options.text,
         weight: options.weight,
         alignment: options.alignment,
       });
-      await BluetoothPrinter.feedLine({ lines: 1 });
+      await Printer.feedLine({ lines: 1 });
     });
   }
 
@@ -241,8 +241,8 @@ export class PrinterService {
     }
 
     await this.executePrintJob(async () => {
-      await BluetoothPrinter.printEpson({ data: base64Data });
-      await BluetoothPrinter.feedLine({ lines: 1 });
+      await Printer.printEpson({ data: base64Data });
+      await Printer.feedLine({ lines: 1 });
     });
   }
 }
