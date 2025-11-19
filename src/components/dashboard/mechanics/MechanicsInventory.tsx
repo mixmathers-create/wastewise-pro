@@ -153,9 +153,10 @@ export function MechanicsInventory() {
                   <span className={`px-2 py-1 rounded text-xs ${
                     mechanic.status === "available" ? "bg-green-100 text-green-800" :
                     mechanic.status === "suspended" ? "bg-red-100 text-red-800" :
+                    mechanic.status === "on_duty" ? "bg-blue-100 text-blue-800" :
                     "bg-yellow-100 text-yellow-800"
                   }`}>
-                    {mechanic.status}
+                    {mechanic.status.replace('_', ' ')}
                   </span>
                 </TableCell>
                 <TableCell>
