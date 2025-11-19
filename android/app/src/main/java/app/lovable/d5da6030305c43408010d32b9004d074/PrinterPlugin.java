@@ -25,9 +25,9 @@ import org.json.JSONException;
 
 import recieptservice.com.recieptservice.PrinterInterface;
 
-@CapacitorPlugin(name = "BluetoothPrinter")
-public class BluetoothPrinterPlugin extends Plugin {
-    private static final String TAG = "BluetoothPrinterPlugin";
+@CapacitorPlugin(name = "Printer")
+public class PrinterPlugin extends Plugin {
+    private static final String TAG = "PrinterPlugin";
     private static final long CONNECTION_TIMEOUT_MS = 8000;
     private static final String[][] SERVICE_CANDIDATES = new String[][] {
         {"recieptservice.com.recieptservice", "recieptservice.com.recieptservice.service.PrinterService"}
