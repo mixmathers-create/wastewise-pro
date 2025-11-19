@@ -9,14 +9,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Capacitor } from '@capacitor/core';
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
 
 const CollectionsTab = ({ profile }: { profile: any }) => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [receipts, setReceipts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedReceipts, setSelectedReceipts] = useState<Set<string>>(new Set());
   const isMobile = Capacitor.isNativePlatform();
+  const isAdmin = profile?.role === "admin";
 
   const fetchReceipts = async () => {
     setLoading(true);
@@ -43,6 +48,45 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
     navigate(`/receipt-preview?id=${receiptId}`);
   };
 
+  const toggleSelectReceipt = (receiptId: string) => {
+    setSelectedReceipts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(receiptId)) {
+        newSet.delete(receiptId);
+      } else {
+        newSet.add(receiptId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedReceipts.size === receipts.length) {
+      setSelectedReceipts(new Set());
+    } else {
+      setSelectedReceipts(new Set(receipts.map(r => r.id)));
+    }
+  };
+
+  const handleMassDelete = async () => {
+    if (selectedReceipts.size === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from("collection_receipts")
+        .delete()
+        .in("id", Array.from(selectedReceipts));
+
+      if (error) throw error;
+
+      toast({ title: "Success", description: `Deleted ${selectedReceipts.size} receipts` });
+      setSelectedReceipts(new Set());
+      fetchReceipts();
+    } catch (err: any) {
+      toast({ title: "Delete Error", description: err.message, variant: "destructive" });
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -51,20 +95,31 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
             <CardTitle>QR Collections</CardTitle>
             <CardDescription>Create and view collection receipts</CardDescription>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size={isMobile ? "default" : "lg"}>
-                <Plus className="mr-2 h-4 w-4" />
-                Create Receipt
+          <div className="flex gap-2 items-center">
+            {!isMobile && isAdmin && selectedReceipts.size > 0 && (
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                onClick={handleMassDelete}
+              >
+                Delete ({selectedReceipts.size})
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>New Collection Receipt</DialogTitle>
-              </DialogHeader>
-              <CreateReceiptForm profile={profile} onSuccess={handleSuccess} />
-            </DialogContent>
-          </Dialog>
+            )}
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size={isMobile ? "default" : "lg"}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Receipt
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>New Collection Receipt</DialogTitle>
+                </DialogHeader>
+                <CreateReceiptForm profile={profile} onSuccess={handleSuccess} />
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </CardHeader>
       <CardContent className={isMobile ? "p-2" : ""}>
@@ -117,6 +172,14 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
           <Table>
             <TableHeader>
               <TableRow>
+                {isAdmin && (
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedReceipts.size === receipts.length && receipts.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </TableHead>
+                )}
                 <TableHead>Date</TableHead>
                 <TableHead>QR Code</TableHead>
                 <TableHead>Signed By</TableHead>
@@ -126,6 +189,14 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
             <TableBody>
               {receipts.map((r) => (
                 <TableRow key={r.id}>
+                  {isAdmin && (
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedReceipts.has(r.id)}
+                        onCheckedChange={() => toggleSelectReceipt(r.id)}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell>{new Date(r.created_at).toLocaleString()}</TableCell>
                   <TableCell className="font-medium">{r.qr_code}</TableCell>
                   <TableCell>{r.signed_by || '-'}</TableCell>
