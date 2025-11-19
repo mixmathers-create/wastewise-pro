@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Download, Upload } from "lucide-react";
 import { generateCSV, downloadCSV, parseCSV } from "@/lib/csvUtils";
 import { useToast } from "@/hooks/use-toast";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const TrucksTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
   const [trucks, setTrucks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTrucks, setSelectedTrucks] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = profile?.role === "admin";
 
@@ -64,6 +66,45 @@ const TrucksTab = ({ profile }: { profile: any }) => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const toggleSelectTruck = (truckId: string) => {
+    setSelectedTrucks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(truckId)) {
+        newSet.delete(truckId);
+      } else {
+        newSet.add(truckId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedTrucks.size === trucks.length) {
+      setSelectedTrucks(new Set());
+    } else {
+      setSelectedTrucks(new Set(trucks.map(t => t.id)));
+    }
+  };
+
+  const handleMassDelete = async () => {
+    if (selectedTrucks.size === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from("trucks")
+        .delete()
+        .in("id", Array.from(selectedTrucks));
+
+      if (error) throw error;
+
+      toast({ title: "Success", description: `Deleted ${selectedTrucks.size} trucks` });
+      setSelectedTrucks(new Set());
+      fetchTrucks();
+    } catch (err: any) {
+      toast({ title: "Delete Error", description: err.message, variant: "destructive" });
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -73,7 +114,16 @@ const TrucksTab = ({ profile }: { profile: any }) => {
             <CardDescription>Manage your fleet</CardDescription>
           </div>
           {isAdmin && (
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              {selectedTrucks.size > 0 && (
+                <Button 
+                  variant="destructive" 
+                  size="sm" 
+                  onClick={handleMassDelete}
+                >
+                  Delete ({selectedTrucks.size})
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={downloadTemplate}>
                 <Download className="h-4 w-4 mr-2" />Template
               </Button>
@@ -106,6 +156,14 @@ const TrucksTab = ({ profile }: { profile: any }) => {
           <Table>
             <TableHeader>
               <TableRow>
+              {isAdmin && (
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={selectedTrucks.size === trucks.length && trucks.length > 0}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                </TableHead>
+              )}
               <TableHead>Code</TableHead>
               <TableHead>Plate Number</TableHead>
               <TableHead>Type</TableHead>
@@ -116,6 +174,14 @@ const TrucksTab = ({ profile }: { profile: any }) => {
             <TableBody>
               {trucks.map((t) => (
                 <TableRow key={t.id}>
+                  {isAdmin && (
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedTrucks.has(t.id)}
+                        onCheckedChange={() => toggleSelectTruck(t.id)}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell className="font-medium">{t.code}</TableCell>
                   <TableCell>{t.plate_number || "N/A"}</TableCell>
                   <TableCell>{t.type}</TableCell>
