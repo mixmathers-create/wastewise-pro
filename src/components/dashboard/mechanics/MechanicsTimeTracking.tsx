@@ -76,13 +76,29 @@ export function MechanicsTimeTracking() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "user" },
+        video: { 
+          facingMode: "user",
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
         audio: false 
       });
       streamRef.current = stream;
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        
+        // Wait for video metadata to load
+        await new Promise((resolve) => {
+          if (videoRef.current) {
+            videoRef.current.onloadedmetadata = () => {
+              videoRef.current?.play();
+              resolve(true);
+            };
+          }
+        });
       }
+      
       setShowCamera(true);
     } catch (error: any) {
       toast({ title: "Camera Error", description: error.message, variant: "destructive" });
@@ -93,12 +109,27 @@ export function MechanicsTimeTracking() {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
+      
+      // Ensure video has valid dimensions
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        toast({ title: "Error", description: "Camera not ready. Please wait a moment.", variant: "destructive" });
+        return;
+      }
+      
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
+      
       if (ctx) {
-        ctx.drawImage(video, 0, 0);
-        const photoData = canvas.toDataURL('image/jpeg');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const photoData = canvas.toDataURL('image/jpeg', 0.9);
+        
+        // Verify photo data is valid
+        if (photoData === 'data:,' || photoData.length < 100) {
+          toast({ title: "Error", description: "Failed to capture photo. Please try again.", variant: "destructive" });
+          return;
+        }
+        
         setCapturedPhoto(photoData);
         stopCamera();
       }
