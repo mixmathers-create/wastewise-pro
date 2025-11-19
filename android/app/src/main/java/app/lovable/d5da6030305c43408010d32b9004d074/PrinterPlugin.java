@@ -20,9 +20,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.JSArray;
-
 import org.json.JSONException;
-
 import recieptservice.com.recieptservice.PrinterInterface;
 
 @CapacitorPlugin(name = "Printer")
@@ -80,7 +78,7 @@ public class PrinterPlugin extends Plugin {
                 // First attempt: explicit component only (matches supplier instructions)
                 try {
                     Intent explicitComponent = new Intent();
-                    explicitComponent.setClassName(pkg, cls);
+                    explicitComponent.setClassName("recieptservice.com.recieptservice", "recieptservice.com.recieptservice.service.PrinterService");
                     boolean ok = context.bindService(explicitComponent, serviceConnection, Context.BIND_AUTO_CREATE);
                     Log.d(TAG, "Attempted bind to " + pkg + "/" + cls + " (component only) => " + ok);
                     if (ok) {
