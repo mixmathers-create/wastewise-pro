@@ -948,6 +948,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                 schedules={schedules.filter(s => s.status === 'approved')}
                 clients={clients}
                 trucks={trucks}
+                selectedDate={format(selectedDate, "yyyy-MM-dd")}
                 landfillLat={LANDFILL_LAT}
                 landfillLon={LANDFILL_LON}
               />
