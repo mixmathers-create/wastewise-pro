@@ -4,8 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import AddTruckDialog from "./AddTruckDialog";
+import TruckEditDialog from "./TruckEditDialog";
 import { Button } from "@/components/ui/button";
-import { Download, Upload } from "lucide-react";
+import { Download, Upload, Pencil } from "lucide-react";
 import { generateCSV, downloadCSV, parseCSV } from "@/lib/csvUtils";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,6 +17,8 @@ const TrucksTab = ({ profile }: { profile: any }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedTrucks, setSelectedTrucks] = useState<Set<string>>(new Set());
+  const [editingTruck, setEditingTruck] = useState<any>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = profile?.role === "admin";
 
@@ -169,6 +172,7 @@ const TrucksTab = ({ profile }: { profile: any }) => {
               <TableHead>Type</TableHead>
               <TableHead>Capacity (MT)</TableHead>
               <TableHead>Status</TableHead>
+              {isAdmin && <TableHead>Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -187,12 +191,32 @@ const TrucksTab = ({ profile }: { profile: any }) => {
                   <TableCell>{t.type}</TableCell>
                   <TableCell>{t.capacity || 0} MT</TableCell>
                   <TableCell><span className={`inline-flex px-2 py-1 text-xs rounded-full ${t.status === 'available' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{t.status}</span></TableCell>
+                  {isAdmin && (
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setEditingTruck(t);
+                          setEditDialogOpen(true);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
       </CardContent>
+      <TruckEditDialog
+        truck={editingTruck}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onUpdated={fetchTrucks}
+      />
     </Card>
   );
 };
