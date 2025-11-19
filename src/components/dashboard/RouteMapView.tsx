@@ -1,11 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import mapboxgl from "mapbox-gl";
-import "mapbox-gl/dist/mapbox-gl.css";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertTriangle } from "lucide-react";
+import { useEffect, useRef } from "react";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 interface Client {
   id: string;
@@ -51,45 +46,43 @@ export const RouteMapView = ({
   landfillLon 
 }: RouteMapViewProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const [mapboxToken, setMapboxToken] = useState("");
-  const [tokenSaved, setTokenSaved] = useState(false);
+  const map = useRef<maplibregl.Map | null>(null);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem("mapbox_token");
-    if (savedToken) {
-      setMapboxToken(savedToken);
-      setTokenSaved(true);
-    }
-  }, []);
-
-  const handleSaveToken = () => {
-    if (mapboxToken) {
-      localStorage.setItem("mapbox_token", mapboxToken);
-      setTokenSaved(true);
-    }
-  };
-
-  useEffect(() => {
-    if (!mapContainer.current || !tokenSaved || !mapboxToken) return;
+    if (!mapContainer.current) return;
     if (map.current) return; // Initialize map only once
 
-    mapboxgl.accessToken = mapboxToken;
-
     try {
-      map.current = new mapboxgl.Map({
+      map.current = new maplibregl.Map({
         container: mapContainer.current,
-        style: "mapbox://styles/mapbox/streets-v12",
+        style: {
+          version: 8,
+          sources: {
+            osm: {
+              type: "raster",
+              tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+              tileSize: 256,
+              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            },
+          },
+          layers: [
+            {
+              id: "osm",
+              type: "raster",
+              source: "osm",
+            },
+          ],
+        },
         center: [landfillLon, landfillLat],
         zoom: 11,
       });
 
-      map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
+      map.current.addControl(new maplibregl.NavigationControl(), "top-right");
 
       // Add landfill marker
-      new mapboxgl.Marker({ color: "#ef4444" })
+      new maplibregl.Marker({ color: "#ef4444" })
         .setLngLat([landfillLon, landfillLat])
-        .setPopup(new mapboxgl.Popup().setHTML("<strong>Landfill</strong>"))
+        .setPopup(new maplibregl.Popup().setHTML("<strong>Landfill</strong>"))
         .addTo(map.current);
 
     } catch (error) {
@@ -100,10 +93,10 @@ export const RouteMapView = ({
       map.current?.remove();
       map.current = null;
     };
-  }, [mapboxToken, tokenSaved, landfillLat, landfillLon]);
+  }, [landfillLat, landfillLon]);
 
   useEffect(() => {
-    if (!map.current || !tokenSaved) return;
+    if (!map.current) return;
 
     // Clear existing markers and sources
     const markers = document.querySelectorAll(".client-marker");
@@ -138,10 +131,10 @@ export const RouteMapView = ({
         el.style.border = "2px solid white";
         el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
 
-        new mapboxgl.Marker(el)
+        new maplibregl.Marker(el)
           .setLngLat([client.longitude, client.latitude])
           .setPopup(
-            new mapboxgl.Popup({ offset: 25 }).setHTML(
+            new maplibregl.Popup({ offset: 25 }).setHTML(
               `<strong>${client.name}</strong><br/>
               ${client.industry}<br/>
               ${schedule.shift} Shift<br/>
@@ -191,7 +184,7 @@ export const RouteMapView = ({
 
     // Fit bounds to show all points
     if (filteredSchedules.length > 0) {
-      const bounds = new mapboxgl.LngLatBounds();
+      const bounds = new maplibregl.LngLatBounds();
       bounds.extend([landfillLon, landfillLat]);
 
       filteredSchedules.forEach((schedule) => {
@@ -205,47 +198,7 @@ export const RouteMapView = ({
 
       map.current.fitBounds(bounds, { padding: 50 });
     }
-  }, [schedules, clients, trucks, selectedDate, tokenSaved, landfillLat, landfillLon]);
-
-  if (!tokenSaved) {
-    return (
-      <Card className="p-6">
-        <Alert className="mb-4">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
-            To view the route map, you need to provide your Mapbox public token. 
-            Get one for free at{" "}
-            <a 
-              href="https://mapbox.com/" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              mapbox.com
-            </a>
-          </AlertDescription>
-        </Alert>
-        <div className="space-y-2">
-          <Label htmlFor="mapbox-token">Mapbox Public Token</Label>
-          <div className="flex gap-2">
-            <Input
-              id="mapbox-token"
-              type="text"
-              placeholder="pk.eyJ1..."
-              value={mapboxToken}
-              onChange={(e) => setMapboxToken(e.target.value)}
-            />
-            <button
-              onClick={handleSaveToken}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-            >
-              Save
-            </button>
-          </div>
-        </div>
-      </Card>
-    );
-  }
+  }, [schedules, clients, trucks, selectedDate, landfillLat, landfillLon]);
 
   return (
     <div className="relative w-full h-[600px] rounded-lg overflow-hidden border">
