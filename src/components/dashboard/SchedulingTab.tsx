@@ -22,6 +22,7 @@ import FingerprintJS from "@fingerprintjs/fingerprintjs";
 import { useNavigate } from "react-router-dom";
 import { VisualScheduleChart } from "./VisualScheduleChart";
 import { RouteMapView } from "./RouteMapView";
+import { SpecialDispatchDialog } from "./SpecialDispatchDialog";
 import jsPDF from "jspdf";
 
 interface Driver {
@@ -104,6 +105,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const [maintenanceBlocks, setMaintenanceBlocks] = useState<MaintenanceBlock[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [showSpecialDispatch, setShowSpecialDispatch] = useState(false);
   
   // Landfill location constants
   const LANDFILL_LAT = 10.41404594740414;
@@ -969,6 +971,24 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                 Select Clients to Service
               </Button>
               
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">or</span>
+                </div>
+              </div>
+
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => setShowSpecialDispatch(true)} 
+                className="w-full"
+              >
+                Create Special Dispatch
+              </Button>
+              
               <p className="text-xs text-muted-foreground">
                 Schedules will be auto-generated based on client MT requirements, collection days, and preferred shifts.
               </p>
@@ -1440,6 +1460,17 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <SpecialDispatchDialog
+        open={showSpecialDispatch}
+        onOpenChange={setShowSpecialDispatch}
+        clients={clients}
+        trucks={trucks}
+        drivers={drivers}
+        helpers={helpers}
+        maintenanceBlocks={maintenanceBlocks}
+        onSuccess={loadData}
+      />
     </div>
   );
 };
