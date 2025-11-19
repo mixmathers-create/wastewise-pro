@@ -5,11 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit, Trash2, LogOut, LogIn } from "lucide-react";
+import { Plus, Edit, Trash2, LogOut, LogIn, Download } from "lucide-react";
 import { AddEquipmentDialog } from "./AddEquipmentDialog";
 import { EditEquipmentDialog } from "./EditEquipmentDialog";
 import { CheckoutEquipmentDialog } from "./CheckoutEquipmentDialog";
 import { CheckinEquipmentDialog } from "./CheckinEquipmentDialog";
+import { generateCSV, downloadCSV } from "@/lib/csvUtils";
+import { format } from "date-fns";
 
 export default function EquipmentInventory() {
   const [equipment, setEquipment] = useState<any[]>([]);
@@ -42,7 +44,7 @@ export default function EquipmentInventory() {
       .from("equipment_checkouts")
       .select(`
         *,
-        equipment_inventory(name, code, type),
+        equipment_inventory(name, code, type, is_consumable),
         drivers(name),
         helpers(name)
       `)
@@ -63,6 +65,38 @@ export default function EquipmentInventory() {
     }
   };
 
+  const handleExportInventory = () => {
+    const csvData = equipment.map(item => ({
+      Code: item.code,
+      Name: item.name,
+      Type: item.type,
+      Consumable: item.is_consumable ? 'Yes' : 'No',
+      Quantity: item.quantity,
+      Status: item.status
+    }));
+    const csv = generateCSV(csvData, ['Code', 'Name', 'Type', 'Consumable', 'Quantity', 'Status']);
+    downloadCSV(csv, `equipment-inventory-${format(new Date(), 'yyyy-MM-dd')}.csv`);
+    toast({ title: "Success", description: "Inventory exported" });
+  };
+
+  const handleExportCheckouts = () => {
+    const csvData = checkouts.map(checkout => ({
+      Equipment: checkout.equipment_inventory?.code || '',
+      Name: checkout.equipment_inventory?.name || '',
+      'Assigned To': checkout.assigned_to_type === 'driver' 
+        ? checkout.drivers?.name || '' 
+        : checkout.helpers?.name || '',
+      Type: checkout.assigned_to_type,
+      Quantity: checkout.quantity,
+      'Checked Out': format(new Date(checkout.checked_out_at), 'yyyy-MM-dd HH:mm'),
+      'Checked In': checkout.checked_in_at ? format(new Date(checkout.checked_in_at), 'yyyy-MM-dd HH:mm') : '',
+      Status: checkout.status
+    }));
+    const csv = generateCSV(csvData, ['Equipment', 'Name', 'Assigned To', 'Type', 'Quantity', 'Checked Out', 'Checked In', 'Status']);
+    downloadCSV(csv, `equipment-checkouts-${format(new Date(), 'yyyy-MM-dd')}.csv`);
+    toast({ title: "Success", description: "Checkouts exported" });
+  };
+
   return (
     <Tabs defaultValue="inventory" className="w-full">
       <TabsList>
@@ -75,9 +109,14 @@ export default function EquipmentInventory() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Equipment Inventory</CardTitle>
-              <Button onClick={() => setShowAddDialog(true)}>
-                <Plus className="h-4 w-4 mr-2" /> Add Equipment
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={handleExportInventory}>
+                  <Download className="h-4 w-4 mr-2" /> Export
+                </Button>
+                <Button onClick={() => setShowAddDialog(true)}>
+                  <Plus className="h-4 w-4 mr-2" /> Add Equipment
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -183,7 +222,7 @@ export default function EquipmentInventory() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      {checkout.status === "checked_out" && (
+                      {checkout.status === "checked_out" && !checkout.equipment_inventory?.is_consumable && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -191,6 +230,9 @@ export default function EquipmentInventory() {
                         >
                           <LogIn className="h-4 w-4 mr-2" /> Check In
                         </Button>
+                      )}
+                      {checkout.equipment_inventory?.is_consumable && checkout.status === 'checked_out' && (
+                        <span className="text-xs text-muted-foreground">Consumable</span>
                       )}
                     </TableCell>
                   </TableRow>

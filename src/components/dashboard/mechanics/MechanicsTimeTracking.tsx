@@ -3,10 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, Clock } from "lucide-react";
+import { Camera, Clock, Download, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { format, differenceInMinutes } from "date-fns";
+import { generateCSV, downloadCSV } from "@/lib/csvUtils";
 
 export function MechanicsTimeTracking() {
   const [mechanics, setMechanics] = useState<any[]>([]);
@@ -14,6 +17,9 @@ export function MechanicsTimeTracking() {
   const [selectedMechanic, setSelectedMechanic] = useState("");
   const [showCamera, setShowCamera] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const [showPhotoPreview, setShowPhotoPreview] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -156,10 +162,70 @@ export function MechanicsTimeTracking() {
     }
   };
 
+  const calculateTotalTime = (timeIn: string, timeOut: string | null) => {
+    if (!timeOut) return '-';
+    const minutes = differenceInMinutes(new Date(timeOut), new Date(timeIn));
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}h ${mins}m`;
+  };
+
+  const handleExport = async () => {
+    if (!startDate || !endDate) {
+      toast({ title: "Error", description: "Please select date range", variant: "destructive" });
+      return;
+    }
+
+    const { data } = await supabase
+      .from("mechanic_time_logs")
+      .select("*, mechanics(name, id_number)")
+      .gte("time_in", startDate)
+      .lte("time_in", `${endDate}T23:59:59`)
+      .order("time_in", { ascending: false });
+
+    if (!data || data.length === 0) {
+      toast({ title: "Info", description: "No data found for selected date range" });
+      return;
+    }
+
+    const csvData = data.map(log => ({
+      'Mechanic': log.mechanics?.name || '',
+      'ID Number': log.mechanics?.id_number || '',
+      'Time In': format(new Date(log.time_in), 'yyyy-MM-dd HH:mm:ss'),
+      'Time Out': log.time_out ? format(new Date(log.time_out), 'yyyy-MM-dd HH:mm:ss') : '',
+      'Total Time': calculateTotalTime(log.time_in, log.time_out),
+      'Location': log.latitude && log.longitude ? `${log.latitude}, ${log.longitude}` : ''
+    }));
+
+    const csv = generateCSV(csvData, ['Mechanic', 'ID Number', 'Time In', 'Time Out', 'Total Time', 'Location']);
+    downloadCSV(csv, `mechanic-time-logs-${startDate}-to-${endDate}.csv`);
+    toast({ title: "Success", description: "Time logs exported" });
+  };
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Time Tracking</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle>Time Tracking</CardTitle>
+          <div className="flex gap-2 items-center">
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-40"
+            />
+            <span className="text-muted-foreground">to</span>
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-40"
+            />
+            <Button variant="outline" onClick={handleExport}>
+              <Download className="h-4 w-4 mr-2" /> Export
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="flex gap-4 items-end">
