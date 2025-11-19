@@ -171,7 +171,8 @@ public class BluetoothPrinterPlugin extends Plugin {
         }
 
         if (!isBound || printerInterface == null) {
-            call.reject("Printer not connected");
+            Log.e(TAG, "printText failed - service not bound");
+            call.reject("Printer service not available");
             return;
         }
 
