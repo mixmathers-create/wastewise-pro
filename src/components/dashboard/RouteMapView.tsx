@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -47,6 +47,7 @@ export const RouteMapView = ({
 }: RouteMapViewProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   useEffect(() => {
     if (!mapContainer.current) return;
@@ -79,11 +80,18 @@ export const RouteMapView = ({
 
       map.current.addControl(new maplibregl.NavigationControl(), "top-right");
 
-      // Add landfill marker
-      new maplibregl.Marker({ color: "#ef4444" })
-        .setLngLat([landfillLon, landfillLat])
-        .setPopup(new maplibregl.Popup().setHTML("<strong>Landfill</strong>"))
-        .addTo(map.current);
+      // Wait for style to load before adding markers and sources
+      map.current.on('load', () => {
+        setMapLoaded(true);
+        
+        // Add landfill marker after map is loaded
+        if (map.current) {
+          new maplibregl.Marker({ color: "#ef4444" })
+            .setLngLat([landfillLon, landfillLat])
+            .setPopup(new maplibregl.Popup().setHTML("<strong>Landfill</strong>"))
+            .addTo(map.current);
+        }
+      });
 
     } catch (error) {
       console.error("Error initializing map:", error);
@@ -92,11 +100,12 @@ export const RouteMapView = ({
     return () => {
       map.current?.remove();
       map.current = null;
+      setMapLoaded(false);
     };
   }, [landfillLat, landfillLon]);
 
   useEffect(() => {
-    if (!map.current) return;
+    if (!map.current || !mapLoaded) return;
 
     // Clear existing markers and sources
     const markers = document.querySelectorAll(".client-marker");
@@ -198,7 +207,7 @@ export const RouteMapView = ({
 
       map.current.fitBounds(bounds, { padding: 50 });
     }
-  }, [schedules, clients, trucks, selectedDate, landfillLat, landfillLon]);
+  }, [schedules, clients, trucks, selectedDate, mapLoaded, landfillLat, landfillLon]);
 
   return (
     <div className="relative w-full h-[600px] rounded-lg overflow-hidden border">
