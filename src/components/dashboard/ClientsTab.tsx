@@ -54,18 +54,13 @@ const ClientsTab = ({ profile }: { profile: any }) => {
   const downloadTemplate = () => {
     const exampleData = [{
       name: 'Sample Restaurant',
-      industry: 'Restaurant',
-      address: '123 Main Street, Cebu City',
-      contact_info: 'manager@samplerestaurant.com',
-      contact_person: 'John Doe',
-      contact_number: '+63 912 345 6789',
       latitude: '10.3157',
       longitude: '123.8854',
-      mt_requirement: '2.5',
-      collection_shift: 'AM',
-      collection_days: 'Mon|Tue|Wed|Thu|Fri'
+      contact_info: 'manager@samplerestaurant.com',
+      contact_number: '+63 912 345 6789',
+      contact_person: 'John Doe'
     }];
-    const csv = generateCSV(exampleData, ['name', 'industry', 'address', 'contact_info', 'contact_person', 'contact_number', 'latitude', 'longitude', 'mt_requirement', 'collection_shift', 'collection_days']);
+    const csv = generateCSV(exampleData, ['name', 'latitude', 'longitude', 'contact_info', 'contact_number', 'contact_person']);
     downloadCSV(csv, 'clients-template.csv');
   };
 
@@ -79,13 +74,13 @@ const ClientsTab = ({ profile }: { profile: any }) => {
     try {
       // Validate that required fields are present
       const invalidRows = rows.filter(row => 
-        !row.name || !row.industry || !row.latitude || !row.longitude
+        !row.name || !row.latitude || !row.longitude || !row.contact_info || !row.contact_number || !row.contact_person
       );
 
       if (invalidRows.length > 0) {
         toast({ 
           title: "Import Error", 
-          description: "All rows must have name, industry, latitude, and longitude", 
+          description: "All rows must have name, latitude, longitude, contact_info, contact_number, and contact_person", 
           variant: "destructive" 
         });
         return;
@@ -93,16 +88,15 @@ const ClientsTab = ({ profile }: { profile: any }) => {
 
       const clientsToInsert = rows.map(row => ({
         name: row.name,
-        industry: row.industry,
-        address: row.address || null,
-        contact_info: row.contact_info || null,
-        contact_person: row.contact_person || null,
-        contact_number: row.contact_number || null,
         latitude: parseFloat(row.latitude),
         longitude: parseFloat(row.longitude),
-        mt_requirement: row.mt_requirement ? parseFloat(row.mt_requirement) : 0,
-        collection_shift: row.collection_shift || 'AM',
-        collection_days: row.collection_days ? row.collection_days.split('|') : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+        contact_info: row.contact_info,
+        contact_number: row.contact_number,
+        contact_person: row.contact_person,
+        industry: 'General', // Default value, to be updated via desktop app
+        mt_requirement: 0, // Default value, to be updated via desktop app
+        collection_shift: 'AM', // Default value, to be updated via desktop app
+        collection_days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], // Default value, to be updated via desktop app
         qr_code: `CLIENT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       }));
 
