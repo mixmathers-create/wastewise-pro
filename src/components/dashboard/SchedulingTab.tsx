@@ -124,6 +124,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const [deviceFingerprint, setDeviceFingerprint] = useState<string>("");
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [showPastSchedules, setShowPastSchedules] = useState(false);
   const [maintenanceExpanded, setMaintenanceExpanded] = useState(false);
   
   const [showPeekDialog, setShowPeekDialog] = useState(false);
@@ -649,11 +650,17 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
 
   const sortedDates = Object.keys(groupedSchedules).sort();
   
-  // Filter schedules by selected date (show ±7 days around selected date)
+  // Filter schedules based on showPastSchedules toggle
+  const today = format(new Date(), "yyyy-MM-dd");
   const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
   const minDate = format(addDays(selectedDate, -7), "yyyy-MM-dd");
   const maxDate = format(addDays(selectedDate, 7), "yyyy-MM-dd");
-  const visibleDates = sortedDates.filter(d => d >= minDate && d <= maxDate);
+  const visibleDates = sortedDates.filter(d => {
+    if (showPastSchedules) {
+      return d >= minDate && d <= maxDate;
+    }
+    return d >= today && d >= minDate && d <= maxDate;
+  });
 
   return (
     <div className="space-y-4">
@@ -718,6 +725,13 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                   <CardDescription className="text-xs">All approved assignments</CardDescription>
                 </div>
                 <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setShowPastSchedules(!showPastSchedules)}
+                  >
+                    {showPastSchedules ? "Hide Past" : "Show Past"}
+                  </Button>
                   <Button variant="outline" size="sm" onClick={exportScheduleAsPDF}>
                     <Download className="mr-1 h-3 w-3" />
                     Export PDF
