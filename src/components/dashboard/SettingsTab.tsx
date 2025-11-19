@@ -8,6 +8,35 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 const SettingsTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
   const [printerStatus, setPrinterStatus] = useState<'unknown' | 'connected' | 'error'>('unknown');
+  const [serviceConnected, setServiceConnected] = useState(false);
+
+  const handleConnectService = async () => {
+    if (!printerService.isAvailable()) {
+      toast({
+        title: "Not Available",
+        description: "Printer service only available on Android devices",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await printerService.testConnection();
+      setServiceConnected(true);
+      toast({
+        title: "Service Connected",
+        description: "Printer service connection established successfully",
+      });
+    } catch (error: any) {
+      setServiceConnected(false);
+      console.error('Service connection error:', error);
+      toast({
+        title: "Connection Failed",
+        description: error.message || "Could not establish connection to printer service",
+        variant: "destructive"
+      });
+    }
+  };
 
   const handleCheckPrinter = async () => {
     if (!printerService.isAvailable()) {
@@ -87,16 +116,25 @@ const SettingsTab = ({ profile }: { profile: any }) => {
             <AlertDescription>
               The H10P has an internal 58mm ESC/POS thermal printer using GB18030 encoding. 
               The vendor's printer service APK must be installed and running on the device.
-              Click "Check Printer" to verify the connection, then use "Test Print" to print a test receipt.
+              First click "Connect Service" to establish connection, then "Check Printer" to verify, and finally "Test Print" to test.
             </AlertDescription>
           </Alert>
 
           <div className="space-y-3">
+            <Button 
+              onClick={handleConnectService}
+              className="w-full"
+              variant={serviceConnected ? 'default' : 'outline'}
+            >
+              {serviceConnected ? 'Service Connected' : 'Connect Service'}
+            </Button>
+            
             <div className="flex gap-2">
               <Button 
                 onClick={handleCheckPrinter}
                 className="flex-1"
                 variant={printerStatus === 'connected' ? 'default' : 'outline'}
+                disabled={!serviceConnected}
               >
                 Check Printer
               </Button>
