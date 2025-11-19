@@ -203,24 +203,26 @@ export const RouteMapView = ({
         const client = clientsMap.get(clientId);
         if (!client || !client.latitude || !client.longitude) return;
 
-        // Add numbered client marker
+        // Add numbered client marker with truck color
         const el = document.createElement("div");
         el.className = "client-marker";
-        el.style.backgroundColor = color;
-        el.style.width = "24px";
-        el.style.height = "24px";
-        el.style.borderRadius = "50%";
-        el.style.border = "2px solid white";
-        el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
-        el.style.display = "flex";
-        el.style.alignItems = "center";
-        el.style.justifyContent = "center";
-        el.style.color = "white";
-        el.style.fontSize = "11px";
-        el.style.fontWeight = "bold";
+        el.style.cssText = `
+          background-color: ${color} !important;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          border: 2px solid white;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-size: 11px;
+          font-weight: bold;
+        `;
         el.textContent = String(orderIdx + 1);
 
-        new maplibregl.Marker(el)
+        new maplibregl.Marker({ element: el, anchor: 'center' })
           .setLngLat([client.longitude, client.latitude])
           .setPopup(
             new maplibregl.Popup({ offset: 25 }).setHTML(
