@@ -205,17 +205,17 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
   }, []);
 
   const handleDownloadDriverTemplate = () => {
-    const headers = ['name', 'license_number', 'id_number', 'birthdate', 'contact_number', 'license_expiry_date', 'status', 'suspension_start_date', 'suspension_end_date'];
+    const headers = ['name', 'license_number', 'birthdate', 'contact_number', 'license_expiry_date', 'status', 'id_number (optional)', 'suspension_start_date (optional)', 'suspension_end_date (optional)'];
     const sampleData = [{
-      name: 'Juan Dela Cruz',
-      license_number: 'N01-12-345678',
-      id_number: '1234-5678-9012',
-      birthdate: '1990-01-15',
-      contact_number: '09171234567',
-      license_expiry_date: '2026-12-31',
-      status: 'available',
-      suspension_start_date: '',
-      suspension_end_date: ''
+      'name': 'Juan Dela Cruz',
+      'license_number': 'N01-12-345678',
+      'birthdate': '1990-01-15',
+      'contact_number': '09171234567',
+      'license_expiry_date': '2026-12-31',
+      'status': 'available',
+      'id_number (optional)': '',
+      'suspension_start_date (optional)': '',
+      'suspension_end_date (optional)': ''
     }];
     const csv = generateCSV(sampleData, headers);
     downloadCSV(csv, 'drivers-import-template.csv');
@@ -223,15 +223,15 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
   };
 
   const handleDownloadHelperTemplate = () => {
-    const headers = ['name', 'id_number', 'birthdate', 'contact_number', 'status', 'suspension_start_date', 'suspension_end_date'];
+    const headers = ['name', 'birthdate', 'contact_number', 'status', 'id_number (optional)', 'suspension_start_date (optional)', 'suspension_end_date (optional)'];
     const sampleData = [{
-      name: 'Maria Santos',
-      id_number: '1234-5678-9012',
-      birthdate: '1995-03-20',
-      contact_number: '09181234567',
-      status: 'available',
-      suspension_start_date: '',
-      suspension_end_date: ''
+      'name': 'Maria Santos',
+      'birthdate': '1995-03-20',
+      'contact_number': '09181234567',
+      'status': 'available',
+      'id_number (optional)': '',
+      'suspension_start_date (optional)': '',
+      'suspension_end_date (optional)': ''
     }];
     const csv = generateCSV(sampleData, headers);
     downloadCSV(csv, 'helpers-import-template.csv');
@@ -257,8 +257,32 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
     if (!file) return;
     try {
       const text = await file.text();
-      const parsed = parseCSV(text);
-      const { error } = await supabase.from("drivers").insert(parsed);
+      const rows = parseCSV(text);
+      
+      const processedRows = rows.map(row => {
+        // Generate ID number if not provided
+        const idNumber = row['id_number (optional)'] || row.id_number || `DRV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        const driverData: any = {
+          name: row.name,
+          license_number: row.license_number,
+          id_number: idNumber,
+          birthdate: row.birthdate || null,
+          contact_number: row.contact_number || null,
+          license_expiry_date: row.license_expiry_date || null,
+          status: row.status || 'available',
+        };
+
+        // Only add suspension dates if provided
+        const suspensionStart = row['suspension_start_date (optional)'] || row.suspension_start_date;
+        const suspensionEnd = row['suspension_end_date (optional)'] || row.suspension_end_date;
+        if (suspensionStart) driverData.suspension_start_date = suspensionStart;
+        if (suspensionEnd) driverData.suspension_end_date = suspensionEnd;
+
+        return driverData;
+      });
+
+      const { error } = await supabase.from("drivers").insert(processedRows);
       if (error) throw error;
       toast({ title: "Drivers imported successfully" });
       fetchAll();
@@ -272,8 +296,30 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
     if (!file) return;
     try {
       const text = await file.text();
-      const parsed = parseCSV(text);
-      const { error } = await supabase.from("helpers").insert(parsed);
+      const rows = parseCSV(text);
+      
+      const processedRows = rows.map(row => {
+        // Generate ID number if not provided
+        const idNumber = row['id_number (optional)'] || row.id_number || `HLP-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        const helperData: any = {
+          name: row.name,
+          id_number: idNumber,
+          birthdate: row.birthdate || null,
+          contact_number: row.contact_number || null,
+          status: row.status || 'available',
+        };
+
+        // Only add suspension dates if provided
+        const suspensionStart = row['suspension_start_date (optional)'] || row.suspension_start_date;
+        const suspensionEnd = row['suspension_end_date (optional)'] || row.suspension_end_date;
+        if (suspensionStart) helperData.suspension_start_date = suspensionStart;
+        if (suspensionEnd) helperData.suspension_end_date = suspensionEnd;
+
+        return helperData;
+      });
+
+      const { error } = await supabase.from("helpers").insert(processedRows);
       if (error) throw error;
       toast({ title: "Helpers imported successfully" });
       fetchAll();
