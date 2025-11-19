@@ -5,8 +5,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import AddDriverDialog from "./AddDriverDialog";
 import AddHelperDialog from "./AddHelperDialog";
+import DriverEditDialog from "./DriverEditDialog";
+import HelperEditDialog from "./HelperEditDialog";
 import { Button } from "@/components/ui/button";
-import { Download, Upload } from "lucide-react";
+import { Download, Upload, Pencil } from "lucide-react";
 import { generateCSV, downloadCSV, parseCSV } from "@/lib/csvUtils";
 import { useToast } from "@/hooks/use-toast";
 
@@ -18,19 +20,31 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
   const [error, setError] = useState<string | null>(null);
   const driverFileRef = useRef<HTMLInputElement>(null);
   const helperFileRef = useRef<HTMLInputElement>(null);
+  const [editingDriver, setEditingDriver] = useState<any>(null);
+  const [editingHelper, setEditingHelper] = useState<any>(null);
+  const [driverEditOpen, setDriverEditOpen] = useState(false);
+  const [helperEditOpen, setHelperEditOpen] = useState(false);
   const isAdmin = profile?.role === "admin";
 
   const fetchAll = async () => {
     setLoading(true);
     const [{ data: d, error: de }, { data: h, error: he }] = await Promise.all([
-      supabase.from("drivers").select("id,name,license_number,id_number,birthdate,contact_number").order("name"),
-      supabase.from("helpers").select("id,name,id_number,birthdate,contact_number").order("name"),
+      supabase.from("drivers").select("*").order("name"),
+      supabase.from("helpers").select("*").order("name"),
     ]);
     if (de) setError(de.message);
     else if (he) setError(he.message);
     setDrivers(d || []);
     setHelpers(h || []);
     setLoading(false);
+  };
+
+  const formatAvailability = (availability: any) => {
+    if (!availability) return "Not set";
+    const days = availability.days?.join(", ") || "No days";
+    const shifts = availability.shifts?.join(", ") || "No shifts";
+    const doubleShift = availability.doubleShift ? "✓ Double" : "";
+    return `${days} | ${shifts} ${doubleShift}`;
   };
 
   const downloadDriverTemplate = () => {
@@ -103,127 +117,181 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
   }, []);
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Drivers</CardTitle>
-              <CardDescription>Licensed vehicle operators</CardDescription>
-            </div>
-            {isAdmin && (
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={downloadDriverTemplate}>
-                  <Download className="h-4 w-4 mr-2" />Template
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => driverFileRef.current?.click()}>
-                  <Upload className="h-4 w-4 mr-2" />Import CSV
-                </Button>
-                <input
-                  ref={driverFileRef}
-                  type="file"
-                  accept=".csv"
-                  onChange={handleDriverImport}
-                  className="hidden"
-                />
-                <AddDriverDialog profile={profile} onAdded={fetchAll} />
+    <>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Drivers</CardTitle>
+                <CardDescription>Licensed vehicle operators</CardDescription>
               </div>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
-          ) : error ? (
-            <p className="text-destructive">{error}</p>
-          ) : drivers.length === 0 ? (
-            <p className="text-muted-foreground">No drivers yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>License</TableHead>
-              <TableHead>ID Number</TableHead>
-              <TableHead>Birth Date</TableHead>
-              <TableHead>Contact</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {drivers.map((d) => (
-                  <TableRow key={d.id}>
-                    <TableCell className="font-medium">{d.name}</TableCell>
-                    <TableCell>{d.license_number || "N/A"}</TableCell>
-                    <TableCell>{d.id_number || "N/A"}</TableCell>
-                    <TableCell>{d.birthdate ? new Date(d.birthdate).toLocaleDateString() : "N/A"}</TableCell>
-                    <TableCell>{d.contact_number || "N/A"}</TableCell>
+              {isAdmin && (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={downloadDriverTemplate}>
+                    <Download className="h-4 w-4 mr-2" />Template
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => driverFileRef.current?.click()}>
+                    <Upload className="h-4 w-4 mr-2" />Import CSV
+                  </Button>
+                  <input
+                    ref={driverFileRef}
+                    type="file"
+                    accept=".csv"
+                    onChange={handleDriverImport}
+                    className="hidden"
+                  />
+                  <AddDriverDialog profile={profile} onAdded={fetchAll} />
+                </div>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
+            ) : error ? (
+              <p className="text-destructive">{error}</p>
+            ) : drivers.length === 0 ? (
+              <p className="text-muted-foreground">No drivers yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>License</TableHead>
+                    <TableHead>ID Number</TableHead>
+                    <TableHead>Birth Date</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Availability</TableHead>
+                    {isAdmin && <TableHead>Actions</TableHead>}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {drivers.map((d) => (
+                    <TableRow key={d.id}>
+                      <TableCell className="font-medium">{d.name}</TableCell>
+                      <TableCell>{d.license_number || "N/A"}</TableCell>
+                      <TableCell>{d.id_number || "N/A"}</TableCell>
+                      <TableCell>{d.birthdate ? new Date(d.birthdate).toLocaleDateString() : "N/A"}</TableCell>
+                      <TableCell>{d.contact_number || "N/A"}</TableCell>
+                      <TableCell className="text-sm">{formatAvailability(d.availability)}</TableCell>
+                      {isAdmin && (
+                        <TableCell>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => {
+                              setEditingDriver(d);
+                              setDriverEditOpen(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Helpers</CardTitle>
-              <CardDescription>Collection assistants</CardDescription>
-            </div>
-            {isAdmin && (
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={downloadHelperTemplate}>
-                  <Download className="h-4 w-4 mr-2" />Template
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => helperFileRef.current?.click()}>
-                  <Upload className="h-4 w-4 mr-2" />Import CSV
-                </Button>
-                <input
-                  ref={helperFileRef}
-                  type="file"
-                  accept=".csv"
-                  onChange={handleHelperImport}
-                  className="hidden"
-                />
-                <AddHelperDialog profile={profile} onAdded={fetchAll} />
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Helpers</CardTitle>
+                <CardDescription>Collection assistants</CardDescription>
               </div>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
-          ) : error ? (
-            <p className="text-destructive">{error}</p>
-          ) : helpers.length === 0 ? (
-            <p className="text-muted-foreground">No helpers yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>ID Number</TableHead>
-              <TableHead>Birth Date</TableHead>
-              <TableHead>Contact</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {helpers.map((h) => (
-                  <TableRow key={h.id}>
-                    <TableCell className="font-medium">{h.name}</TableCell>
-                    <TableCell>{h.id_number || "N/A"}</TableCell>
-                    <TableCell>{h.birthdate ? new Date(h.birthdate).toLocaleDateString() : "N/A"}</TableCell>
-                    <TableCell>{h.contact_number || "N/A"}</TableCell>
+              {isAdmin && (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={downloadHelperTemplate}>
+                    <Download className="h-4 w-4 mr-2" />Template
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => helperFileRef.current?.click()}>
+                    <Upload className="h-4 w-4 mr-2" />Import CSV
+                  </Button>
+                  <input
+                    ref={helperFileRef}
+                    type="file"
+                    accept=".csv"
+                    onChange={handleHelperImport}
+                    className="hidden"
+                  />
+                  <AddHelperDialog profile={profile} onAdded={fetchAll} />
+                </div>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
+            ) : error ? (
+              <p className="text-destructive">{error}</p>
+            ) : helpers.length === 0 ? (
+              <p className="text-muted-foreground">No helpers yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>ID Number</TableHead>
+                    <TableHead>Birth Date</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Availability</TableHead>
+                    {isAdmin && <TableHead>Actions</TableHead>}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+                </TableHeader>
+                <TableBody>
+                  {helpers.map((h) => (
+                    <TableRow key={h.id}>
+                      <TableCell className="font-medium">{h.name}</TableCell>
+                      <TableCell>{h.id_number || "N/A"}</TableCell>
+                      <TableCell>{h.birthdate ? new Date(h.birthdate).toLocaleDateString() : "N/A"}</TableCell>
+                      <TableCell>{h.contact_number || "N/A"}</TableCell>
+                      <TableCell className="text-sm">{formatAvailability(h.availability)}</TableCell>
+                      {isAdmin && (
+                        <TableCell>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => {
+                              setEditingHelper(h);
+                              setHelperEditOpen(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {editingDriver && (
+        <DriverEditDialog
+          driver={editingDriver}
+          open={driverEditOpen}
+          onOpenChange={setDriverEditOpen}
+          onUpdated={fetchAll}
+        />
+      )}
+
+      {editingHelper && (
+        <HelperEditDialog
+          helper={editingHelper}
+          open={helperEditOpen}
+          onOpenChange={setHelperEditOpen}
+          onUpdated={fetchAll}
+        />
+      )}
+    </>
   );
 };
 
