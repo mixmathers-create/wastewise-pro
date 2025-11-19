@@ -5,6 +5,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import AddDriverDialog from "./AddDriverDialog";
 import AddHelperDialog from "./AddHelperDialog";
 import DriverEditDialog from "./DriverEditDialog";
@@ -35,6 +39,10 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
   const [deleteType, setDeleteType] = useState<'drivers' | 'helpers' | null>(null);
   const [previewDriver, setPreviewDriver] = useState<any>(null);
   const [licensePreviewOpen, setLicensePreviewOpen] = useState(false);
+  const [suspensionDialogOpen, setSuspensionDialogOpen] = useState(false);
+  const [suspensionTarget, setSuspensionTarget] = useState<{ id: string; type: 'driver' | 'helper'; name: string } | null>(null);
+  const [suspensionStartDate, setSuspensionStartDate] = useState("");
+  const [suspensionEndDate, setSuspensionEndDate] = useState("");
   const isAdmin = profile?.role === "admin";
 
   const fetchAll = async () => {
@@ -59,16 +67,16 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
   };
 
   const getLicenseStatus = (expiryDate: string | null) => {
-    if (!expiryDate) return { label: "Not Set", variant: "secondary" as const };
+    if (!expiryDate) return <Badge variant="secondary">Not Set</Badge>;
     
     const expiry = new Date(expiryDate);
     const today = new Date();
     const daysUntilExpiry = Math.floor((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     
-    if (daysUntilExpiry < 0) return { label: "Expired", variant: "destructive" as const };
-    if (daysUntilExpiry <= 30) return { label: `${daysUntilExpiry}d left`, variant: "destructive" as const };
-    if (daysUntilExpiry <= 60) return { label: `${daysUntilExpiry}d left`, variant: "default" as const };
-    return { label: "Valid", variant: "default" as const };
+    if (daysUntilExpiry < 0) return <Badge variant="destructive">Expired</Badge>;
+    if (daysUntilExpiry <= 30) return <Badge variant="destructive">{daysUntilExpiry}d left</Badge>;
+    if (daysUntilExpiry <= 60) return <Badge variant="default">{daysUntilExpiry}d left</Badge>;
+    return <Badge variant="default">Valid</Badge>;
   };
 
   const toggleSelectDriver = (id: string) => {
@@ -89,398 +97,412 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
     });
   };
 
-  const toggleSelectAllDrivers = () => {
-    if (selectedDrivers.size === drivers.length) {
-      setSelectedDrivers(new Set());
-    } else {
+  const toggleSelectAllDrivers = (checked: boolean) => {
+    if (checked) {
       setSelectedDrivers(new Set(drivers.map(d => d.id)));
+    } else {
+      setSelectedDrivers(new Set());
     }
   };
 
-  const toggleSelectAllHelpers = () => {
-    if (selectedHelpers.size === helpers.length) {
-      setSelectedHelpers(new Set());
-    } else {
+  const toggleSelectAllHelpers = (checked: boolean) => {
+    if (checked) {
       setSelectedHelpers(new Set(helpers.map(h => h.id)));
+    } else {
+      setSelectedHelpers(new Set());
     }
   };
 
   const handleMassDelete = async () => {
-    const idsToDelete = deleteType === 'drivers' 
-      ? Array.from(selectedDrivers) 
-      : Array.from(selectedHelpers);
-    
-    if (idsToDelete.length === 0) return;
-
     try {
-      const table = deleteType === 'drivers' ? 'drivers' : 'helpers';
-      const { error } = await supabase
-        .from(table)
-        .delete()
-        .in('id', idsToDelete);
-
-      if (error) throw error;
-
-      toast({ 
-        title: "Success", 
-        description: `Deleted ${idsToDelete.length} ${deleteType}` 
-      });
-      
-      if (deleteType === 'drivers') {
+      if (deleteType === 'drivers' && selectedDrivers.size > 0) {
+        const { error } = await supabase
+          .from("drivers")
+          .delete()
+          .in("id", Array.from(selectedDrivers));
+        
+        if (error) throw error;
+        toast({ title: `${selectedDrivers.size} driver(s) deleted successfully` });
         setSelectedDrivers(new Set());
-      } else {
+      } else if (deleteType === 'helpers' && selectedHelpers.size > 0) {
+        const { error } = await supabase
+          .from("helpers")
+          .delete()
+          .in("id", Array.from(selectedHelpers));
+        
+        if (error) throw error;
+        toast({ title: `${selectedHelpers.size} helper(s) deleted successfully` });
         setSelectedHelpers(new Set());
       }
-      
+      setDeleteDialogOpen(false);
       fetchAll();
     } catch (error: any) {
-      toast({ 
-        title: "Error", 
-        description: error.message, 
-        variant: "destructive" 
-      });
-    } finally {
-      setDeleteDialogOpen(false);
-      setDeleteType(null);
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     }
   };
 
-  const downloadDriverTemplate = () => {
-    const csv = generateCSV([], ['name', 'license_number', 'id_number', 'birthdate', 'contact_number']);
-    downloadCSV(csv, 'drivers-template.csv');
+  const handleStatusChange = async (id: string, newStatus: string, type: 'driver' | 'helper', name: string) => {
+    if (newStatus === 'suspended') {
+      setSuspensionTarget({ id, type, name });
+      setSuspensionStartDate("");
+      setSuspensionEndDate("");
+      setSuspensionDialogOpen(true);
+    } else {
+      await updateStatus(id, newStatus, type, null, null);
+    }
   };
 
-  const downloadHelperTemplate = () => {
-    const csv = generateCSV([], ['name', 'id_number', 'birthdate', 'contact_number']);
-    downloadCSV(csv, 'helpers-template.csv');
+  const handleSuspensionSubmit = async () => {
+    if (!suspensionStartDate || !suspensionEndDate) {
+      toast({ title: "Error", description: "Both suspension dates are required", variant: "destructive" });
+      return;
+    }
+    if (new Date(suspensionEndDate) < new Date(suspensionStartDate)) {
+      toast({ title: "Error", description: "End date must be after start date", variant: "destructive" });
+      return;
+    }
+    if (suspensionTarget) {
+      await updateStatus(
+        suspensionTarget.id,
+        'suspended',
+        suspensionTarget.type,
+        suspensionStartDate,
+        suspensionEndDate
+      );
+      setSuspensionDialogOpen(false);
+      setSuspensionTarget(null);
+    }
   };
 
-  const handleDriverImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const text = await file.text();
-    const rows = parseCSV(text);
-
+  const updateStatus = async (
+    id: string,
+    status: string,
+    type: 'driver' | 'helper',
+    startDate: string | null,
+    endDate: string | null
+  ) => {
     try {
-      const driversToInsert = rows.map(row => ({
-        name: row.name,
-        license_number: row.license_number || null,
-        id_number: row.id_number || `DRV-${Date.now().toString().slice(-6)}`,
-        birthdate: row.birthdate || null,
-        contact_number: row.contact_number || null
-      }));
+      const table = type === 'driver' ? 'drivers' : 'helpers';
+      const { error } = await supabase
+        .from(table)
+        .update({
+          status,
+          suspension_start_date: status === 'suspended' ? startDate : null,
+          suspension_end_date: status === 'suspended' ? endDate : null,
+        })
+        .eq("id", id);
 
-      const { error } = await supabase.from("drivers").insert(driversToInsert);
       if (error) throw error;
-
-      toast({ title: "Success", description: `Imported ${driversToInsert.length} drivers` });
+      toast({ title: `${type === 'driver' ? 'Driver' : 'Helper'} status updated successfully` });
       fetchAll();
-    } catch (err: any) {
-      toast({ title: "Import Error", description: err.message, variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     }
-
-    if (driverFileRef.current) driverFileRef.current.value = '';
-  };
-
-  const handleHelperImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const text = await file.text();
-    const rows = parseCSV(text);
-
-    try {
-      const helpersToInsert = rows.map(row => ({
-        name: row.name,
-        id_number: row.id_number || `HLP-${Date.now().toString().slice(-6)}`,
-        birthdate: row.birthdate || null,
-        contact_number: row.contact_number || null
-      }));
-
-      const { error } = await supabase.from("helpers").insert(helpersToInsert);
-      if (error) throw error;
-
-      toast({ title: "Success", description: `Imported ${helpersToInsert.length} helpers` });
-      fetchAll();
-    } catch (err: any) {
-      toast({ title: "Import Error", description: err.message, variant: "destructive" });
-    }
-
-    if (helperFileRef.current) helperFileRef.current.value = '';
   };
 
   useEffect(() => {
     fetchAll();
   }, []);
 
+  const handleExportDrivers = () => {
+    const csv = generateCSV(drivers, ["name", "license_number", "id_number"]);
+    downloadCSV(csv, "drivers.csv");
+  };
+
+  const handleExportHelpers = () => {
+    const csv = generateCSV(helpers, ["name", "id_number"]);
+    downloadCSV(csv, "helpers.csv");
+  };
+
+  const handleImportDrivers = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = parseCSV(text);
+      const { error } = await supabase.from("drivers").insert(parsed);
+      if (error) throw error;
+      toast({ title: "Drivers imported successfully" });
+      fetchAll();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleImportHelpers = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = parseCSV(text);
+      const { error } = await supabase.from("helpers").insert(parsed);
+      if (error) throw error;
+      toast({ title: "Helpers imported successfully" });
+      fetchAll();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  if (loading) return <Skeleton className="h-96" />;
+  if (error) return <div className="text-destructive">{error}</div>;
+
   return (
-    <>
+    <div className="space-y-6">
       <ExpiringLicensesAlert />
       
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Drivers</CardTitle>
-                <CardDescription>Licensed vehicle operators</CardDescription>
-              </div>
-              {isAdmin && (
-                <div className="flex gap-2">
-                  {selectedDrivers.size > 0 && (
-                    <Button 
-                      variant="destructive" 
-                      size="sm"
-                      onClick={() => {
-                        setDeleteType('drivers');
-                        setDeleteDialogOpen(true);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete ({selectedDrivers.size})
-                    </Button>
-                  )}
-                  <Button variant="outline" size="sm" onClick={downloadDriverTemplate}>
-                    <Download className="h-4 w-4 mr-2" />Template
+      <Card>
+        <CardHeader>
+          <CardTitle>Drivers</CardTitle>
+          <CardDescription>Manage your drivers and their information</CardDescription>
+          <div className="flex gap-2 mt-4">
+            {isAdmin && (
+              <>
+                <AddDriverDialog profile={profile} onAdded={fetchAll} />
+                <Button variant="outline" size="sm" onClick={handleExportDrivers}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Export
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => driverFileRef.current?.click()}>
+                  <Upload className="w-4 h-4 mr-2" />
+                  Import
+                </Button>
+                <input
+                  ref={driverFileRef}
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={handleImportDrivers}
+                />
+                {selectedDrivers.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      setDeleteType('drivers');
+                      setDeleteDialogOpen(true);
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete ({selectedDrivers.size})
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => driverFileRef.current?.click()}>
-                    <Upload className="h-4 w-4 mr-2" />Import CSV
-                  </Button>
-                  <input
-                    ref={driverFileRef}
-                    type="file"
-                    accept=".csv"
-                    onChange={handleDriverImport}
-                    className="hidden"
-                  />
-                  <AddDriverDialog profile={profile} onAdded={fetchAll} />
-                </div>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
-            ) : error ? (
-              <p className="text-destructive">{error}</p>
-            ) : drivers.length === 0 ? (
-              <p className="text-muted-foreground">No drivers yet.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {isAdmin && (
-                      <TableHead className="w-12">
-                        <Checkbox
-                          checked={selectedDrivers.size === drivers.length}
-                          onCheckedChange={toggleSelectAllDrivers}
-                        />
-                      </TableHead>
-                    )}
-                    <TableHead>Name</TableHead>
-                    <TableHead>License</TableHead>
-                    <TableHead>License Status</TableHead>
-                    <TableHead>Availability</TableHead>
-                    {isAdmin && <TableHead>Actions</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {drivers.map((d) => {
-                    const licenseStatus = getLicenseStatus(d.license_expiry_date);
-                    return (
-                      <TableRow key={d.id}>
-                        {isAdmin && (
-                          <TableCell>
-                            <Checkbox
-                              checked={selectedDrivers.has(d.id)}
-                              onCheckedChange={() => toggleSelectDriver(d.id)}
-                            />
-                          </TableCell>
-                        )}
-                        <TableCell className="font-medium">{d.name}</TableCell>
-                        <TableCell>{d.license_number || "N/A"}</TableCell>
-                        <TableCell>
-                          <Badge variant={licenseStatus.variant}>
-                            {licenseStatus.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm">{formatAvailability(d.availability)}</TableCell>
-                        {isAdmin && (
-                          <TableCell>
-                            <div className="flex gap-1">
-                              {d.license_file_url && (
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => {
-                                    setPreviewDriver(d);
-                                    setLicensePreviewOpen(true);
-                                  }}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                              )}
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                onClick={() => {
-                                  setEditingDriver(d);
-                                  setDriverEditOpen(true);
-                                }}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                )}
+              </>
             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Helpers</CardTitle>
-                <CardDescription>Collection assistants</CardDescription>
-              </div>
-              {isAdmin && (
-                <div className="flex gap-2">
-                  {selectedHelpers.size > 0 && (
-                    <Button 
-                      variant="destructive" 
-                      size="sm"
-                      onClick={() => {
-                        setDeleteType('helpers');
-                        setDeleteDialogOpen(true);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete ({selectedHelpers.size})
-                    </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {isAdmin && (
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedDrivers.size === drivers.length && drivers.length > 0}
+                      onCheckedChange={toggleSelectAllDrivers}
+                    />
+                  </TableHead>
+                )}
+                <TableHead>Name</TableHead>
+                <TableHead>License</TableHead>
+                <TableHead>License Status</TableHead>
+                <TableHead>Employment Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {drivers.map((driver) => (
+                <TableRow key={driver.id}>
+                  {isAdmin && (
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedDrivers.has(driver.id)}
+                        onCheckedChange={() => toggleSelectDriver(driver.id)}
+                      />
+                    </TableCell>
                   )}
-                  <Button variant="outline" size="sm" onClick={downloadHelperTemplate}>
-                    <Download className="h-4 w-4 mr-2" />Template
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => helperFileRef.current?.click()}>
-                    <Upload className="h-4 w-4 mr-2" />Import CSV
-                  </Button>
-                  <input
-                    ref={helperFileRef}
-                    type="file"
-                    accept=".csv"
-                    onChange={handleHelperImport}
-                    className="hidden"
-                  />
-                  <AddHelperDialog profile={profile} onAdded={fetchAll} />
-                </div>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
-            ) : error ? (
-              <p className="text-destructive">{error}</p>
-            ) : helpers.length === 0 ? (
-              <p className="text-muted-foreground">No helpers yet.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {isAdmin && (
-                      <TableHead className="w-12">
-                        <Checkbox
-                          checked={selectedHelpers.size === helpers.length}
-                          onCheckedChange={toggleSelectAllHelpers}
-                        />
-                      </TableHead>
-                    )}
-                    <TableHead>Name</TableHead>
-                    <TableHead>ID Number</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Availability</TableHead>
-                    {isAdmin && <TableHead>Actions</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {helpers.map((h) => (
-                    <TableRow key={h.id}>
-                      {isAdmin && (
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedHelpers.has(h.id)}
-                            onCheckedChange={() => toggleSelectHelper(h.id)}
-                          />
-                        </TableCell>
+                  <TableCell>{driver.name}</TableCell>
+                  <TableCell>{driver.license_number || "N/A"}</TableCell>
+                  <TableCell>
+                    {getLicenseStatus(driver.license_expiry_date)}
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      value={driver.status || 'available'}
+                      onValueChange={(value) => handleStatusChange(driver.id, value, 'driver', driver.name)}
+                      disabled={!isAdmin}
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="available">Available</SelectItem>
+                        <SelectItem value="suspended">Suspended</SelectItem>
+                        <SelectItem value="fired">Fired</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      {driver.license_file_url && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setPreviewDriver(driver);
+                            setLicensePreviewOpen(true);
+                          }}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
                       )}
-                      <TableCell className="font-medium">{h.name}</TableCell>
-                      <TableCell>{h.id_number || "N/A"}</TableCell>
-                      <TableCell>{h.contact_number || "N/A"}</TableCell>
-                      <TableCell className="text-sm">{formatAvailability(h.availability)}</TableCell>
                       {isAdmin && (
-                        <TableCell>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={() => {
-                              setEditingHelper(h);
-                              setHelperEditOpen(true);
-                            }}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditingDriver(driver);
+                            setDriverEditOpen(true);
+                          }}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
                       )}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Helpers</CardTitle>
+          <CardDescription>Manage your helpers and their information</CardDescription>
+          <div className="flex gap-2 mt-4">
+            {isAdmin && (
+              <>
+                <AddHelperDialog profile={profile} onAdded={fetchAll} />
+                <Button variant="outline" size="sm" onClick={handleExportHelpers}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Export
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => helperFileRef.current?.click()}>
+                  <Upload className="w-4 h-4 mr-2" />
+                  Import
+                </Button>
+                <input
+                  ref={helperFileRef}
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={handleImportHelpers}
+                />
+                {selectedHelpers.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      setDeleteType('helpers');
+                      setDeleteDialogOpen(true);
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete ({selectedHelpers.size})
+                  </Button>
+                )}
+              </>
             )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {isAdmin && (
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedHelpers.size === helpers.length && helpers.length > 0}
+                      onCheckedChange={toggleSelectAllHelpers}
+                    />
+                  </TableHead>
+                )}
+                <TableHead>Name</TableHead>
+                <TableHead>Employment Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {helpers.map((helper) => (
+                <TableRow key={helper.id}>
+                  {isAdmin && (
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedHelpers.has(helper.id)}
+                        onCheckedChange={() => toggleSelectHelper(helper.id)}
+                      />
+                    </TableCell>
+                  )}
+                  <TableCell>{helper.name}</TableCell>
+                  <TableCell>
+                    <Select
+                      value={helper.status || 'available'}
+                      onValueChange={(value) => handleStatusChange(helper.id, value, 'helper', helper.name)}
+                      disabled={!isAdmin}
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="available">Available</SelectItem>
+                        <SelectItem value="suspended">Suspended</SelectItem>
+                        <SelectItem value="fired">Fired</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {isAdmin && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditingHelper(helper);
+                          setHelperEditOpen(true);
+                        }}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
-      {editingDriver && (
-        <DriverEditDialog
-          driver={editingDriver}
-          open={driverEditOpen}
-          onOpenChange={setDriverEditOpen}
-          onUpdated={fetchAll}
-        />
-      )}
+      <DriverEditDialog
+        driver={editingDriver}
+        open={driverEditOpen}
+        onOpenChange={setDriverEditOpen}
+        onUpdated={fetchAll}
+      />
 
-      {editingHelper && (
-        <HelperEditDialog
-          helper={editingHelper}
-          open={helperEditOpen}
-          onOpenChange={setHelperEditOpen}
-          onUpdated={fetchAll}
-        />
-      )}
-
-      {previewDriver && (
-        <LicensePreviewDialog
-          licenseUrl={previewDriver.license_file_url}
-          driverName={previewDriver.name}
-          open={licensePreviewOpen}
-          onOpenChange={setLicensePreviewOpen}
-        />
-      )}
+      <HelperEditDialog
+        helper={editingHelper}
+        open={helperEditOpen}
+        onOpenChange={setHelperEditOpen}
+        onUpdated={fetchAll}
+      />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Mass Delete</AlertDialogTitle>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {deleteType === 'drivers' ? selectedDrivers.size : selectedHelpers.size} {deleteType}? 
-              This action cannot be undone.
+              This will permanently delete {deleteType === 'drivers' ? selectedDrivers.size : selectedHelpers.size} {deleteType}. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -491,7 +513,50 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+
+      <LicensePreviewDialog
+        licenseUrl={previewDriver?.license_file_url || null}
+        driverName={previewDriver?.name || ""}
+        open={licensePreviewOpen}
+        onOpenChange={setLicensePreviewOpen}
+      />
+
+      <Dialog open={suspensionDialogOpen} onOpenChange={setSuspensionDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Suspend {suspensionTarget?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="suspensionStart">Suspension Start Date</Label>
+              <Input
+                id="suspensionStart"
+                type="date"
+                value={suspensionStartDate}
+                onChange={(e) => setSuspensionStartDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="suspensionEnd">Suspension End Date</Label>
+              <Input
+                id="suspensionEnd"
+                type="date"
+                value={suspensionEndDate}
+                onChange={(e) => setSuspensionEndDate(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSuspensionDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSuspensionSubmit}>
+              Confirm Suspension
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 
