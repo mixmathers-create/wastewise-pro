@@ -38,6 +38,35 @@ export function MechanicsTimeTracking() {
     };
   }, []);
 
+  useEffect(() => {
+    const initCamera = async () => {
+      if (!showCamera || capturedPhoto || !videoRef.current) return;
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: "user",
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false 
+        });
+        
+        streamRef.current = stream;
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+      } catch (error: any) {
+        toast({ title: "Camera Error", description: error.message, variant: "destructive" });
+        setShowCamera(false);
+      }
+    };
+
+    initCamera();
+  }, [showCamera, capturedPhoto]);
+
   const fetchMechanics = async () => {
     const { data } = await supabase.from("mechanics").select("*").order("name");
     setMechanics(data || []);
@@ -74,35 +103,7 @@ export function MechanicsTimeTracking() {
       return;
     }
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          facingMode: "user",
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        },
-        audio: false 
-      });
-      streamRef.current = stream;
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        
-        // Wait for video metadata to load
-        await new Promise((resolve) => {
-          if (videoRef.current) {
-            videoRef.current.onloadedmetadata = () => {
-              videoRef.current?.play();
-              resolve(true);
-            };
-          }
-        });
-      }
-      
-      setShowCamera(true);
-    } catch (error: any) {
-      toast({ title: "Camera Error", description: error.message, variant: "destructive" });
-    }
+    setShowCamera(true);
   };
 
   const capturePhoto = () => {
@@ -288,7 +289,13 @@ export function MechanicsTimeTracking() {
             <div className="space-y-4">
               {showCamera && !capturedPhoto && (
                 <div className="relative">
-                  <video ref={videoRef} autoPlay className="w-full rounded-lg" />
+                  <video 
+                    ref={videoRef} 
+                    autoPlay 
+                    playsInline 
+                    muted
+                    className="w-full rounded-lg bg-black" 
+                  />
                   <canvas ref={canvasRef} className="hidden" />
                   <div className="flex justify-center gap-2 mt-4">
                     <Button onClick={capturePhoto}>Capture Photo</Button>
