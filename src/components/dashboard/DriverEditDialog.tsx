@@ -35,6 +35,9 @@ const DriverEditDialog = ({
   const [doubleShift, setDoubleShift] = useState(false);
   const [licenseFile, setLicenseFile] = useState<File | null>(null);
   const [licenseExpiryDate, setLicenseExpiryDate] = useState("");
+  const [status, setStatus] = useState("available");
+  const [suspensionStartDate, setSuspensionStartDate] = useState("");
+  const [suspensionEndDate, setSuspensionEndDate] = useState("");
 
   useEffect(() => {
     if (driver) {
@@ -44,6 +47,9 @@ const DriverEditDialog = ({
       setBirthdate(driver.birthdate || "");
       setContactNumber(driver.contact_number || "");
       setLicenseExpiryDate(driver.license_expiry_date || "");
+      setStatus(driver.status || "available");
+      setSuspensionStartDate(driver.suspension_start_date || "");
+      setSuspensionEndDate(driver.suspension_end_date || "");
       
       const availability = driver.availability || { days: ["Mon", "Tue", "Wed", "Thu", "Fri"], shifts: ["AM", "PM"], doubleShift: false };
       setAvailableDays(availability.days || []);
@@ -66,6 +72,19 @@ const DriverEditDialog = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate suspension dates
+    if (status === 'suspended') {
+      if (!suspensionStartDate || !suspensionEndDate) {
+        toast({ title: "Error", description: "Suspension dates are required when status is suspended", variant: "destructive" });
+        return;
+      }
+      if (new Date(suspensionEndDate) < new Date(suspensionStartDate)) {
+        toast({ title: "Error", description: "Suspension end date must be after start date", variant: "destructive" });
+        return;
+      }
+    }
+    
     setLoading(true);
     try {
       let licenseFileUrl = driver.license_file_url;
@@ -100,6 +119,9 @@ const DriverEditDialog = ({
           contact_number: contactNumber || null,
           license_file_url: licenseFileUrl,
           license_expiry_date: licenseExpiryDate || null,
+          status,
+          suspension_start_date: status === 'suspended' ? suspensionStartDate : null,
+          suspension_end_date: status === 'suspended' ? suspensionEndDate : null,
           availability: {
             days: availableDays,
             shifts: availableShifts,
@@ -153,6 +175,45 @@ const DriverEditDialog = ({
             <Label htmlFor="contactNumber">Contact Number</Label>
             <Input id="contactNumber" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="+63 XXX XXX XXXX" required />
           </div>
+
+          <div className="border-t pt-4">
+            <Label htmlFor="status">Employment Status</Label>
+            <select 
+              id="status" 
+              value={status} 
+              onChange={(e) => setStatus(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="available">Available</option>
+              <option value="suspended">Suspended</option>
+              <option value="fired">Fired</option>
+            </select>
+          </div>
+
+          {status === 'suspended' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="suspensionStart">Suspension Start Date</Label>
+                <Input 
+                  id="suspensionStart" 
+                  type="date" 
+                  value={suspensionStartDate} 
+                  onChange={(e) => setSuspensionStartDate(e.target.value)} 
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="suspensionEnd">Suspension End Date</Label>
+                <Input 
+                  id="suspensionEnd" 
+                  type="date" 
+                  value={suspensionEndDate} 
+                  onChange={(e) => setSuspensionEndDate(e.target.value)} 
+                  required
+                />
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4 border-t pt-4">
             <div>
