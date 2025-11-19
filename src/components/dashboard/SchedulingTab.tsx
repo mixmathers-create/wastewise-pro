@@ -649,11 +649,9 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
 
   const sortedDates = Object.keys(groupedSchedules).sort();
   
-  // Filter schedules by selected date (show ±7 days)
-  const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
-  const minDate = format(addDays(selectedDate, -7), "yyyy-MM-dd");
-  const maxDate = format(addDays(selectedDate, 7), "yyyy-MM-dd");
-  const visibleDates = sortedDates.filter(d => d >= minDate && d <= maxDate);
+  // Filter schedules to show only today and future dates
+  const today = format(new Date(), "yyyy-MM-dd");
+  const visibleDates = sortedDates.filter(d => d >= today);
 
   return (
     <div className="space-y-4">
