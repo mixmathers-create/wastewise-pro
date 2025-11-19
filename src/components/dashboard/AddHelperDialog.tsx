@@ -20,8 +20,10 @@ const AddHelperDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
     e.preventDefault();
     setLoading(true);
     try {
-      // Generate ID number
-      const generatedId = `HLP-${Date.now().toString().slice(-6)}`;
+      // Generate ABC-123456789 format
+      const letters = Array.from({length: 3}, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
+      const numbers = Array.from({length: 9}, () => Math.floor(Math.random() * 10)).join('');
+      const generatedId = `${letters}-${numbers}`;
       
       const { error } = await supabase.from("helpers").insert({
         name,

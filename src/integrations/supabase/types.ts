@@ -382,6 +382,110 @@ export type Database = {
           },
         ]
       }
+      mechanic_consumable_checkouts: {
+        Row: {
+          checked_out_at: string | null
+          checked_out_by_user_id: string | null
+          consumable_id: string
+          created_at: string | null
+          id: string
+          job_order_id: string
+          mechanic_id: string
+          notes: string | null
+          quantity_used: number
+          truck_id: string
+        }
+        Insert: {
+          checked_out_at?: string | null
+          checked_out_by_user_id?: string | null
+          consumable_id: string
+          created_at?: string | null
+          id?: string
+          job_order_id: string
+          mechanic_id: string
+          notes?: string | null
+          quantity_used: number
+          truck_id: string
+        }
+        Update: {
+          checked_out_at?: string | null
+          checked_out_by_user_id?: string | null
+          consumable_id?: string
+          created_at?: string | null
+          id?: string
+          job_order_id?: string
+          mechanic_id?: string
+          notes?: string | null
+          quantity_used?: number
+          truck_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mechanic_consumable_checkouts_consumable_id_fkey"
+            columns: ["consumable_id"]
+            isOneToOne: false
+            referencedRelation: "mechanic_consumables"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mechanic_consumable_checkouts_job_order_id_fkey"
+            columns: ["job_order_id"]
+            isOneToOne: false
+            referencedRelation: "job_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mechanic_consumable_checkouts_mechanic_id_fkey"
+            columns: ["mechanic_id"]
+            isOneToOne: false
+            referencedRelation: "mechanics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mechanic_consumable_checkouts_truck_id_fkey"
+            columns: ["truck_id"]
+            isOneToOne: false
+            referencedRelation: "trucks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mechanic_consumables: {
+        Row: {
+          category: string
+          code: string
+          created_at: string | null
+          id: string
+          min_stock_level: number | null
+          name: string
+          quantity: number | null
+          status: string | null
+          unit: string
+        }
+        Insert: {
+          category: string
+          code: string
+          created_at?: string | null
+          id?: string
+          min_stock_level?: number | null
+          name: string
+          quantity?: number | null
+          status?: string | null
+          unit: string
+        }
+        Update: {
+          category?: string
+          code?: string
+          created_at?: string | null
+          id?: string
+          min_stock_level?: number | null
+          name?: string
+          quantity?: number | null
+          status?: string | null
+          unit?: string
+        }
+        Relationships: []
+      }
       mechanic_time_logs: {
         Row: {
           created_at: string

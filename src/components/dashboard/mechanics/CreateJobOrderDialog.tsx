@@ -49,7 +49,10 @@ export function CreateJobOrderDialog({ open, onOpenChange, onSuccess }: CreateJo
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) throw new Error("Not authenticated");
 
-      const jobNumber = `JO-${Date.now()}`;
+      // Generate ABC-123456789 format
+      const letters = Array.from({length: 3}, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
+      const numbers = Array.from({length: 9}, () => Math.floor(Math.random() * 10)).join('');
+      const jobNumber = `${letters}-${numbers}`;
 
       const { error } = await supabase.from("job_orders").insert({
         job_number: jobNumber,

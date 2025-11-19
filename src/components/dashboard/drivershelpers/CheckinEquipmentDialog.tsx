@@ -18,6 +18,12 @@ export function CheckinEquipmentDialog({ checkout, open, onOpenChange, onSuccess
   const { toast } = useToast();
 
   const handleCheckin = async () => {
+    // Check if equipment is consumable
+    if (checkout.equipment_inventory?.is_consumable) {
+      toast({ title: "Error", description: "Consumable items cannot be checked in", variant: "destructive" });
+      return;
+    }
+
     if (returnQuantity > checkout.quantity) {
       toast({ title: "Error", description: "Cannot return more than checked out", variant: "destructive" });
       return;
