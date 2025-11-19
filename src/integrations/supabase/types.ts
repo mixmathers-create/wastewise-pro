@@ -147,6 +147,9 @@ export type Database = {
           license_file_url: string | null
           license_number: string | null
           name: string
+          status: string | null
+          suspension_end_date: string | null
+          suspension_start_date: string | null
         }
         Insert: {
           availability?: Json | null
@@ -159,6 +162,9 @@ export type Database = {
           license_file_url?: string | null
           license_number?: string | null
           name: string
+          status?: string | null
+          suspension_end_date?: string | null
+          suspension_start_date?: string | null
         }
         Update: {
           availability?: Json | null
@@ -171,6 +177,9 @@ export type Database = {
           license_file_url?: string | null
           license_number?: string | null
           name?: string
+          status?: string | null
+          suspension_end_date?: string | null
+          suspension_start_date?: string | null
         }
         Relationships: []
       }
@@ -183,6 +192,9 @@ export type Database = {
           id: string
           id_number: string | null
           name: string
+          status: string | null
+          suspension_end_date: string | null
+          suspension_start_date: string | null
         }
         Insert: {
           availability?: Json | null
@@ -192,6 +204,9 @@ export type Database = {
           id?: string
           id_number?: string | null
           name: string
+          status?: string | null
+          suspension_end_date?: string | null
+          suspension_start_date?: string | null
         }
         Update: {
           availability?: Json | null
@@ -201,6 +216,9 @@ export type Database = {
           id?: string
           id_number?: string | null
           name?: string
+          status?: string | null
+          suspension_end_date?: string | null
+          suspension_start_date?: string | null
         }
         Relationships: []
       }

@@ -29,12 +29,18 @@ interface Driver {
   name: string;
   availability?: any;
   license_expiry_date?: string | null;
+  status?: string;
+  suspension_start_date?: string | null;
+  suspension_end_date?: string | null;
 }
 
 interface Helper {
   id: string;
   name: string;
   availability?: any;
+  status?: string;
+  suspension_start_date?: string | null;
+  suspension_end_date?: string | null;
 }
 
 interface TruckType {
@@ -194,6 +200,51 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
     const today = new Date();
     const expiryDate = new Date(driver.license_expiry_date);
     return expiryDate < today;
+  };
+
+  const canAssignDriver = (driver: Driver, scheduleDate?: string): { canAssign: boolean; reason?: string } => {
+    // Check if fired
+    if (driver.status === 'fired') {
+      return { canAssign: false, reason: 'Driver has been terminated' };
+    }
+    
+    // Check if license expired
+    if (isDriverLicenseExpired(driver)) {
+      return { canAssign: false, reason: 'License has expired' };
+    }
+    
+    // Check if suspended
+    if (driver.status === 'suspended' && driver.suspension_start_date && driver.suspension_end_date) {
+      const checkDate = scheduleDate ? new Date(scheduleDate) : new Date();
+      const suspensionStart = new Date(driver.suspension_start_date);
+      const suspensionEnd = new Date(driver.suspension_end_date);
+      
+      if (checkDate >= suspensionStart && checkDate <= suspensionEnd) {
+        return { canAssign: false, reason: `Suspended until ${new Date(driver.suspension_end_date).toLocaleDateString()}` };
+      }
+    }
+    
+    return { canAssign: true };
+  };
+
+  const canAssignHelper = (helper: Helper, scheduleDate?: string): { canAssign: boolean; reason?: string } => {
+    // Check if fired
+    if (helper.status === 'fired') {
+      return { canAssign: false, reason: 'Helper has been terminated' };
+    }
+    
+    // Check if suspended
+    if (helper.status === 'suspended' && helper.suspension_start_date && helper.suspension_end_date) {
+      const checkDate = scheduleDate ? new Date(scheduleDate) : new Date();
+      const suspensionStart = new Date(helper.suspension_start_date);
+      const suspensionEnd = new Date(helper.suspension_end_date);
+      
+      if (checkDate >= suspensionStart && checkDate <= suspensionEnd) {
+        return { canAssign: false, reason: `Suspended until ${new Date(helper.suspension_end_date).toLocaleDateString()}` };
+      }
+    }
+    
+    return { canAssign: true };
   };
 
   const updateTruckDeployment = (date: string, shift: string, field: "trucks" | "mt", value: string) => {
@@ -421,16 +472,37 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   };
 
   const updateSchedule = async (schedule: Schedule) => {
-    // Validate driver license
+    // Validate driver
     if (schedule.driver_id) {
       const selectedDriver = drivers.find(d => d.id === schedule.driver_id);
-      if (selectedDriver && isDriverLicenseExpired(selectedDriver)) {
-        toast({ 
-          title: "Cannot assign driver", 
-          description: "Driver's license has expired. Please update the license before assigning.", 
-          variant: "destructive" 
-        });
-        return;
+      if (selectedDriver) {
+        const driverCheck = canAssignDriver(selectedDriver, schedule.date);
+        if (!driverCheck.canAssign) {
+          toast({ 
+            title: "Cannot assign driver", 
+            description: driverCheck.reason, 
+            variant: "destructive" 
+          });
+          return;
+        }
+      }
+    }
+
+    // Validate helpers
+    if (schedule.helper_ids && schedule.helper_ids.length > 0) {
+      for (const helperId of schedule.helper_ids) {
+        const helper = helpers.find(h => h.id === helperId);
+        if (helper) {
+          const helperCheck = canAssignHelper(helper, schedule.date);
+          if (!helperCheck.canAssign) {
+            toast({ 
+              title: "Cannot assign helper", 
+              description: `${helper.name}: ${helperCheck.reason}`, 
+              variant: "destructive" 
+            });
+            return;
+          }
+        }
       }
     }
 
@@ -1021,15 +1093,15 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                 </SelectTrigger>
                 <SelectContent>
                   {drivers.map(d => {
-                    const isExpired = isDriverLicenseExpired(d);
+                    const assignCheck = canAssignDriver(d, editingSchedule?.date);
                     return (
                       <SelectItem 
                         key={d.id} 
                         value={d.id} 
                         className="text-xs"
-                        disabled={isExpired}
+                        disabled={!assignCheck.canAssign}
                       >
-                        {d.name} {isExpired && <span className="text-destructive ml-1">(License Expired)</span>}
+                        {d.name} {!assignCheck.canAssign && <span className="text-destructive ml-1">({assignCheck.reason})</span>}
                       </SelectItem>
                     );
                   })}
@@ -1057,21 +1129,27 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
             <div>
               <Label className="text-xs">Helpers</Label>
               <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
-                {helpers.map(h => (
-                  <div key={h.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      checked={editingSchedule?.helper_ids?.includes(h.id)}
-                      onCheckedChange={(checked) => {
-                        const currentHelpers = editingSchedule?.helper_ids || [];
-                        const newHelpers = checked
-                          ? [...currentHelpers, h.id]
-                          : currentHelpers.filter(id => id !== h.id);
-                        setEditingSchedule({ ...editingSchedule!, helper_ids: newHelpers });
-                      }}
-                    />
-                    <Label className="text-xs">{h.name}</Label>
-                  </div>
-                ))}
+                {helpers.map(h => {
+                  const helperCheck = canAssignHelper(h, editingSchedule?.date);
+                  return (
+                    <div key={h.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        checked={editingSchedule?.helper_ids?.includes(h.id)}
+                        disabled={!helperCheck.canAssign}
+                        onCheckedChange={(checked) => {
+                          const currentHelpers = editingSchedule?.helper_ids || [];
+                          const newHelpers = checked
+                            ? [...currentHelpers, h.id]
+                            : currentHelpers.filter(id => id !== h.id);
+                          setEditingSchedule({ ...editingSchedule!, helper_ids: newHelpers });
+                        }}
+                      />
+                      <Label className="text-xs">
+                        {h.name} {!helperCheck.canAssign && <span className="text-destructive text-[10px]">({helperCheck.reason})</span>}
+                      </Label>
+                    </div>
+                  );
+                })}
               </div>
             </div>
             <div className="flex gap-2">
