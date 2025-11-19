@@ -1,11 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import EquipmentInventory from "./drivershelpers/EquipmentInventory";
-
-// Import will be resolved through circular reference resolution
-const DriversHelpersInventory = ({ profile }: { profile: any }) => {
-  // This will be the personnel management component
-  return <div>Drivers and Helpers content here</div>;
-};
+import DriversHelpersPersonnel from "./drivershelpers/DriversHelpersPersonnel";
 
 export default function DriversHelpersTab({ profile }: { profile: any }) {
   return (
@@ -16,7 +11,7 @@ export default function DriversHelpersTab({ profile }: { profile: any }) {
       </TabsList>
       
       <TabsContent value="personnel">
-        <DriversHelpersInventory profile={profile} />
+        <DriversHelpersPersonnel profile={profile} />
       </TabsContent>
       
       <TabsContent value="equipment">
