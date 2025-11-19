@@ -183,6 +183,103 @@ export type Database = {
         }
         Relationships: []
       }
+      equipment_checkouts: {
+        Row: {
+          assigned_to_type: string
+          checked_in_at: string | null
+          checked_out_at: string
+          created_at: string
+          driver_id: string | null
+          equipment_id: string
+          helper_id: string | null
+          id: string
+          notes: string | null
+          quantity: number | null
+          status: string | null
+        }
+        Insert: {
+          assigned_to_type: string
+          checked_in_at?: string | null
+          checked_out_at?: string
+          created_at?: string
+          driver_id?: string | null
+          equipment_id: string
+          helper_id?: string | null
+          id?: string
+          notes?: string | null
+          quantity?: number | null
+          status?: string | null
+        }
+        Update: {
+          assigned_to_type?: string
+          checked_in_at?: string | null
+          checked_out_at?: string
+          created_at?: string
+          driver_id?: string | null
+          equipment_id?: string
+          helper_id?: string | null
+          id?: string
+          notes?: string | null
+          quantity?: number | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipment_checkouts_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_checkouts_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_inventory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_checkouts_helper_id_fkey"
+            columns: ["helper_id"]
+            isOneToOne: false
+            referencedRelation: "helpers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      equipment_inventory: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          is_consumable: boolean | null
+          name: string
+          quantity: number | null
+          status: string | null
+          type: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          is_consumable?: boolean | null
+          name: string
+          quantity?: number | null
+          status?: string | null
+          type: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          is_consumable?: boolean | null
+          name?: string
+          quantity?: number | null
+          status?: string | null
+          type?: string
+        }
+        Relationships: []
+      }
       helpers: {
         Row: {
           availability: Json | null
@@ -467,9 +564,13 @@ export type Database = {
       tool_checkouts: {
         Row: {
           checked_in_at: string | null
+          checked_in_by_user_id: string | null
           checked_out_at: string
+          checked_out_by_user_id: string | null
+          checkin_photo_url: string | null
           created_at: string
           id: string
+          job_order_id: string | null
           mechanic_id: string
           notes: string | null
           status: string | null
@@ -477,9 +578,13 @@ export type Database = {
         }
         Insert: {
           checked_in_at?: string | null
+          checked_in_by_user_id?: string | null
           checked_out_at?: string
+          checked_out_by_user_id?: string | null
+          checkin_photo_url?: string | null
           created_at?: string
           id?: string
+          job_order_id?: string | null
           mechanic_id: string
           notes?: string | null
           status?: string | null
@@ -487,15 +592,26 @@ export type Database = {
         }
         Update: {
           checked_in_at?: string | null
+          checked_in_by_user_id?: string | null
           checked_out_at?: string
+          checked_out_by_user_id?: string | null
+          checkin_photo_url?: string | null
           created_at?: string
           id?: string
+          job_order_id?: string | null
           mechanic_id?: string
           notes?: string | null
           status?: string | null
           tool_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tool_checkouts_job_order_id_fkey"
+            columns: ["job_order_id"]
+            isOneToOne: false
+            referencedRelation: "job_orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tool_checkouts_mechanic_id_fkey"
             columns: ["mechanic_id"]

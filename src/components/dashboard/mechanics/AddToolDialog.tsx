@@ -15,18 +15,29 @@ interface AddToolDialogProps {
 
 export function AddToolDialog({ open, onOpenChange, onSuccess }: AddToolDialogProps) {
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
   const [category, setCategory] = useState("");
   const [condition, setCondition] = useState("good");
   const { toast } = useToast();
+
+  const toolCategories = [
+    "Power Tools",
+    "Hand Tools",
+    "Diagnostic Equipment",
+    "Lifting Equipment",
+    "Safety Equipment",
+    "Welding Equipment",
+    "Other"
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
+      const autoCode = `TOOL-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+      
       const { error } = await supabase.from("tools").insert({
         name,
-        code,
+        code: autoCode,
         category: category || null,
         condition,
         status: "available"
@@ -34,11 +45,10 @@ export function AddToolDialog({ open, onOpenChange, onSuccess }: AddToolDialogPr
 
       if (error) throw error;
 
-      toast({ title: "Success", description: "Tool added successfully" });
+      toast({ title: "Success", description: `Tool added with code: ${autoCode}` });
       onSuccess();
       onOpenChange(false);
       setName("");
-      setCode("");
       setCategory("");
       setCondition("good");
     } catch (error: any) {
@@ -58,12 +68,19 @@ export function AddToolDialog({ open, onOpenChange, onSuccess }: AddToolDialogPr
             <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <div>
-            <Label htmlFor="code">Tool Code *</Label>
-            <Input id="code" value={code} onChange={(e) => setCode(e.target.value)} required />
-          </div>
-          <div>
             <Label htmlFor="category">Category</Label>
-            <Input id="category" value={category} onChange={(e) => setCategory(e.target.value)} />
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent className="bg-background z-50">
+                {toolCategories.map((cat) => (
+                  <SelectItem key={cat} value={cat}>
+                    {cat}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label htmlFor="condition">Condition</Label>
