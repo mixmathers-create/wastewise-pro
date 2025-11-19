@@ -1,8 +1,8 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import html2canvas from 'html2canvas';
 
-// Define the plugin interface
-interface BluetoothPrinterPlugin {
+// Define the plugin interface for AIDL-based printer
+interface PrinterPlugin {
   connect(): Promise<{ success: boolean; name?: string; encoding?: string; serviceVersion?: string }>;
   disconnect(): Promise<void>;
   printText(options: { text: string; align: number }): Promise<void>;
@@ -19,8 +19,8 @@ interface BluetoothPrinterPlugin {
   printEpson(options: { data: string }): Promise<void>;
 }
 
-// Register the custom BluetoothPrinter plugin
-const BluetoothPrinter = registerPlugin<BluetoothPrinterPlugin>('BluetoothPrinter');
+// Register the custom Printer plugin (uses AIDL)
+const Printer = registerPlugin<PrinterPlugin>('Printer');
 
 /**
  * H10P Internal Printer Service

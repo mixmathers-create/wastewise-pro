@@ -12,8 +12,8 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         Log.d("MainActivity", "Registering custom plugins");
         // Register custom plugins
-        registerPlugin(BluetoothPrinterPlugin.class);
-        Log.d("MainActivity", "Registered BluetoothPrinterPlugin");
+        registerPlugin(PrinterPlugin.class);
+        Log.d("MainActivity", "Registered PrinterPlugin");
         registerPlugin(CameraPlugin.class);
         Log.d("MainActivity", "Registered CameraPlugin");
     }
