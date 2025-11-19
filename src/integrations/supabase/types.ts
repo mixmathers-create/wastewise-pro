@@ -143,6 +143,8 @@ export type Database = {
           created_at: string
           id: string
           id_number: string | null
+          license_expiry_date: string | null
+          license_file_url: string | null
           license_number: string | null
           name: string
         }
@@ -153,6 +155,8 @@ export type Database = {
           created_at?: string
           id?: string
           id_number?: string | null
+          license_expiry_date?: string | null
+          license_file_url?: string | null
           license_number?: string | null
           name: string
         }
@@ -163,6 +167,8 @@ export type Database = {
           created_at?: string
           id?: string
           id_number?: string | null
+          license_expiry_date?: string | null
+          license_file_url?: string | null
           license_number?: string | null
           name?: string
         }
@@ -391,6 +397,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_expiring_licenses: {
+        Args: never
+        Returns: {
+          days_until_expiry: number
+          id: string
+          license_expiry_date: string
+          license_number: string
+          name: string
+        }[]
+      }
       get_user_team_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
