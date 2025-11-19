@@ -204,14 +204,52 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
     fetchAll();
   }, []);
 
+  const handleDownloadDriverTemplate = () => {
+    const headers = ['name', 'license_number', 'id_number', 'birthdate', 'contact_number', 'license_expiry_date', 'status', 'suspension_start_date', 'suspension_end_date'];
+    const sampleData = [{
+      name: 'Juan Dela Cruz',
+      license_number: 'N01-12-345678',
+      id_number: '1234-5678-9012',
+      birthdate: '1990-01-15',
+      contact_number: '09171234567',
+      license_expiry_date: '2026-12-31',
+      status: 'available',
+      suspension_start_date: '',
+      suspension_end_date: ''
+    }];
+    const csv = generateCSV(sampleData, headers);
+    downloadCSV(csv, 'drivers-import-template.csv');
+    toast({ title: "Template Downloaded", description: "Driver import template with sample data downloaded" });
+  };
+
+  const handleDownloadHelperTemplate = () => {
+    const headers = ['name', 'id_number', 'birthdate', 'contact_number', 'status', 'suspension_start_date', 'suspension_end_date'];
+    const sampleData = [{
+      name: 'Maria Santos',
+      id_number: '1234-5678-9012',
+      birthdate: '1995-03-20',
+      contact_number: '09181234567',
+      status: 'available',
+      suspension_start_date: '',
+      suspension_end_date: ''
+    }];
+    const csv = generateCSV(sampleData, headers);
+    downloadCSV(csv, 'helpers-import-template.csv');
+    toast({ title: "Template Downloaded", description: "Helper import template with sample data downloaded" });
+  };
+
   const handleExportDrivers = () => {
-    const csv = generateCSV(drivers, ["name", "license_number", "id_number"]);
-    downloadCSV(csv, "drivers.csv");
+    const headers = ['name', 'license_number', 'id_number', 'birthdate', 'contact_number', 'license_expiry_date', 'status', 'suspension_start_date', 'suspension_end_date'];
+    const csv = generateCSV(drivers, headers);
+    downloadCSV(csv, `drivers-export-${new Date().toISOString().split('T')[0]}.csv`);
+    toast({ title: "Success", description: "Drivers exported successfully" });
   };
 
   const handleExportHelpers = () => {
-    const csv = generateCSV(helpers, ["name", "id_number"]);
-    downloadCSV(csv, "helpers.csv");
+    const headers = ['name', 'id_number', 'birthdate', 'contact_number', 'status', 'suspension_start_date', 'suspension_end_date'];
+    const csv = generateCSV(helpers, headers);
+    downloadCSV(csv, `helpers-export-${new Date().toISOString().split('T')[0]}.csv`);
+    toast({ title: "Success", description: "Helpers exported successfully" });
   };
 
   const handleImportDrivers = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -259,6 +297,10 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
             {isAdmin && (
               <>
                 <AddDriverDialog profile={profile} onAdded={fetchAll} />
+                <Button variant="outline" size="sm" onClick={handleDownloadDriverTemplate}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Template
+                </Button>
                 <Button variant="outline" size="sm" onClick={handleExportDrivers}>
                   <Download className="w-4 h-4 mr-2" />
                   Export
@@ -385,6 +427,10 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
             {isAdmin && (
               <>
                 <AddHelperDialog profile={profile} onAdded={fetchAll} />
+                <Button variant="outline" size="sm" onClick={handleDownloadHelperTemplate}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Template
+                </Button>
                 <Button variant="outline" size="sm" onClick={handleExportHelpers}>
                   <Download className="w-4 h-4 mr-2" />
                   Export
