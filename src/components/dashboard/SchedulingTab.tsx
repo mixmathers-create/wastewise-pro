@@ -20,6 +20,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Badge } from "@/components/ui/badge";
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
 import { VisualScheduleChart } from "./VisualScheduleChart";
+import { RouteMapView } from "./RouteMapView";
 import jsPDF from "jspdf";
 
 interface Driver {
@@ -657,9 +658,10 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   return (
     <div className="space-y-4">
       <Tabs defaultValue="live" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="live">Active Schedule</TabsTrigger>
           <TabsTrigger value="manage">Generate</TabsTrigger>
+          <TabsTrigger value="map">Map View</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
@@ -921,6 +923,26 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
               </CollapsibleContent>
             </Card>
           </Collapsible>
+        </TabsContent>
+
+        <TabsContent value="map">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Route Map</CardTitle>
+              <CardDescription className="text-xs">
+                View scheduled routes and client locations
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <RouteMapView
+                schedules={schedules.filter(s => s.status === 'approved')}
+                clients={clients}
+                trucks={trucks}
+                landfillLat={LANDFILL_LAT}
+                landfillLon={LANDFILL_LON}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="analytics">
