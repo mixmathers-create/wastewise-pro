@@ -98,186 +98,164 @@ public class BluetoothPrinterPlugin extends Plugin {
                     boolean ok = context.bindService(withAction, serviceConnection, Context.BIND_AUTO_CREATE);
                     Log.d(TAG, "Attempted bind to " + pkg + "/" + cls + " (with action) => " + ok);
                     if (ok) {
-                        Log.d(TAG, "Successfully bound to printer service using action: " + pkg + ".PrinterInterface");
+                        Log.d(TAG, "Successfully bound to printer service: " + pkg + "/" + cls);
                         return;
                     }
                 } catch (Exception ex) {
                     Log.w(TAG, "Action bind failed for " + pkg + "/" + cls + ": " + ex.getMessage());
                 }
             }
-
-            Log.e(TAG, "All attempts to bind to printer service failed");
-            if (connectionLatch != null) {
-                connectionLatch.countDown();
-            }
+            Log.e(TAG, "Failed to bind to any printer service candidate");
         } catch (Exception e) {
-            Log.e(TAG, "Error binding to printer service", e);
-            if (connectionLatch != null) {
-                connectionLatch.countDown();
-            }
+            Log.e(TAG, "Error binding printer service: " + e.getMessage());
         }
     }
 
-    private boolean waitForServiceConnection(long timeoutMs) {
+    private boolean waitForServiceConnection() {
         try {
             if (connectionLatch != null) {
-                return connectionLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
+                boolean connected = connectionLatch.await(CONNECTION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                if (!connected) {
+                    Log.e(TAG, "Service connection timeout after " + CONNECTION_TIMEOUT_MS + "ms");
+                }
+                return connected && isBound;
             }
-            return false;
+            return isBound;
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            Log.e(TAG, "Interrupted while waiting for printer service", e);
+            Log.e(TAG, "Interrupted while waiting for service connection", e);
             return false;
         }
     }
 
     @PluginMethod
     public void connect(PluginCall call) {
-        JSObject result = new JSObject();
-        if (!isBound || printerInterface == null) {
-            Log.d(TAG, "connect() called while not bound. Attempting to bind...");
-            bindPrinterService();
-            boolean connected = waitForServiceConnection(CONNECTION_TIMEOUT_MS);
-            if (!connected) {
-                result.put("success", false);
-                result.put("bound", isBound);
-                result.put("interface", printerInterface != null);
-                call.reject("Printer service not available. Check logcat for details.");
-                return;
-            }
+        if (!waitForServiceConnection()) {
+            call.reject("Failed to connect to printer service");
+            return;
         }
-        if (isBound && printerInterface != null) {
-            try {
-                // Initialize printer with GB18030 charset
-                String version = printerInterface.getServiceVersion();
-                printerInterface.setCode("GB18030");
-                Log.d(TAG, "Printer initialized with GB18030 encoding. Service version: " + version);
 
-                result.put("success", true);
-                result.put("name", "H10P Internal Printer");
-                result.put("encoding", "GB18030");
-                result.put("serviceVersion", version);
-                call.resolve(result);
+        try {
+            // Initialize printer with GB18030 encoding
+            byte[] initCommand = new byte[]{0x1B, 0x40, 0x1C, 0x26, 0x1C, 0x43, 0x00};
+            printerInterface.printEpson(initCommand);
+
+            JSObject ret = new JSObject();
+            ret.put("connected", true);
+            ret.put("service", "PrinterService");
+            try {
+                ret.put("version", printerInterface.getServiceVersion());
             } catch (RemoteException e) {
-                Log.e(TAG, "Error initializing printer", e);
-                result.put("success", false);
-                result.put("error", "Failed to initialize printer: " + e.getMessage());
-                call.reject("Failed to initialize printer", e);
+                ret.put("version", "unknown");
             }
-        } else {
-            result.put("success", false);
-            result.put("bound", isBound);
-            result.put("interface", printerInterface != null);
-            Log.e(TAG, "Printer not available - isBound: " + isBound + ", interface: " + (printerInterface != null));
-            call.reject("Printer service not available. Check logcat for details.");
+            call.resolve(ret);
+        } catch (RemoteException e) {
+            call.reject("Failed to initialize printer: " + e.getMessage());
         }
     }
 
     @PluginMethod
     public void disconnect(PluginCall call) {
-        call.resolve();
+        JSObject ret = new JSObject();
+        ret.put("disconnected", true);
+        call.resolve(ret);
     }
 
     @PluginMethod
     public void printText(PluginCall call) {
+        String text = call.getString("text");
+        Integer alignment = call.getInt("alignment", 0);
+
+        if (text == null) {
+            call.reject("Text is required");
+            return;
+        }
+
         if (!isBound || printerInterface == null) {
-            Log.e(TAG, "printText failed - service not bound");
-            call.reject("Printer service not available");
+            call.reject("Printer not connected");
             return;
         }
 
         try {
-            String text = call.getString("text", "");
-            Integer align = call.getInt("align", 0);
-
-            Log.d(TAG, "Printing text with alignment " + align + ": " + text);
-            
-            // Set alignment: 0=left, 1=center, 2=right
-            printerInterface.setAlignment(align);
-            
-            // Print the text (already includes newline from calling code)
+            printerInterface.setAlignment(alignment);
             printerInterface.printText(text);
-            
             call.resolve();
         } catch (RemoteException e) {
-            Log.e(TAG, "Error printing text", e);
             call.reject("Failed to print text: " + e.getMessage());
         }
     }
 
     @PluginMethod
     public void printImage(PluginCall call) {
+        String base64Image = call.getString("base64Image");
+        Integer alignment = call.getInt("alignment", 0);
+
+        if (base64Image == null) {
+            call.reject("base64Image is required");
+            return;
+        }
+
         if (!isBound || printerInterface == null) {
-            call.reject("Printer service not available");
+            call.reject("Printer not connected");
             return;
         }
 
         try {
-            String base64Image = call.getString("base64Image", "");
-            Integer align = call.getInt("align", 1);
-
-            // Decode base64 to bitmap
-            byte[] decodedBytes = Base64.decode(base64Image, Base64.DEFAULT);
-            Bitmap bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
+            byte[] decodedString = Base64.decode(base64Image, Base64.DEFAULT);
+            Bitmap bitmap = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
 
             if (bitmap == null) {
                 call.reject("Failed to decode image");
                 return;
             }
 
-            // Set alignment
-            printerInterface.setAlignment(align);
-            
-            // Print bitmap
+            printerInterface.setAlignment(alignment);
             printerInterface.printBitmap(bitmap);
-            
             call.resolve();
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error printing image", e);
-            call.reject("Failed to print image: " + e.getMessage());
         } catch (Exception e) {
-            Log.e(TAG, "Error decoding image", e);
-            call.reject("Failed to decode image: " + e.getMessage());
+            call.reject("Failed to print image: " + e.getMessage());
         }
     }
 
     @PluginMethod
     public void printBarcode(PluginCall call) {
+        String data = call.getString("data");
+        Integer symbology = call.getInt("symbology", 73);
+        Integer height = call.getInt("height", 162);
+        Integer width = call.getInt("width", 2);
+        Integer alignment = call.getInt("alignment", 1);
+
+        if (data == null) {
+            call.reject("Barcode data is required");
+            return;
+        }
+
         if (!isBound || printerInterface == null) {
-            call.reject("Printer service not available");
+            call.reject("Printer not connected");
             return;
         }
 
         try {
-            String data = call.getString("data", "");
-            Integer symbology = call.getInt("symbology", 8); // Default CODE128
-            Integer height = call.getInt("height", 162); // Vendor default
-            Integer width = call.getInt("width", 2);
-            Integer align = call.getInt("align", 1);
-
-            printerInterface.setAlignment(align);
+            printerInterface.setAlignment(alignment);
             printerInterface.printBarCode(data, symbology, height, width);
-
             call.resolve();
         } catch (RemoteException e) {
-            Log.e(TAG, "Error printing barcode", e);
             call.reject("Failed to print barcode: " + e.getMessage());
         }
     }
 
     @PluginMethod
     public void feedLine(PluginCall call) {
+        Integer lines = call.getInt("lines", 1);
+
         if (!isBound || printerInterface == null) {
-            call.reject("Printer service not available");
+            call.reject("Printer not connected");
             return;
         }
 
         try {
-            Integer lines = call.getInt("lines", 1);
             printerInterface.nextLine(lines);
             call.resolve();
         } catch (RemoteException e) {
-            Log.e(TAG, "Error feeding line", e);
             call.reject("Failed to feed line: " + e.getMessage());
         }
     }
@@ -285,16 +263,14 @@ public class BluetoothPrinterPlugin extends Plugin {
     @PluginMethod
     public void cutPaper(PluginCall call) {
         if (!isBound || printerInterface == null) {
-            call.reject("Printer service not available");
+            call.reject("Printer not connected");
             return;
         }
 
         try {
-            // Feed extra lines before cut (simulating paper cut)
             printerInterface.nextLine(5);
             call.resolve();
         } catch (RemoteException e) {
-            Log.e(TAG, "Error cutting paper", e);
             call.reject("Failed to cut paper: " + e.getMessage());
         }
     }
@@ -302,17 +278,14 @@ public class BluetoothPrinterPlugin extends Plugin {
     @PluginMethod
     public void beginWork(PluginCall call) {
         if (!isBound || printerInterface == null) {
-            Log.e(TAG, "beginWork failed - service not bound");
-            call.reject("Printer service not available");
+            call.reject("Printer not connected");
             return;
         }
 
         try {
-            Log.d(TAG, "Beginning print job");
             printerInterface.beginWork();
             call.resolve();
         } catch (RemoteException e) {
-            Log.e(TAG, "Error beginning work", e);
             call.reject("Failed to begin work: " + e.getMessage());
         }
     }
@@ -320,92 +293,87 @@ public class BluetoothPrinterPlugin extends Plugin {
     @PluginMethod
     public void endWork(PluginCall call) {
         if (!isBound || printerInterface == null) {
-            Log.e(TAG, "endWork failed - service not bound");
-            call.reject("Printer service not available");
+            call.reject("Printer not connected");
             return;
         }
 
         try {
-            Log.d(TAG, "Ending print job");
             printerInterface.endWork();
             call.resolve();
         } catch (RemoteException e) {
-            Log.e(TAG, "Error ending work", e);
             call.reject("Failed to end work: " + e.getMessage());
         }
     }
 
     @PluginMethod
     public void setTextBold(PluginCall call) {
+        Boolean bold = call.getBoolean("bold", false);
+
         if (!isBound || printerInterface == null) {
-            call.reject("Printer service not available");
+            call.reject("Printer not connected");
             return;
         }
 
         try {
-            Boolean bold = call.getBoolean("bold", false);
             printerInterface.setTextBold(bold);
             call.resolve();
         } catch (RemoteException e) {
-            Log.e(TAG, "Error setting text bold", e);
             call.reject("Failed to set text bold: " + e.getMessage());
         }
     }
 
     @PluginMethod
     public void setTextSize(PluginCall call) {
+        Float size = call.getFloat("size", 1.0f);
+
         if (!isBound || printerInterface == null) {
-            call.reject("Printer service not available");
+            call.reject("Printer not connected");
             return;
         }
 
         try {
-            Float size = call.getFloat("size", 24.0f);
             printerInterface.setTextSize(size);
             call.resolve();
         } catch (RemoteException e) {
-            Log.e(TAG, "Error setting text size", e);
             call.reject("Failed to set text size: " + e.getMessage());
         }
     }
 
     @PluginMethod
     public void printQRCode(PluginCall call) {
+        String data = call.getString("data");
+        Integer moduleSize = call.getInt("moduleSize", 8);
+        Integer errorLevel = call.getInt("errorLevel", 3);
+        Integer alignment = call.getInt("alignment", 1);
+
+        if (data == null) {
+            call.reject("QR code data is required");
+            return;
+        }
+
         if (!isBound || printerInterface == null) {
-            call.reject("Printer service not available");
+            call.reject("Printer not connected");
             return;
         }
 
         try {
-            String data = call.getString("data", "");
-            Integer moduleSize = call.getInt("moduleSize", 8);
-            Integer errorLevel = call.getInt("errorLevel", 3);
-            Integer align = call.getInt("align", 1);
-
-            printerInterface.setAlignment(align);
+            printerInterface.setAlignment(alignment);
             printerInterface.printQRCode(data, moduleSize, errorLevel);
-            
             call.resolve();
         } catch (RemoteException e) {
-            Log.e(TAG, "Error printing QR code", e);
             call.reject("Failed to print QR code: " + e.getMessage());
         }
     }
 
     @PluginMethod
     public void printTableText(PluginCall call) {
-        if (!isBound || printerInterface == null) {
-            call.reject("Printer service not available");
-            return;
-        }
-
         try {
             JSArray textArray = call.getArray("text");
             JSArray weightArray = call.getArray("weight");
             JSArray alignmentArray = call.getArray("alignment");
 
             if (textArray == null || weightArray == null || alignmentArray == null) {
-                call.reject("Missing table parameters");
+                call.reject("text, weight, and alignment arrays are required");
                 return;
             }
 
@@ -423,34 +391,38 @@ public class BluetoothPrinterPlugin extends Plugin {
                 alignment[i] = alignmentArray.getInt(i);
             }
 
+            if (!isBound || printerInterface == null) {
+                call.reject("Printer not connected");
+                return;
+            }
+
             printerInterface.printTableText(text, weight, alignment);
             call.resolve();
-        } catch (RemoteException | JSONException e) {
-            Log.e(TAG, "Error printing table", e);
-            call.reject("Failed to print table: " + e.getMessage());
+        } catch (JSONException | RemoteException e) {
+            call.reject("Failed to print table text: " + e.getMessage());
         }
     }
 
     @PluginMethod
     public void printEpson(PluginCall call) {
+        String base64Data = call.getString("data");
+
+        if (base64Data == null) {
+            call.reject("data is required");
+            return;
+        }
+
         if (!isBound || printerInterface == null) {
-            call.reject("Printer service not available");
+            call.reject("Printer not connected");
             return;
         }
 
         try {
-            String base64Data = call.getString("data", "");
-            if (base64Data.isEmpty()) {
-                call.reject("No data provided");
-                return;
-            }
-
-            byte[] bytes = Base64.decode(base64Data, Base64.DEFAULT);
-            printerInterface.printEpson(bytes);
+            byte[] data = Base64.decode(base64Data, Base64.DEFAULT);
+            printerInterface.printEpson(data);
             call.resolve();
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error sending Epson commands", e);
-            call.reject("Failed to send Epson commands: " + e.getMessage());
+        } catch (Exception e) {
+            call.reject("Failed to print Epson data: " + e.getMessage());
         }
     }
 
