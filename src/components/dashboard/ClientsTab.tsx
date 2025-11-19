@@ -11,6 +11,7 @@ import QRCode from "qrcode";
 import { generateCSV, downloadCSV, parseCSV } from "@/lib/csvUtils";
 import { useToast } from "@/hooks/use-toast";
 import { Capacitor } from '@capacitor/core';
+import { Checkbox } from "@/components/ui/checkbox";
 
 const ClientsTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
@@ -18,6 +19,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingClient, setEditingClient] = useState<any | null>(null);
+  const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = profile?.role === "admin";
   const isMobile = Capacitor.isNativePlatform();
@@ -50,7 +52,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
   };
 
   const downloadTemplate = () => {
-    const csv = generateCSV([], ['name', 'industry', 'address', 'contact_info', 'contact_person', 'contact_number']);
+    const csv = generateCSV([], ['name', 'industry', 'address', 'contact_info', 'contact_person', 'contact_number', 'latitude', 'longitude', 'mt_requirement', 'collection_shift', 'collection_days']);
     downloadCSV(csv, 'clients-template.csv');
   };
 
@@ -62,6 +64,20 @@ const ClientsTab = ({ profile }: { profile: any }) => {
     const rows = parseCSV(text);
 
     try {
+      // Validate that required fields are present
+      const invalidRows = rows.filter(row => 
+        !row.name || !row.industry || !row.latitude || !row.longitude
+      );
+
+      if (invalidRows.length > 0) {
+        toast({ 
+          title: "Import Error", 
+          description: "All rows must have name, industry, latitude, and longitude", 
+          variant: "destructive" 
+        });
+        return;
+      }
+
       const clientsToInsert = rows.map(row => ({
         name: row.name,
         industry: row.industry,
@@ -69,6 +85,11 @@ const ClientsTab = ({ profile }: { profile: any }) => {
         contact_info: row.contact_info || null,
         contact_person: row.contact_person || null,
         contact_number: row.contact_number || null,
+        latitude: parseFloat(row.latitude),
+        longitude: parseFloat(row.longitude),
+        mt_requirement: row.mt_requirement ? parseFloat(row.mt_requirement) : 0,
+        collection_shift: row.collection_shift || 'AM',
+        collection_days: row.collection_days ? row.collection_days.split('|') : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
         qr_code: `CLIENT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       }));
 
@@ -84,6 +105,45 @@ const ClientsTab = ({ profile }: { profile: any }) => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const toggleSelectClient = (clientId: string) => {
+    setSelectedClients(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(clientId)) {
+        newSet.delete(clientId);
+      } else {
+        newSet.add(clientId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedClients.size === clients.length) {
+      setSelectedClients(new Set());
+    } else {
+      setSelectedClients(new Set(clients.map(c => c.id)));
+    }
+  };
+
+  const handleMassDelete = async () => {
+    if (selectedClients.size === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from("clients")
+        .delete()
+        .in("id", Array.from(selectedClients));
+
+      if (error) throw error;
+
+      toast({ title: "Success", description: `Deleted ${selectedClients.size} clients` });
+      setSelectedClients(new Set());
+      fetchClients();
+    } catch (err: any) {
+      toast({ title: "Delete Error", description: err.message, variant: "destructive" });
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -93,7 +153,16 @@ const ClientsTab = ({ profile }: { profile: any }) => {
             <CardDescription>Manage your client database</CardDescription>
           </div>
           {isAdmin && (
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              {selectedClients.size > 0 && (
+                <Button 
+                  variant="destructive" 
+                  size="sm" 
+                  onClick={handleMassDelete}
+                >
+                  Delete ({selectedClients.size})
+                </Button>
+              )}
               {!isMobile && (
                 <>
                   <Button variant="outline" size="sm" onClick={downloadTemplate}>
@@ -131,6 +200,14 @@ const ClientsTab = ({ profile }: { profile: any }) => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {isAdmin && (
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedClients.size === clients.length && clients.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
+                  )}
                   <TableHead>Name</TableHead>
                   <TableHead>Industry</TableHead>
                   <TableHead>Contact Person</TableHead>
@@ -142,6 +219,14 @@ const ClientsTab = ({ profile }: { profile: any }) => {
               <TableBody>
                 {clients.map((client) => (
                   <TableRow key={client.id}>
+                    {isAdmin && (
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedClients.has(client.id)}
+                          onCheckedChange={() => toggleSelectClient(client.id)}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell className="font-medium">{client.name}</TableCell>
                     <TableCell>{client.industry}</TableCell>
                     <TableCell>{client.contact_person || "—"}</TableCell>

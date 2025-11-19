@@ -16,6 +16,21 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("");
+
+  const industries = [
+    "Restaurant",
+    "Hotel",
+    "Shopping Mall",
+    "Office Building",
+    "Hospital",
+    "School",
+    "Factory",
+    "Residential",
+    "Retail Store",
+    "Warehouse",
+    "Government",
+    "Other"
+  ];
   const [address, setAddress] = useState("");
   const [contact, setContact] = useState("");
   const [contactPerson, setContactPerson] = useState("");
@@ -94,7 +109,18 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
           </div>
           <div>
             <Label htmlFor="industry">Industry</Label>
-            <Input id="industry" value={industry} onChange={(e) => setIndustry(e.target.value)} required />
+            <Select value={industry} onValueChange={setIndustry} required>
+              <SelectTrigger>
+                <SelectValue placeholder="Select industry" />
+              </SelectTrigger>
+              <SelectContent>
+                {industries.map((ind) => (
+                  <SelectItem key={ind} value={ind}>
+                    {ind}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label htmlFor="address">Address</Label>

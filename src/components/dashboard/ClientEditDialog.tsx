@@ -38,6 +38,21 @@ const ClientEditDialog = ({
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState(client);
 
+  const industries = [
+    "Restaurant",
+    "Hotel",
+    "Shopping Mall",
+    "Office Building",
+    "Hospital",
+    "School",
+    "Factory",
+    "Residential",
+    "Retail Store",
+    "Warehouse",
+    "Government",
+    "Other"
+  ];
+
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   useEffect(() => {
@@ -100,7 +115,18 @@ const ClientEditDialog = ({
           </div>
           <div>
             <Label>Industry</Label>
-            <Input value={formData.industry} onChange={(e) => setFormData({...formData, industry: e.target.value})} required />
+            <Select value={formData.industry} onValueChange={(val) => setFormData({...formData, industry: val})} required>
+              <SelectTrigger>
+                <SelectValue placeholder="Select industry" />
+              </SelectTrigger>
+              <SelectContent>
+                {industries.map((ind) => (
+                  <SelectItem key={ind} value={ind}>
+                    {ind}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label>MT Requirement</Label>
