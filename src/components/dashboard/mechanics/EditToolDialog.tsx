@@ -22,6 +22,16 @@ export function EditToolDialog({ tool, open, onOpenChange, onSuccess }: EditTool
   const [status, setStatus] = useState("");
   const { toast } = useToast();
 
+  const toolCategories = [
+    "Power Tools",
+    "Hand Tools",
+    "Diagnostic Equipment",
+    "Lifting Equipment",
+    "Safety Equipment",
+    "Welding Equipment",
+    "Other"
+  ];
+
   useEffect(() => {
     if (tool) {
       setName(tool.name || "");
@@ -70,11 +80,22 @@ export function EditToolDialog({ tool, open, onOpenChange, onSuccess }: EditTool
           </div>
           <div>
             <Label htmlFor="code">Tool Code *</Label>
-            <Input id="code" value={code} onChange={(e) => setCode(e.target.value)} required />
+            <Input id="code" value={code} onChange={(e) => setCode(e.target.value)} required disabled />
           </div>
           <div>
             <Label htmlFor="category">Category</Label>
-            <Input id="category" value={category} onChange={(e) => setCategory(e.target.value)} />
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent className="bg-background z-50">
+                {toolCategories.map((cat) => (
+                  <SelectItem key={cat} value={cat}>
+                    {cat}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label htmlFor="condition">Condition</Label>
@@ -82,7 +103,7 @@ export function EditToolDialog({ tool, open, onOpenChange, onSuccess }: EditTool
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-background z-50">
                 <SelectItem value="good">Good</SelectItem>
                 <SelectItem value="fair">Fair</SelectItem>
                 <SelectItem value="poor">Poor</SelectItem>
@@ -95,7 +116,7 @@ export function EditToolDialog({ tool, open, onOpenChange, onSuccess }: EditTool
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-background z-50">
                 <SelectItem value="available">Available</SelectItem>
                 <SelectItem value="checked_out">Checked Out</SelectItem>
                 <SelectItem value="maintenance">Maintenance</SelectItem>

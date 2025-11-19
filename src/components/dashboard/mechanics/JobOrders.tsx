@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, CheckCircle2, PauseCircle } from "lucide-react";
+import { Plus, CheckCircle2, PauseCircle, Trash2 } from "lucide-react";
 import { CreateJobOrderDialog } from "./CreateJobOrderDialog";
 import { CompleteJobOrderDialog } from "./CompleteJobOrderDialog";
 import { SuspendJobOrderDialog } from "./SuspendJobOrderDialog";
@@ -27,6 +27,19 @@ export function JobOrders() {
       .select("*, mechanics(name), trucks(code)")
       .order("created_at", { ascending: false });
     setJobOrders(data || []);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this job order?")) return;
+
+    try {
+      const { error } = await supabase.from("job_orders").delete().eq("id", id);
+      if (error) throw error;
+      toast({ title: "Success", description: "Job order deleted" });
+      fetchJobOrders();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
   };
 
   const checkEndOfDayJobs = async () => {
@@ -134,6 +147,13 @@ export function JobOrders() {
                         <CheckCircle2 className="h-4 w-4 mr-2" /> Resume & Complete
                       </Button>
                     )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDelete(job.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>
