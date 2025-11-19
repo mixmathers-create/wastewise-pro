@@ -52,7 +52,20 @@ const ClientsTab = ({ profile }: { profile: any }) => {
   };
 
   const downloadTemplate = () => {
-    const csv = generateCSV([], ['name', 'industry', 'address', 'contact_info', 'contact_person', 'contact_number', 'latitude', 'longitude', 'mt_requirement', 'collection_shift', 'collection_days']);
+    const exampleData = [{
+      name: 'Sample Restaurant',
+      industry: 'Restaurant',
+      address: '123 Main Street, Cebu City',
+      contact_info: 'manager@samplerestaurant.com',
+      contact_person: 'John Doe',
+      contact_number: '+63 912 345 6789',
+      latitude: '10.3157',
+      longitude: '123.8854',
+      mt_requirement: '2.5',
+      collection_shift: 'AM',
+      collection_days: 'Mon|Tue|Wed|Thu|Fri'
+    }];
+    const csv = generateCSV(exampleData, ['name', 'industry', 'address', 'contact_info', 'contact_person', 'contact_number', 'latitude', 'longitude', 'mt_requirement', 'collection_shift', 'collection_days']);
     downloadCSV(csv, 'clients-template.csv');
   };
 
