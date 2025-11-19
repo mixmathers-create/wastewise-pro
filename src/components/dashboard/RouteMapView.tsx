@@ -32,9 +32,71 @@ interface RouteMapViewProps {
   landfillLon: number;
 }
 
-const SHIFT_COLORS = {
-  AM: "#3b82f6", // blue
-  PM: "#f59e0b", // amber
+const WAREHOUSE_LAT = 10.349687843989079;
+const WAREHOUSE_LON = 123.93580520941734;
+
+// Generate distinct colors for trucks
+const TRUCK_COLORS = [
+  "#3b82f6", // blue
+  "#f59e0b", // amber
+  "#10b981", // emerald
+  "#8b5cf6", // violet
+  "#ef4444", // red
+  "#06b6d4", // cyan
+  "#f97316", // orange
+  "#ec4899", // pink
+  "#84cc16", // lime
+  "#6366f1", // indigo
+];
+
+// Helper function to calculate distance between two points (Haversine formula)
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+// Optimize route order using nearest neighbor algorithm
+const optimizeRoute = (clientIds: string[], clientsMap: Map<string, Client>, startLat: number, startLon: number) => {
+  if (clientIds.length <= 1) return clientIds;
+  
+  const unvisited = [...clientIds];
+  const route: string[] = [];
+  let currentLat = startLat;
+  let currentLon = startLon;
+  
+  while (unvisited.length > 0) {
+    let nearestIdx = 0;
+    let minDistance = Infinity;
+    
+    unvisited.forEach((clientId, idx) => {
+      const client = clientsMap.get(clientId);
+      if (client?.latitude && client?.longitude) {
+        const distance = calculateDistance(currentLat, currentLon, client.latitude, client.longitude);
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestIdx = idx;
+        }
+      }
+    });
+    
+    const nearestClient = unvisited[nearestIdx];
+    route.push(nearestClient);
+    const client = clientsMap.get(nearestClient);
+    if (client?.latitude && client?.longitude) {
+      currentLat = client.latitude;
+      currentLon = client.longitude;
+    }
+    unvisited.splice(nearestIdx, 1);
+  }
+  
+  return route;
 };
 
 export const RouteMapView = ({ 
@@ -84,8 +146,14 @@ export const RouteMapView = ({
       map.current.on('load', () => {
         setMapLoaded(true);
         
-        // Add landfill marker after map is loaded
+        // Add warehouse marker after map is loaded
         if (map.current) {
+          new maplibregl.Marker({ color: "#059669" })
+            .setLngLat([WAREHOUSE_LON, WAREHOUSE_LAT])
+            .setPopup(new maplibregl.Popup().setHTML("<strong>Warehouse/Dispatch</strong>"))
+            .addTo(map.current);
+          
+          // Add landfill marker
           new maplibregl.Marker({ color: "#ef4444" })
             .setLngLat([landfillLon, landfillLat])
             .setPopup(new maplibregl.Popup().setHTML("<strong>Landfill</strong>"))
@@ -124,76 +192,99 @@ export const RouteMapView = ({
       if (!schedule.client_ids || schedule.client_ids.length === 0) return;
 
       const truck = trucks.find((t) => t.id === schedule.truck_id);
-      const color = SHIFT_COLORS[schedule.shift as keyof typeof SHIFT_COLORS] || "#6b7280";
+      const truckIdx = trucks.findIndex((t) => t.id === schedule.truck_id);
+      const color = TRUCK_COLORS[truckIdx % TRUCK_COLORS.length];
 
-      schedule.client_ids.forEach((clientId) => {
+      // Optimize route order starting from warehouse
+      const optimizedClientIds = optimizeRoute(schedule.client_ids, clientsMap, WAREHOUSE_LAT, WAREHOUSE_LON);
+
+      // Add client markers
+      optimizedClientIds.forEach((clientId, orderIdx) => {
         const client = clientsMap.get(clientId);
         if (!client || !client.latitude || !client.longitude) return;
 
-        // Add client marker
+        // Add numbered client marker
         const el = document.createElement("div");
         el.className = "client-marker";
         el.style.backgroundColor = color;
-        el.style.width = "12px";
-        el.style.height = "12px";
+        el.style.width = "24px";
+        el.style.height = "24px";
         el.style.borderRadius = "50%";
         el.style.border = "2px solid white";
         el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
+        el.style.display = "flex";
+        el.style.alignItems = "center";
+        el.style.justifyContent = "center";
+        el.style.color = "white";
+        el.style.fontSize = "11px";
+        el.style.fontWeight = "bold";
+        el.textContent = String(orderIdx + 1);
 
         new maplibregl.Marker(el)
           .setLngLat([client.longitude, client.latitude])
           .setPopup(
             new maplibregl.Popup({ offset: 25 }).setHTML(
-              `<strong>${client.name}</strong><br/>
+              `<strong>#${orderIdx + 1}: ${client.name}</strong><br/>
               ${client.industry}<br/>
               ${schedule.shift} Shift<br/>
               Truck: ${truck?.code || "N/A"}`
             )
           )
           .addTo(map.current!);
+      });
 
-        // Draw line to landfill
-        const sourceId = `route-${schedule.id}-${clientId}`;
-        if (map.current!.getSource(sourceId)) {
-          map.current!.removeLayer(sourceId);
-          map.current!.removeSource(sourceId);
+      // Build complete route: warehouse -> clients -> landfill -> warehouse
+      const routeCoordinates: [number, number][] = [[WAREHOUSE_LON, WAREHOUSE_LAT]];
+      
+      optimizedClientIds.forEach((clientId) => {
+        const client = clientsMap.get(clientId);
+        if (client?.latitude && client?.longitude) {
+          routeCoordinates.push([client.longitude, client.latitude]);
         }
+      });
+      
+      routeCoordinates.push([landfillLon, landfillLat]);
+      routeCoordinates.push([WAREHOUSE_LON, WAREHOUSE_LAT]);
 
-        map.current!.addSource(sourceId, {
-          type: "geojson",
-          data: {
-            type: "Feature",
-            properties: {},
-            geometry: {
-              type: "LineString",
-              coordinates: [
-                [client.longitude, client.latitude],
-                [landfillLon, landfillLat],
-              ],
-            },
-          },
-        });
+      // Draw complete route line
+      const sourceId = `route-${schedule.id}`;
+      if (map.current!.getSource(sourceId)) {
+        map.current!.removeLayer(sourceId);
+        map.current!.removeSource(sourceId);
+      }
 
-        map.current!.addLayer({
-          id: sourceId,
-          type: "line",
-          source: sourceId,
-          layout: {
-            "line-join": "round",
-            "line-cap": "round",
+      map.current!.addSource(sourceId, {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: routeCoordinates,
           },
-          paint: {
-            "line-color": color,
-            "line-width": 2,
-            "line-opacity": 0.6,
-          },
-        });
+        },
+      });
+
+      map.current!.addLayer({
+        id: sourceId,
+        type: "line",
+        source: sourceId,
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": color,
+          "line-width": 3,
+          "line-opacity": 0.7,
+        },
       });
     });
 
-    // Fit bounds to show all points
+    // Fit bounds to show all points including warehouse
     if (filteredSchedules.length > 0) {
       const bounds = new maplibregl.LngLatBounds();
+      bounds.extend([WAREHOUSE_LON, WAREHOUSE_LAT]);
       bounds.extend([landfillLon, landfillLat]);
 
       filteredSchedules.forEach((schedule) => {
@@ -212,18 +303,23 @@ export const RouteMapView = ({
   return (
     <div className="relative w-full h-[600px] rounded-lg overflow-hidden border">
       <div ref={mapContainer} className="absolute inset-0" />
-      <div className="absolute top-4 left-4 bg-background/90 backdrop-blur-sm p-3 rounded-lg shadow-lg space-y-2">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: SHIFT_COLORS.AM }} />
-          <span className="text-sm">AM Shift</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: SHIFT_COLORS.PM }} />
-          <span className="text-sm">PM Shift</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-destructive" />
-          <span className="text-sm">Landfill</span>
+      <div className="absolute top-4 left-4 bg-background/90 backdrop-blur-sm p-3 rounded-lg shadow-lg space-y-2 max-h-[400px] overflow-y-auto">
+        <div className="font-semibold text-sm mb-2">Legend</div>
+        {trucks.map((truck, idx) => (
+          <div key={truck.id} className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: TRUCK_COLORS[idx % TRUCK_COLORS.length] }} />
+            <span className="text-sm">{truck.code}</span>
+          </div>
+        ))}
+        <div className="border-t pt-2 mt-2">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#059669" }} />
+            <span className="text-sm">Warehouse</span>
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <div className="w-3 h-3 rounded-full bg-destructive" />
+            <span className="text-sm">Landfill</span>
+          </div>
         </div>
       </div>
     </div>
