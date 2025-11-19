@@ -22,7 +22,10 @@ export function AddMechanicDialog({ open, onOpenChange, onSuccess }: AddMechanic
     e.preventDefault();
 
     try {
-      const idNumber = `MECH-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+      // Generate ABC-123456789 format
+      const letters = Array.from({length: 3}, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
+      const numbers = Array.from({length: 9}, () => Math.floor(Math.random() * 10)).join('');
+      const idNumber = `${letters}-${numbers}`;
       
       const { error } = await supabase.from("mechanics").insert({
         name,
