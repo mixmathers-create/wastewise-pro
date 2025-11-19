@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Bluetooth, Printer } from "lucide-react";
+import { Printer } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { printerService } from "@/lib/printerService";
 
@@ -73,7 +73,7 @@ const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
     if (!Capacitor.isNativePlatform()) {
       toast({ 
         title: "Not Available", 
-        description: "Bluetooth printer is only available on mobile devices",
+        description: "Internal printer is only available on mobile devices",
         variant: "destructive" 
       });
       return;
@@ -123,9 +123,9 @@ const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Printer className="h-5 w-5" />
-            Bluetooth Printer Settings
+            Internal Printer Settings
           </CardTitle>
-          <CardDescription>Connect to a thermal printer for receipt printing</CardDescription>
+          <CardDescription>Connect to the H10P internal thermal printer</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between rounded-md border p-4">
@@ -136,7 +136,7 @@ const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
               </p>
             </div>
             <Button onClick={connectPrinter} disabled={!Capacitor.isNativePlatform()}>
-              <Bluetooth className="mr-2 h-4 w-4" />
+              <Printer className="mr-2 h-4 w-4" />
               {printerConnected ? "Reconnect" : "Connect Printer"}
             </Button>
           </div>
