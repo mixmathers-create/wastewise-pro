@@ -55,7 +55,7 @@ const SettingsTab = ({ profile }: { profile: any }) => {
         const versionLabel = result.serviceVersion ? ` · v${result.serviceVersion}` : '';
         toast({
           title: "Printer Connected",
-          description: `${result.name || 'H10P Internal Printer'} ready (${result.encoding || 'GB18030'})${versionLabel}`,
+          description: `${result.name || 'H10P Internal Printer'} ready${versionLabel}`,
         });
       } else {
         setPrinterStatus('error');
@@ -106,15 +106,15 @@ const SettingsTab = ({ profile }: { profile: any }) => {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Bluetooth Printer</CardTitle>
+          <CardTitle>Internal Printer</CardTitle>
           <CardDescription>
-            Prints to "innerprinter" device automatically
+            H10P internal thermal printer
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Alert>
             <AlertDescription>
-              The H10P has an internal 58mm ESC/POS thermal printer using GB18030 encoding. 
+              The H10P has an internal 58mm ESC/POS thermal printer. 
               The vendor's printer service APK must be installed and running on the device.
               First click "Connect Service" to establish connection, then "Check Printer" to verify, and finally "Test Print" to test.
             </AlertDescription>
