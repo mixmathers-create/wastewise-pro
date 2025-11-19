@@ -52,6 +52,8 @@ const HelperEditDialog = ({
     }
   }, [helper]);
 
+  if (!helper) return null;
+
   const handleDayToggle = (day: string) => {
     setAvailableDays(prev => 
       prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
