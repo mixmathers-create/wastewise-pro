@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,17 +6,30 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Clock } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Camera as CapacitorCamera, CameraResultType } from "@capacitor/camera";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export function MechanicsTimeTracking() {
   const [mechanics, setMechanics] = useState<any[]>([]);
   const [timeLogs, setTimeLogs] = useState<any[]>([]);
   const [selectedMechanic, setSelectedMechanic] = useState("");
+  const [showCamera, setShowCamera] = useState(false);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchMechanics();
     fetchTimeLogs();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
   }, []);
 
   const fetchMechanics = async () => {
@@ -49,24 +62,62 @@ export function MechanicsTimeTracking() {
     });
   };
 
-  const handleTimeIn = async () => {
+  const startCamera = async () => {
     if (!selectedMechanic) {
       toast({ title: "Error", description: "Please select a mechanic", variant: "destructive" });
       return;
     }
 
     try {
-      const photo = await CapacitorCamera.getPhoto({
-        quality: 90,
-        allowEditing: false,
-        resultType: CameraResultType.DataUrl
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: "user" },
+        audio: false 
       });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setShowCamera(true);
+    } catch (error: any) {
+      toast({ title: "Camera Error", description: error.message, variant: "destructive" });
+    }
+  };
 
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0);
+        const photoData = canvas.toDataURL('image/jpeg');
+        setCapturedPhoto(photoData);
+        stopCamera();
+      }
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+  };
+
+  const handleTimeIn = async () => {
+    if (!capturedPhoto) {
+      toast({ title: "Error", description: "Please capture a photo", variant: "destructive" });
+      return;
+    }
+
+    try {
       const location = await getCurrentLocation();
 
       const { error } = await supabase.from("mechanic_time_logs").insert({
         mechanic_id: selectedMechanic,
-        photo_url: photo.dataUrl,
+        photo_url: capturedPhoto,
         latitude: location.latitude,
         longitude: location.longitude
       });
@@ -76,9 +127,17 @@ export function MechanicsTimeTracking() {
       toast({ title: "Success", description: "Time in recorded" });
       fetchTimeLogs();
       setSelectedMechanic("");
+      setCapturedPhoto(null);
+      setShowCamera(false);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     }
+  };
+
+  const handleCancel = () => {
+    stopCamera();
+    setCapturedPhoto(null);
+    setShowCamera(false);
   };
 
   const handleTimeOut = async (logId: string) => {
@@ -119,10 +178,43 @@ export function MechanicsTimeTracking() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={handleTimeIn}>
+          <Button onClick={startCamera}>
             <Camera className="h-4 w-4 mr-2" /> Time In
           </Button>
         </div>
+
+        <Dialog open={showCamera} onOpenChange={setShowCamera}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Capture Photo</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {!capturedPhoto ? (
+                <>
+                  <video ref={videoRef} autoPlay className="w-full rounded-lg" />
+                  <canvas ref={canvasRef} className="hidden" />
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" onClick={handleCancel}>Cancel</Button>
+                    <Button onClick={capturePhoto}>
+                      <Camera className="h-4 w-4 mr-2" /> Capture
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <img src={capturedPhoto} alt="Captured" className="w-full rounded-lg" />
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" onClick={() => {
+                      setCapturedPhoto(null);
+                      startCamera();
+                    }}>Retake</Button>
+                    <Button onClick={handleTimeIn}>Confirm Time In</Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <Table>
           <TableHeader>

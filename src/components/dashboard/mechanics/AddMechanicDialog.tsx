@@ -22,16 +22,23 @@ export function AddMechanicDialog({ open, onOpenChange, onSuccess }: AddMechanic
     e.preventDefault();
 
     try {
+      const idNumber = `MECH-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+      
       const { error } = await supabase.from("mechanics").insert({
         name,
+        id_number: idNumber,
         contact_number: contactNumber || null,
         birthdate: birthdate || null,
-        status: "available"
+        status: "available",
+        availability: {
+          days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+          shifts: ["AM", "PM"]
+        }
       });
 
       if (error) throw error;
 
-      toast({ title: "Success", description: "Mechanic added successfully" });
+      toast({ title: "Success", description: `Mechanic added with ID: ${idNumber}` });
       onSuccess();
       onOpenChange(false);
       setName("");
