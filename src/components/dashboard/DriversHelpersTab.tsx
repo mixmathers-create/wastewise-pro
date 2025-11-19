@@ -3,14 +3,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import AddDriverDialog from "./AddDriverDialog";
 import AddHelperDialog from "./AddHelperDialog";
 import DriverEditDialog from "./DriverEditDialog";
 import HelperEditDialog from "./HelperEditDialog";
+import LicensePreviewDialog from "./LicensePreviewDialog";
+import ExpiringLicensesAlert from "./ExpiringLicensesAlert";
 import { Button } from "@/components/ui/button";
-import { Download, Upload, Pencil } from "lucide-react";
+import { Download, Upload, Pencil, Eye, Trash2 } from "lucide-react";
 import { generateCSV, downloadCSV, parseCSV } from "@/lib/csvUtils";
 import { useToast } from "@/hooks/use-toast";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 const DriversHelpersTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
@@ -24,6 +29,12 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
   const [editingHelper, setEditingHelper] = useState<any>(null);
   const [driverEditOpen, setDriverEditOpen] = useState(false);
   const [helperEditOpen, setHelperEditOpen] = useState(false);
+  const [selectedDrivers, setSelectedDrivers] = useState<Set<string>>(new Set());
+  const [selectedHelpers, setSelectedHelpers] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteType, setDeleteType] = useState<'drivers' | 'helpers' | null>(null);
+  const [previewDriver, setPreviewDriver] = useState<any>(null);
+  const [licensePreviewOpen, setLicensePreviewOpen] = useState(false);
   const isAdmin = profile?.role === "admin";
 
   const fetchAll = async () => {
@@ -45,6 +56,93 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
     const shifts = availability.shifts?.join(", ") || "No shifts";
     const doubleShift = availability.doubleShift ? "✓ Double" : "";
     return `${days} | ${shifts} ${doubleShift}`;
+  };
+
+  const getLicenseStatus = (expiryDate: string | null) => {
+    if (!expiryDate) return { label: "Not Set", variant: "secondary" as const };
+    
+    const expiry = new Date(expiryDate);
+    const today = new Date();
+    const daysUntilExpiry = Math.floor((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (daysUntilExpiry < 0) return { label: "Expired", variant: "destructive" as const };
+    if (daysUntilExpiry <= 30) return { label: `${daysUntilExpiry}d left`, variant: "destructive" as const };
+    if (daysUntilExpiry <= 60) return { label: `${daysUntilExpiry}d left`, variant: "default" as const };
+    return { label: "Valid", variant: "default" as const };
+  };
+
+  const toggleSelectDriver = (id: string) => {
+    setSelectedDrivers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      return newSet;
+    });
+  };
+
+  const toggleSelectHelper = (id: string) => {
+    setSelectedHelpers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      return newSet;
+    });
+  };
+
+  const toggleSelectAllDrivers = () => {
+    if (selectedDrivers.size === drivers.length) {
+      setSelectedDrivers(new Set());
+    } else {
+      setSelectedDrivers(new Set(drivers.map(d => d.id)));
+    }
+  };
+
+  const toggleSelectAllHelpers = () => {
+    if (selectedHelpers.size === helpers.length) {
+      setSelectedHelpers(new Set());
+    } else {
+      setSelectedHelpers(new Set(helpers.map(h => h.id)));
+    }
+  };
+
+  const handleMassDelete = async () => {
+    const idsToDelete = deleteType === 'drivers' 
+      ? Array.from(selectedDrivers) 
+      : Array.from(selectedHelpers);
+    
+    if (idsToDelete.length === 0) return;
+
+    try {
+      const table = deleteType === 'drivers' ? 'drivers' : 'helpers';
+      const { error } = await supabase
+        .from(table)
+        .delete()
+        .in('id', idsToDelete);
+
+      if (error) throw error;
+
+      toast({ 
+        title: "Success", 
+        description: `Deleted ${idsToDelete.length} ${deleteType}` 
+      });
+      
+      if (deleteType === 'drivers') {
+        setSelectedDrivers(new Set());
+      } else {
+        setSelectedHelpers(new Set());
+      }
+      
+      fetchAll();
+    } catch (error: any) {
+      toast({ 
+        title: "Error", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    } finally {
+      setDeleteDialogOpen(false);
+      setDeleteType(null);
+    }
   };
 
   const downloadDriverTemplate = () => {
@@ -118,6 +216,8 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
 
   return (
     <>
+      <ExpiringLicensesAlert />
+      
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -128,6 +228,19 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
               </div>
               {isAdmin && (
                 <div className="flex gap-2">
+                  {selectedDrivers.size > 0 && (
+                    <Button 
+                      variant="destructive" 
+                      size="sm"
+                      onClick={() => {
+                        setDeleteType('drivers');
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete ({selectedDrivers.size})
+                    </Button>
+                  )}
                   <Button variant="outline" size="sm" onClick={downloadDriverTemplate}>
                     <Download className="h-4 w-4 mr-2" />Template
                   </Button>
@@ -157,40 +270,73 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {isAdmin && (
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={selectedDrivers.size === drivers.length}
+                          onCheckedChange={toggleSelectAllDrivers}
+                        />
+                      </TableHead>
+                    )}
                     <TableHead>Name</TableHead>
                     <TableHead>License</TableHead>
-                    <TableHead>ID Number</TableHead>
-                    <TableHead>Birth Date</TableHead>
-                    <TableHead>Contact</TableHead>
+                    <TableHead>License Status</TableHead>
                     <TableHead>Availability</TableHead>
                     {isAdmin && <TableHead>Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {drivers.map((d) => (
-                    <TableRow key={d.id}>
-                      <TableCell className="font-medium">{d.name}</TableCell>
-                      <TableCell>{d.license_number || "N/A"}</TableCell>
-                      <TableCell>{d.id_number || "N/A"}</TableCell>
-                      <TableCell>{d.birthdate ? new Date(d.birthdate).toLocaleDateString() : "N/A"}</TableCell>
-                      <TableCell>{d.contact_number || "N/A"}</TableCell>
-                      <TableCell className="text-sm">{formatAvailability(d.availability)}</TableCell>
-                      {isAdmin && (
+                  {drivers.map((d) => {
+                    const licenseStatus = getLicenseStatus(d.license_expiry_date);
+                    return (
+                      <TableRow key={d.id}>
+                        {isAdmin && (
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedDrivers.has(d.id)}
+                              onCheckedChange={() => toggleSelectDriver(d.id)}
+                            />
+                          </TableCell>
+                        )}
+                        <TableCell className="font-medium">{d.name}</TableCell>
+                        <TableCell>{d.license_number || "N/A"}</TableCell>
                         <TableCell>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={() => {
-                              setEditingDriver(d);
-                              setDriverEditOpen(true);
-                            }}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                          <Badge variant={licenseStatus.variant}>
+                            {licenseStatus.label}
+                          </Badge>
                         </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
+                        <TableCell className="text-sm">{formatAvailability(d.availability)}</TableCell>
+                        {isAdmin && (
+                          <TableCell>
+                            <div className="flex gap-1">
+                              {d.license_file_url && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => {
+                                    setPreviewDriver(d);
+                                    setLicensePreviewOpen(true);
+                                  }}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => {
+                                  setEditingDriver(d);
+                                  setDriverEditOpen(true);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -206,6 +352,19 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
               </div>
               {isAdmin && (
                 <div className="flex gap-2">
+                  {selectedHelpers.size > 0 && (
+                    <Button 
+                      variant="destructive" 
+                      size="sm"
+                      onClick={() => {
+                        setDeleteType('helpers');
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete ({selectedHelpers.size})
+                    </Button>
+                  )}
                   <Button variant="outline" size="sm" onClick={downloadHelperTemplate}>
                     <Download className="h-4 w-4 mr-2" />Template
                   </Button>
@@ -235,9 +394,16 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {isAdmin && (
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={selectedHelpers.size === helpers.length}
+                          onCheckedChange={toggleSelectAllHelpers}
+                        />
+                      </TableHead>
+                    )}
                     <TableHead>Name</TableHead>
                     <TableHead>ID Number</TableHead>
-                    <TableHead>Birth Date</TableHead>
                     <TableHead>Contact</TableHead>
                     <TableHead>Availability</TableHead>
                     {isAdmin && <TableHead>Actions</TableHead>}
@@ -246,9 +412,16 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
                 <TableBody>
                   {helpers.map((h) => (
                     <TableRow key={h.id}>
+                      {isAdmin && (
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedHelpers.has(h.id)}
+                            onCheckedChange={() => toggleSelectHelper(h.id)}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell className="font-medium">{h.name}</TableCell>
                       <TableCell>{h.id_number || "N/A"}</TableCell>
-                      <TableCell>{h.birthdate ? new Date(h.birthdate).toLocaleDateString() : "N/A"}</TableCell>
                       <TableCell>{h.contact_number || "N/A"}</TableCell>
                       <TableCell className="text-sm">{formatAvailability(h.availability)}</TableCell>
                       {isAdmin && (
@@ -291,6 +464,33 @@ const DriversHelpersTab = ({ profile }: { profile: any }) => {
           onUpdated={fetchAll}
         />
       )}
+
+      {previewDriver && (
+        <LicensePreviewDialog
+          licenseUrl={previewDriver.license_file_url}
+          driverName={previewDriver.name}
+          open={licensePreviewOpen}
+          onOpenChange={setLicensePreviewOpen}
+        />
+      )}
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Mass Delete</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {deleteType === 'drivers' ? selectedDrivers.size : selectedHelpers.size} {deleteType}? 
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleMassDelete} className="bg-destructive text-destructive-foreground">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };

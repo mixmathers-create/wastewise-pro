@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { Upload } from "lucide-react";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SHIFTS = ["AM", "PM"];
@@ -32,6 +33,8 @@ const DriverEditDialog = ({
   const [availableDays, setAvailableDays] = useState<string[]>([]);
   const [availableShifts, setAvailableShifts] = useState<string[]>([]);
   const [doubleShift, setDoubleShift] = useState(false);
+  const [licenseFile, setLicenseFile] = useState<File | null>(null);
+  const [licenseExpiryDate, setLicenseExpiryDate] = useState("");
 
   useEffect(() => {
     if (driver) {
@@ -40,6 +43,7 @@ const DriverEditDialog = ({
       setIdNumber(driver.id_number || "");
       setBirthdate(driver.birthdate || "");
       setContactNumber(driver.contact_number || "");
+      setLicenseExpiryDate(driver.license_expiry_date || "");
       
       const availability = driver.availability || { days: ["Mon", "Tue", "Wed", "Thu", "Fri"], shifts: ["AM", "PM"], doubleShift: false };
       setAvailableDays(availability.days || []);
@@ -64,6 +68,28 @@ const DriverEditDialog = ({
     e.preventDefault();
     setLoading(true);
     try {
+      let licenseFileUrl = driver.license_file_url;
+      
+      // Upload new license file if provided
+      if (licenseFile) {
+        const fileExt = licenseFile.name.split('.').pop();
+        const fileName = `${idNumber}-${Date.now()}.${fileExt}`;
+        
+        // Delete old file if exists
+        if (driver.license_file_url) {
+          await supabase.storage
+            .from('driver-licenses')
+            .remove([driver.license_file_url]);
+        }
+        
+        const { error: uploadError, data: uploadData } = await supabase.storage
+          .from('driver-licenses')
+          .upload(fileName, licenseFile);
+
+        if (uploadError) throw uploadError;
+        licenseFileUrl = uploadData.path;
+      }
+
       const { error } = await supabase
         .from("drivers")
         .update({
@@ -72,6 +98,8 @@ const DriverEditDialog = ({
           id_number: idNumber,
           birthdate: birthdate || null,
           contact_number: contactNumber || null,
+          license_file_url: licenseFileUrl,
+          license_expiry_date: licenseExpiryDate || null,
           availability: {
             days: availableDays,
             shifts: availableShifts,
@@ -124,6 +152,32 @@ const DriverEditDialog = ({
           <div>
             <Label htmlFor="contactNumber">Contact Number</Label>
             <Input id="contactNumber" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="+63 XXX XXX XXXX" required />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 border-t pt-4">
+            <div>
+              <Label htmlFor="licenseExpiryDate">License Expiry Date</Label>
+              <Input 
+                id="licenseExpiryDate" 
+                type="date" 
+                value={licenseExpiryDate} 
+                onChange={(e) => setLicenseExpiryDate(e.target.value)} 
+              />
+            </div>
+            <div>
+              <Label htmlFor="licenseFile">Update Driver's License (PDF/JPG)</Label>
+              <Input
+                id="licenseFile"
+                type="file"
+                accept="application/pdf,image/jpeg,image/jpg,image/png"
+                onChange={(e) => setLicenseFile(e.target.files?.[0] || null)}
+              />
+              {driver.license_file_url && !licenseFile && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Current file on record
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="space-y-3 border-t pt-4">
