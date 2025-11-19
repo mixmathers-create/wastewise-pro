@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
+import { useNavigate } from "react-router-dom";
 import { VisualScheduleChart } from "./VisualScheduleChart";
 import { RouteMapView } from "./RouteMapView";
 import jsPDF from "jspdf";
@@ -87,6 +88,7 @@ interface MaintenanceBlock {
 
 const SchedulingTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [helpers, setHelpers] = useState<Helper[]>([]);
   const [trucks, setTrucks] = useState<TruckType[]>([]);
@@ -124,7 +126,6 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const [deviceFingerprint, setDeviceFingerprint] = useState<string>("");
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [showPastSchedules, setShowPastSchedules] = useState(false);
   const [maintenanceExpanded, setMaintenanceExpanded] = useState(false);
   
   const [showPeekDialog, setShowPeekDialog] = useState(false);
@@ -650,17 +651,12 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
 
   const sortedDates = Object.keys(groupedSchedules).sort();
   
-  // Filter schedules based on showPastSchedules toggle
+  // Filter schedules to show only current and future dates
   const today = format(new Date(), "yyyy-MM-dd");
   const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
   const minDate = format(addDays(selectedDate, -7), "yyyy-MM-dd");
   const maxDate = format(addDays(selectedDate, 7), "yyyy-MM-dd");
-  const visibleDates = sortedDates.filter(d => {
-    if (showPastSchedules) {
-      return d >= minDate && d <= maxDate;
-    }
-    return d >= today && d >= minDate && d <= maxDate;
-  });
+  const visibleDates = sortedDates.filter(d => d >= today && d >= minDate && d <= maxDate);
 
   return (
     <div className="space-y-4">
@@ -728,9 +724,9 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    onClick={() => setShowPastSchedules(!showPastSchedules)}
+                    onClick={() => navigate("/past-schedules")}
                   >
-                    {showPastSchedules ? "Hide Past" : "Show Past"}
+                    View Past Schedules
                   </Button>
                   <Button variant="outline" size="sm" onClick={exportScheduleAsPDF}>
                     <Download className="mr-1 h-3 w-3" />

@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import MobileDashboard from "./pages/MobileDashboard";
 import ReceiptPreview from "./pages/ReceiptPreview";
 import NotFound from "./pages/NotFound";
+import PastSchedules from "./pages/PastSchedules";
 import { isNativePlatform } from "@/lib/capacitorUtils";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => {
             <Route path="/dashboard" element={<DashboardComponent />} />
             <Route path="/mobile" element={<MobileDashboard />} />
             <Route path="/receipt-preview" element={<ReceiptPreview />} />
+            <Route path="/past-schedules" element={<PastSchedules />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
