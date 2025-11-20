@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Printer } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { printerService } from "@/lib/printerService";
+import { SchedulingParametersSettings } from "./SchedulingParametersSettings";
 
 const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
@@ -96,6 +97,8 @@ const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
 
   return (
     <div className="space-y-4">
+      <SchedulingParametersSettings />
+      
       <Card>
         <CardHeader>
           <CardTitle>Account Information</CardTitle>
