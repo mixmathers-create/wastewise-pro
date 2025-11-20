@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { printerService } from "@/lib/printerService";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { SchedulingParametersSettings } from "./SchedulingParametersSettings";
 
 const SettingsTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
@@ -104,6 +105,8 @@ const SettingsTab = ({ profile }: { profile: any }) => {
 
   return (
     <div className="space-y-4">
+      <SchedulingParametersSettings />
+      
       <Card>
         <CardHeader>
           <CardTitle>Internal Printer</CardTitle>

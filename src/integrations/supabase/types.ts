@@ -598,6 +598,7 @@ export type Database = {
           approved_at: string | null
           approved_by: string | null
           client_ids: string[] | null
+          client_mt_allocations: Json | null
           created_at: string | null
           date: string
           device_fingerprint: string | null
@@ -605,6 +606,7 @@ export type Database = {
           helper_ids: string[]
           id: string
           is_backup: boolean | null
+          is_special_dispatch: boolean | null
           mt_requirement: number | null
           shift: string
           signature_data: string | null
@@ -616,6 +618,7 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           client_ids?: string[] | null
+          client_mt_allocations?: Json | null
           created_at?: string | null
           date: string
           device_fingerprint?: string | null
@@ -623,6 +626,7 @@ export type Database = {
           helper_ids?: string[]
           id?: string
           is_backup?: boolean | null
+          is_special_dispatch?: boolean | null
           mt_requirement?: number | null
           shift: string
           signature_data?: string | null
@@ -634,6 +638,7 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           client_ids?: string[] | null
+          client_mt_allocations?: Json | null
           created_at?: string | null
           date?: string
           device_fingerprint?: string | null
@@ -641,6 +646,7 @@ export type Database = {
           helper_ids?: string[]
           id?: string
           is_backup?: boolean | null
+          is_special_dispatch?: boolean | null
           mt_requirement?: number | null
           shift?: string
           signature_data?: string | null
@@ -664,6 +670,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      scheduling_parameters: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          parameter_key: string
+          parameter_value: Json
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          parameter_key: string
+          parameter_value: Json
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          parameter_key?: string
+          parameter_value?: Json
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       tool_checkouts: {
         Row: {

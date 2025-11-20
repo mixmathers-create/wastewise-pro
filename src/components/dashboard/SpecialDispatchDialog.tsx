@@ -277,17 +277,31 @@ export const SpecialDispatchDialog = ({
       const personnelAssignments = autoAssignPersonnel(dateStr, truckAllocations.length);
       
       // Create schedule entries for each truck allocation
-      const schedules = truckAllocations.map((allocation, index) => ({
-        date: dateStr,
-        shift,
-        truck_id: allocation.truckId,
-        driver_id: personnelAssignments[index]?.driverId || null,
-        helper_ids: personnelAssignments[index]?.helperIds || [],
-        client_ids: allocation.clientIds,
-        mt_requirement: allocation.allocatedMt,
-        status: "draft",
-        is_backup: false
-      }));
+      const schedules = truckAllocations.map((allocation, index) => {
+        // Build client MT allocations for this truck
+        const clientMtAllocationsForTruck = allocation.clientIds.map(clientId => {
+          const clientAssignment = clientMtAssignments.find(ca => ca.clientId === clientId);
+          return {
+            client_id: clientId,
+            mt_requirement: clientAssignment?.mt || 0,
+            allocated_mt: allocation.allocatedMt / allocation.clientIds.length // Distribute equally for simplicity
+          };
+        });
+
+        return {
+          date: dateStr,
+          shift,
+          truck_id: allocation.truckId,
+          driver_id: personnelAssignments[index]?.driverId || null,
+          helper_ids: personnelAssignments[index]?.helperIds || [],
+          client_ids: allocation.clientIds,
+          mt_requirement: allocation.allocatedMt,
+          status: "draft",
+          is_backup: false,
+          is_special_dispatch: true,
+          client_mt_allocations: clientMtAllocationsForTruck
+        };
+      });
 
       const { error } = await supabase.from("schedules").insert(schedules);
       
