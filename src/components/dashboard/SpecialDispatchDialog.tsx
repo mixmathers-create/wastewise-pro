@@ -54,7 +54,6 @@ export const SpecialDispatchDialog = ({
   maintenanceBlocks
 }: SpecialDispatchDialogProps) => {
   const { toast } = useToast();
-  const [mtRequirement, setMtRequirement] = useState("");
   const [clientMtAssignments, setClientMtAssignments] = useState<ClientMtAssignment[]>([]);
   const [collectionDate, setCollectionDate] = useState<Date>();
   const [shift, setShift] = useState<"AM" | "PM">("AM");
@@ -78,29 +77,74 @@ export const SpecialDispatchDialog = ({
       !isTruckUnderMaintenance(truck.id, format(collectionDate, "yyyy-MM-dd"))
   );
 
-  const calculateRequiredTrucks = () => {
-    const mt = parseFloat(mtRequirement);
-    if (isNaN(mt) || mt <= 0) return 0;
+  // Allocate trucks to clients based on capacity
+  const allocateTrucksToClients = (trucksToUse: TruckType[]) => {
+    const sortedTrucks = [...trucksToUse].sort((a, b) => b.capacity - a.capacity);
+    const sortedClients = [...clientMtAssignments].sort((a, b) => b.mt - a.mt);
     
-    const sortedTrucks = [...availableTrucks].sort((a, b) => b.capacity - a.capacity);
-    let remainingMt = mt;
-    let truckCount = 0;
+    const truckAllocations: Array<{
+      truckId: string;
+      clientIds: string[];
+      allocatedMt: number;
+      remainingCapacity: number;
+    }> = sortedTrucks.map(truck => ({
+      truckId: truck.id,
+      clientIds: [],
+      allocatedMt: 0,
+      remainingCapacity: truck.capacity
+    }));
     
-    for (const truck of sortedTrucks) {
-      if (remainingMt <= 0) break;
-      remainingMt -= truck.capacity;
-      truckCount++;
+    // Track remaining MT per client
+    const clientRemainingMt = new Map(sortedClients.map(c => [c.clientId, c.mt]));
+    
+    // First pass: Try to assign each client to one truck
+    for (const client of sortedClients) {
+      const remainingMt = clientRemainingMt.get(client.clientId) || 0;
+      if (remainingMt === 0) continue;
+      
+      // Find best fitting truck (smallest truck that can fit this client's MT)
+      const suitableTruck = truckAllocations.find(t => t.remainingCapacity >= remainingMt);
+      
+      if (suitableTruck) {
+        suitableTruck.clientIds.push(client.clientId);
+        suitableTruck.allocatedMt += remainingMt;
+        suitableTruck.remainingCapacity -= remainingMt;
+        clientRemainingMt.set(client.clientId, 0);
+      }
     }
     
-    return truckCount;
+    // Second pass: Distribute remaining client MT across trucks with capacity
+    for (const client of sortedClients) {
+      let remainingMt = clientRemainingMt.get(client.clientId) || 0;
+      if (remainingMt === 0) continue;
+      
+      // Find trucks with remaining capacity
+      const trucksWithCapacity = truckAllocations
+        .filter(t => t.remainingCapacity > 0)
+        .sort((a, b) => b.remainingCapacity - a.remainingCapacity);
+      
+      for (const truck of trucksWithCapacity) {
+        if (remainingMt === 0) break;
+        
+        const mtToAllocate = Math.min(remainingMt, truck.remainingCapacity);
+        truck.clientIds.push(client.clientId);
+        truck.allocatedMt += mtToAllocate;
+        truck.remainingCapacity -= mtToAllocate;
+        remainingMt -= mtToAllocate;
+      }
+      
+      clientRemainingMt.set(client.clientId, remainingMt);
+    }
+    
+    return truckAllocations.filter(t => t.clientIds.length > 0);
   };
 
   const autoAssignTrucks = () => {
-    const mt = parseFloat(mtRequirement);
-    if (isNaN(mt) || mt <= 0) return [];
+    const totalMt = clientMtAssignments.reduce((sum, ca) => sum + ca.mt, 0);
+    if (totalMt === 0) return [];
     
     const sortedTrucks = [...availableTrucks].sort((a, b) => b.capacity - a.capacity);
-    let remainingMt = mt;
+    let remainingMt = totalMt;
     const assignedTrucks: string[] = [];
     
     for (const truck of sortedTrucks) {
@@ -200,12 +244,6 @@ export const SpecialDispatchDialog = ({
       return;
     }
 
-    const mt = parseFloat(mtRequirement);
-    if (isNaN(mt) || mt <= 0) {
-      toast({ title: "Error", description: "Please enter a valid MT requirement", variant: "destructive" });
-      return;
-    }
-
     if (clientMtAssignments.length === 0) {
       toast({ title: "Error", description: "Please select at least one client", variant: "destructive" });
       return;
@@ -229,18 +267,24 @@ export const SpecialDispatchDialog = ({
     try {
       const dateStr = format(collectionDate, "yyyy-MM-dd");
       
-      // Auto-assign personnel
-      const personnelAssignments = autoAssignPersonnel(dateStr, trucksToAssign.length);
+      // Get truck objects for allocation
+      const trucksToUse = availableTrucks.filter(t => trucksToAssign.includes(t.id));
       
-      // Create schedule entries for each truck
-      const schedules = trucksToAssign.map((truckId, index) => ({
+      // Allocate trucks to clients based on capacity
+      const truckAllocations = allocateTrucksToClients(trucksToUse);
+      
+      // Auto-assign personnel
+      const personnelAssignments = autoAssignPersonnel(dateStr, truckAllocations.length);
+      
+      // Create schedule entries for each truck allocation
+      const schedules = truckAllocations.map((allocation, index) => ({
         date: dateStr,
         shift,
-        truck_id: truckId,
+        truck_id: allocation.truckId,
         driver_id: personnelAssignments[index]?.driverId || null,
         helper_ids: personnelAssignments[index]?.helperIds || [],
-        client_ids: clientMtAssignments.map(ca => ca.clientId),
-        mt_requirement: mt / trucksToAssign.length, // Distribute MT evenly
+        client_ids: allocation.clientIds,
+        mt_requirement: allocation.allocatedMt,
         status: "draft",
         is_backup: false
       }));
@@ -254,11 +298,10 @@ export const SpecialDispatchDialog = ({
       
       toast({ 
         title: "Success", 
-        description: `Special dispatch created with ${trucksToAssign.length} truck${trucksToAssign.length > 1 ? 's' : ''}, ${assignedDrivers} driver${assignedDrivers !== 1 ? 's' : ''}, and ${assignedHelpers} helper${assignedHelpers !== 1 ? 's' : ''}` 
+        description: `Special dispatch created: ${truckAllocations.length} truck${truckAllocations.length > 1 ? 's' : ''} allocated to clients, ${assignedDrivers} driver${assignedDrivers !== 1 ? 's' : ''}, ${assignedHelpers} helper${assignedHelpers !== 1 ? 's' : ''}` 
       });
       
       // Reset form
-      setMtRequirement("");
       setClientMtAssignments([]);
       setCollectionDate(undefined);
       setShift("AM");
@@ -300,7 +343,6 @@ export const SpecialDispatchDialog = ({
     );
   };
 
-  const requiredTrucks = calculateRequiredTrucks();
   const totalClientMt = clientMtAssignments.reduce((sum, ca) => sum + ca.mt, 0);
 
   return (
@@ -311,24 +353,6 @@ export const SpecialDispatchDialog = ({
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* MT Requirement */}
-          <div className="space-y-2">
-            <Label htmlFor="mt">Total MT Requirement *</Label>
-            <Input
-              id="mt"
-              type="number"
-              step="0.01"
-              placeholder="Enter total MT"
-              value={mtRequirement}
-              onChange={(e) => setMtRequirement(e.target.value)}
-            />
-            {mtRequirement && requiredTrucks > 0 && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Truck className="h-4 w-4" />
-                <span>Estimated trucks needed: {requiredTrucks}</span>
-              </div>
-            )}
-          </div>
 
           {/* Date Selection */}
           <div className="space-y-2">
