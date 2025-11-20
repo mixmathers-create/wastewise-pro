@@ -21,20 +21,28 @@ export const SchedulingParametersSettings = () => {
   const [parameters, setParameters] = useState<SchedulingParameter[]>([]);
 
   useEffect(() => {
+    console.log('[SchedulingParametersSettings] Component mounted, loading parameters...');
     loadParameters();
   }, []);
 
   const loadParameters = async () => {
     try {
       setLoading(true);
+      console.log('[SchedulingParametersSettings] Fetching parameters from database...');
       const { data, error } = await supabase
         .from("scheduling_parameters")
         .select("*")
         .order("parameter_key");
 
-      if (error) throw error;
+      if (error) {
+        console.error('[SchedulingParametersSettings] Error loading parameters:', error);
+        throw error;
+      }
+      
+      console.log('[SchedulingParametersSettings] Parameters loaded:', data);
       setParameters(data || []);
     } catch (error: any) {
+      console.error('[SchedulingParametersSettings] Load failed:', error);
       toast({
         title: "Error",
         description: error.message,
