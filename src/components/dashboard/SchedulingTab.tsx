@@ -66,6 +66,12 @@ interface Schedule {
   approved_at?: string;
   device_fingerprint?: string;
   client_ids?: string[];
+  is_special_dispatch?: boolean;
+  client_mt_allocations?: Array<{
+    client_id: string;
+    mt_requirement: number;
+    allocated_mt: number;
+  }>;
 }
 
 interface Client {
@@ -909,16 +915,19 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                                   {shiftSchedules.map((s, i) => {
                                     const driver = drivers.find(d => d.id === s.driver_id);
                                     const truck = trucks.find(t => t.id === s.truck_id);
-                                    const scheduleClients = clients.filter(c => s.client_ids?.includes(c.id));
+                                    const shiftClients = clients.filter(c => s.client_ids?.includes(c.id));
                                     return (
                                       <div key={i} className="text-xs p-1.5 bg-muted/30 rounded space-y-0.5">
-                                        <div>
+                                        <div className="flex items-center gap-1">
                                           <span className="font-medium">{truck?.code}</span> • {driver?.name}
+                                          {s.is_special_dispatch && (
+                                            <Badge variant="secondary" className="text-[9px] h-4 px-1">Special</Badge>
+                                          )}
                                         </div>
-                                        {scheduleClients.length > 0 && (
+                                        {shiftClients.length > 0 && (
                                           <div className="text-[10px] text-muted-foreground flex items-center gap-1">
                                             <Users className="h-3 w-3" />
-                                            {scheduleClients.map(c => c.name).join(', ')} ({s.mt_requirement || 0} MT)
+                                            {shiftClients.map(c => c.name).join(', ')} ({s.mt_requirement || 0} MT)
                                           </div>
                                         )}
                                       </div>
@@ -1221,7 +1230,12 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                 return (
                   <div key={schedule.id || idx} className="border rounded p-3 space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="font-medium text-sm">{truck?.code} - {truck?.type}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="font-medium text-sm">{truck?.code} - {truck?.type}</div>
+                        {schedule.is_special_dispatch && (
+                          <Badge variant="default" className="text-xs">Special Dispatch</Badge>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-xs">{truck?.capacity}MT</Badge>
                         <Button size="sm" variant="ghost" onClick={() => setEditingSchedule(schedule)}>
@@ -1264,26 +1278,39 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                           </Button>
                         </div>
                         <div className="space-y-1">
-                          {scheduleClients.map(c => (
-                            <div key={c.id} className="flex items-center justify-between pl-2 py-1 bg-muted/30 rounded group">
-                              <div className="flex-1">
-                                <span className="font-medium">{c.name}</span>
+                          {scheduleClients.map(c => {
+                            // For special dispatch, show allocated MT from client_mt_allocations
+                            let displayMt = c.mt_requirement;
+                            if (schedule.is_special_dispatch && schedule.client_mt_allocations) {
+                              const allocation = schedule.client_mt_allocations.find(
+                                (alloc: any) => alloc.client_id === c.id
+                              );
+                              if (allocation) {
+                                displayMt = allocation.mt_requirement;
+                              }
+                            }
+                            
+                            return (
+                              <div key={c.id} className="flex items-center justify-between pl-2 py-1 bg-muted/30 rounded group">
+                                <div className="flex-1">
+                                  <span className="font-medium">{c.name}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-muted-foreground">
+                                  <span>{displayMt}MT</span>
+                                  <span>·</span>
+                                  <span>{(displayMt * SERVICE_TIME_PER_MT).toFixed(0)} mins</span>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={() => exportClientSchedule(c.id)}
+                                  >
+                                    <Download className="h-3 w-3" />
+                                  </Button>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                <span>{c.mt_requirement}MT</span>
-                                <span>·</span>
-                                <span>{(c.mt_requirement * SERVICE_TIME_PER_MT).toFixed(0)} mins</span>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={() => exportClientSchedule(c.id)}
-                                >
-                                  <Download className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                         <div className="mt-2 pt-2 border-t space-y-1">
                           <div className="flex justify-between text-muted-foreground">
