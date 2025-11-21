@@ -5,6 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { Upload, Eye } from "lucide-react";
+import { Camera, CameraResultType } from "@capacitor/camera";
+import { Capacitor } from "@capacitor/core";
 
 interface AddMechanicDialogProps {
   open: boolean;
@@ -16,27 +19,53 @@ export function AddMechanicDialog({ open, onOpenChange, onSuccess }: AddMechanic
   const [name, setName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
   const [birthdate, setBirthdate] = useState("");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const { toast } = useToast();
+  const isMobile = Capacitor.isNativePlatform();
+
+  const handlePhotoCapture = async () => {
+    if (isMobile) {
+      try {
+        const image = await Camera.getPhoto({ quality: 90, allowEditing: false, resultType: CameraResultType.Uri });
+        const response = await fetch(image.webPath!);
+        const blob = await response.blob();
+        const file = new File([blob], "mechanic-photo.jpg", { type: "image/jpeg" });
+        setPhotoFile(file);
+        setPhotoPreview(image.webPath!);
+      } catch (error: any) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      }
+    } else {
+      document.getElementById('mechanic-photo-input')?.click();
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) { setPhotoFile(file); setPhotoPreview(URL.createObjectURL(file)); }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
-      // Generate ABC-123456789 format
-      const letters = Array.from({length: 3}, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
       const numbers = Array.from({length: 9}, () => Math.floor(Math.random() * 10)).join('');
-      const idNumber = `${letters}-${numbers}`;
+      const idNumber = `MEC-${numbers}`;
+      let photoUrl = null;
+
+      if (photoFile) {
+        const fileExt = photoFile.name.split('.').pop();
+        const fileName = `${idNumber}-${Date.now()}.${fileExt}`;
+        const { error: uploadError, data } = await supabase.storage.from('personnel-photos').upload(fileName, photoFile);
+        if (uploadError) throw uploadError;
+        photoUrl = data.path;
+      }
       
       const { error } = await supabase.from("mechanics").insert({
-        name,
-        id_number: idNumber,
-        contact_number: contactNumber || null,
-        birthdate: birthdate || null,
-        status: "available",
-        availability: {
-          days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
-          shifts: ["AM", "PM"]
-        }
+        name, id_number: idNumber, contact_number: contactNumber || null,
+        birthdate: birthdate || null, photo_url: photoUrl, status: "available",
+        availability: { days: ["Mon", "Tue", "Wed", "Thu", "Fri"], shifts: ["AM", "PM"] }
       });
 
       if (error) throw error;
@@ -71,9 +100,20 @@ export function AddMechanicDialog({ open, onOpenChange, onSuccess }: AddMechanic
             <Label htmlFor="birthdate">Birthdate</Label>
             <Input id="birthdate" type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} />
           </div>
+          <div>
+            <Label>Photo *</Label>
+            <div className="flex gap-2 items-center">
+              <Button type="button" variant="outline" onClick={handlePhotoCapture}>
+                <Upload className="h-4 w-4 mr-2" />{isMobile ? 'Take Photo' : 'Upload Photo'}
+              </Button>
+              {photoPreview && <Button type="button" variant="outline" size="sm" onClick={() => window.open(photoPreview, '_blank')}><Eye className="h-4 w-4 mr-2" />Preview</Button>}
+            </div>
+            <input id="mechanic-photo-input" type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+            {photoPreview && <img src={photoPreview} alt="Preview" className="mt-2 h-24 w-24 object-cover rounded" />}
+          </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit">Add Mechanic</Button>
+            <Button type="submit" disabled={!photoFile}>Add Mechanic</Button>
           </div>
         </form>
       </DialogContent>

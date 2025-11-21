@@ -4,13 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Download, Upload, Edit, Trash2, Users, UserCog } from "lucide-react";
+import { Download, Upload, Edit, Trash2, Users, UserCog, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateCSV, downloadCSV, parseCSV } from "@/lib/csvUtils";
 import AddDriverDialog from "../AddDriverDialog";
 import AddHelperDialog from "../AddHelperDialog";
 import DriverEditDialog from "../DriverEditDialog";
 import HelperEditDialog from "../HelperEditDialog";
+import LicensePreviewDialog from "../LicensePreviewDialog";
 
 export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
   const { toast } = useToast();
@@ -18,6 +19,8 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
   const [helpers, setHelpers] = useState<any[]>([]);
   const [editingDriver, setEditingDriver] = useState<any>(null);
   const [editingHelper, setEditingHelper] = useState<any>(null);
+  const [viewingLicense, setViewingLicense] = useState<{url: string; name: string} | null>(null);
+  const [viewingPhoto, setViewingPhoto] = useState<{url: string; name: string} | null>(null);
   const driverFileInputRef = useRef<HTMLInputElement>(null);
   const helperFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -207,6 +210,8 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                   <TableHead>Contact</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>License Expiry</TableHead>
+                  <TableHead>License File</TableHead>
+                  <TableHead>Photo</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -230,6 +235,30 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                       {driver.license_expiry_date
                         ? new Date(driver.license_expiry_date).toLocaleDateString()
                         : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {driver.license_file_url ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setViewingLicense({url: driver.license_file_url, name: driver.name})}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View
+                        </Button>
+                      ) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {driver.photo_url ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setViewingPhoto({url: driver.photo_url, name: driver.name})}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View
+                        </Button>
+                      ) : "—"}
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
@@ -294,6 +323,7 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                   <TableHead>ID #</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Photo</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -311,6 +341,18 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                       }`}>
                         {helper.status?.replace('_', ' ')}
                       </span>
+                    </TableCell>
+                    <TableCell>
+                      {helper.photo_url ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setViewingPhoto({url: helper.photo_url, name: helper.name})}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View
+                        </Button>
+                      ) : "—"}
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
@@ -353,6 +395,24 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
           open={!!editingHelper}
           onOpenChange={(open) => !open && setEditingHelper(null)}
           onUpdated={fetchHelpers}
+        />
+      )}
+
+      {viewingLicense && (
+        <LicensePreviewDialog
+          licenseUrl={viewingLicense.url}
+          driverName={viewingLicense.name}
+          open={!!viewingLicense}
+          onOpenChange={(open) => !open && setViewingLicense(null)}
+        />
+      )}
+
+      {viewingPhoto && (
+        <LicensePreviewDialog
+          licenseUrl={viewingPhoto.url}
+          driverName={viewingPhoto.name}
+          open={!!viewingPhoto}
+          onOpenChange={(open) => !open && setViewingPhoto(null)}
         />
       )}
     </Tabs>

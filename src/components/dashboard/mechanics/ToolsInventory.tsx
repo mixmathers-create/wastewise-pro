@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Download, Upload, Plus, Edit, Trash2 } from "lucide-react";
+import { Download, Upload, Plus, Edit, Trash2, QrCode } from "lucide-react";
 import { generateCSV, downloadCSV, parseCSV } from "@/lib/csvUtils";
 import { AddToolDialog } from "./AddToolDialog";
 import { EditToolDialog } from "./EditToolDialog";
+import QRCode from "qrcode";
+import jsPDF from "jspdf";
 
 export function ToolsInventory() {
   const [tools, setTools] = useState<any[]>([]);
@@ -42,11 +44,10 @@ export function ToolsInventory() {
   const downloadTemplate = () => {
     const exampleData = [{
       name: "Power Drill",
-      code: "TOOL-001",
       category: "Power Tools",
       condition: "good"
     }];
-    const csv = generateCSV(exampleData, ["name", "code", "category", "condition"]);
+    const csv = generateCSV(exampleData, ["name", "category", "condition"]);
     downloadCSV(csv, "tools-template.csv");
   };
 
@@ -58,19 +59,22 @@ export function ToolsInventory() {
     const rows = parseCSV(text);
 
     try {
-      const invalidRows = rows.filter(row => !row.name || !row.code);
+      const invalidRows = rows.filter(row => !row.name);
       if (invalidRows.length > 0) {
-        toast({ title: "Import Error", description: "All rows must have name and code", variant: "destructive" });
+        toast({ title: "Import Error", description: "All rows must have name", variant: "destructive" });
         return;
       }
 
-      const toolsToInsert = rows.map(row => ({
-        name: row.name,
-        code: row.code,
-        category: row.category || null,
-        condition: row.condition || "good",
-        status: "available"
-      }));
+      const toolsToInsert = rows.map(row => {
+        const autoCode = `TOOL-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+        return {
+          name: row.name,
+          code: autoCode,
+          category: row.category || null,
+          condition: row.condition || "good",
+          status: "available"
+        };
+      });
 
       const { error } = await supabase.from("tools").insert(toolsToInsert);
       if (error) throw error;
@@ -96,6 +100,39 @@ export function ToolsInventory() {
     }
   };
 
+  const exportToolQRCodes = async () => {
+    const pdf = new jsPDF();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    let y = 20;
+    const qrSize = 50;
+    const spacing = 70;
+
+    for (const tool of tools) {
+      if (y + spacing > pageHeight) {
+        pdf.addPage();
+        y = 20;
+      }
+
+      try {
+        const qrDataUrl = await QRCode.toDataURL(tool.code, { width: 200 });
+        const x = (pageWidth - qrSize) / 2;
+        
+        pdf.addImage(qrDataUrl, 'PNG', x, y, qrSize, qrSize);
+        pdf.setFontSize(10);
+        pdf.text(tool.name, pageWidth / 2, y + qrSize + 5, { align: 'center' });
+        pdf.text(tool.code, pageWidth / 2, y + qrSize + 10, { align: 'center' });
+        
+        y += spacing;
+      } catch (error) {
+        console.error('Error generating QR for tool:', tool.code, error);
+      }
+    }
+
+    pdf.save('tool-qr-codes.pdf');
+    toast({ title: "Success", description: "QR codes exported successfully" });
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -107,6 +144,9 @@ export function ToolsInventory() {
             </Button>
             <Button variant="outline" size="sm" onClick={handleExport}>
               <Download className="h-4 w-4 mr-2" /> Export
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportToolQRCodes}>
+              <QrCode className="h-4 w-4 mr-2" /> Export QR Codes
             </Button>
             <Button variant="outline" size="sm" asChild>
               <label>

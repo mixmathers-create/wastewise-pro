@@ -289,6 +289,7 @@ export type Database = {
           id: string
           id_number: string | null
           name: string
+          photo_url: string | null
           status: string | null
           suspension_end_date: string | null
           suspension_start_date: string | null
@@ -301,6 +302,7 @@ export type Database = {
           id?: string
           id_number?: string | null
           name: string
+          photo_url?: string | null
           status?: string | null
           suspension_end_date?: string | null
           suspension_start_date?: string | null
@@ -313,6 +315,7 @@ export type Database = {
           id?: string
           id_number?: string | null
           name?: string
+          photo_url?: string | null
           status?: string | null
           suspension_end_date?: string | null
           suspension_start_date?: string | null
@@ -536,6 +539,7 @@ export type Database = {
           id: string
           id_number: string | null
           name: string
+          photo_url: string | null
           status: string | null
           suspension_end_date: string | null
           suspension_start_date: string | null
@@ -548,6 +552,7 @@ export type Database = {
           id?: string
           id_number?: string | null
           name: string
+          photo_url?: string | null
           status?: string | null
           suspension_end_date?: string | null
           suspension_start_date?: string | null
@@ -560,6 +565,7 @@ export type Database = {
           id?: string
           id_number?: string | null
           name?: string
+          photo_url?: string | null
           status?: string | null
           suspension_end_date?: string | null
           suspension_start_date?: string | null
