@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Plus } from "lucide-react";
+import { Plus, Upload, Eye } from "lucide-react";
+import { Camera, CameraResultType } from "@capacitor/camera";
+import { Capacitor } from "@capacitor/core";
 
 const AddHelperDialog = ({ profile, onAdded }: { profile: any; onAdded: () => void }) => {
   const { toast } = useToast();
@@ -15,21 +17,67 @@ const AddHelperDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
   const [idNumber, setIdNumber] = useState("");
   const [birthdate, setBirthdate] = useState("");
   const [contactNumber, setContactNumber] = useState("");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const isMobile = Capacitor.isNativePlatform();
+
+  const handlePhotoCapture = async () => {
+    if (isMobile) {
+      try {
+        const image = await Camera.getPhoto({
+          quality: 90,
+          allowEditing: false,
+          resultType: CameraResultType.Uri
+        });
+        
+        const response = await fetch(image.webPath!);
+        const blob = await response.blob();
+        const file = new File([blob], "helper-photo.jpg", { type: "image/jpeg" });
+        setPhotoFile(file);
+        setPhotoPreview(image.webPath!);
+      } catch (error: any) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      }
+    } else {
+      document.getElementById('helper-photo-input')?.click();
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setPhotoFile(file);
+      setPhotoPreview(URL.createObjectURL(file));
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      // Generate ABC-123456789 format
-      const letters = Array.from({length: 3}, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
+      // Generate HLP-123456789 format
       const numbers = Array.from({length: 9}, () => Math.floor(Math.random() * 10)).join('');
-      const generatedId = `${letters}-${numbers}`;
+      const generatedId = `HLP-${numbers}`;
+      const finalIdNumber = idNumber || generatedId;
       
+      let photoUrl = null;
+      if (photoFile) {
+        const fileExt = photoFile.name.split('.').pop();
+        const fileName = `${finalIdNumber}-${Date.now()}.${fileExt}`;
+        const { error: uploadError, data } = await supabase.storage
+          .from('personnel-photos')
+          .upload(fileName, photoFile);
+
+        if (uploadError) throw uploadError;
+        photoUrl = data.path;
+      }
+
       const { error } = await supabase.from("helpers").insert({
         name,
-        id_number: idNumber || generatedId,
+        id_number: finalIdNumber,
         birthdate: birthdate || null,
         contact_number: contactNumber || null,
+        photo_url: photoUrl,
       });
 
       if (error) throw error;
@@ -40,6 +88,8 @@ const AddHelperDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
       setIdNumber("");
       setBirthdate("");
       setContactNumber("");
+      setPhotoFile(null);
+      setPhotoPreview(null);
       onAdded();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -51,7 +101,7 @@ const AddHelperDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button><Plus className="mr-2 h-4 w-4" />Add Helper</Button>
+        <Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Helper</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -59,12 +109,12 @@ const AddHelperDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="name">Name</Label>
+            <Label htmlFor="name">Name *</Label>
             <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <div>
-            <Label htmlFor="idNumber">ID Number (auto-generated if empty)</Label>
-            <Input id="idNumber" value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="HLP-XXXXXX" />
+            <Label htmlFor="idNumber">ID Number (auto-generated HLP-XXXXXXXXX)</Label>
+            <Input id="idNumber" value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="HLP-123456789" />
           </div>
           <div>
             <Label htmlFor="birthdate">Birth Date</Label>
@@ -74,7 +124,32 @@ const AddHelperDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
             <Label htmlFor="contactNumber">Contact Number</Label>
             <Input id="contactNumber" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="+63 XXX XXX XXXX" required />
           </div>
-          <Button type="submit" disabled={loading} className="w-full">
+          <div>
+            <Label>Photo *</Label>
+            <div className="flex gap-2 items-center">
+              <Button type="button" variant="outline" onClick={handlePhotoCapture}>
+                <Upload className="h-4 w-4 mr-2" />
+                {isMobile ? 'Take Photo' : 'Upload Photo'}
+              </Button>
+              {photoPreview && (
+                <Button type="button" variant="outline" size="sm" onClick={() => window.open(photoPreview, '_blank')}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Preview
+                </Button>
+              )}
+            </div>
+            <input
+              id="helper-photo-input"
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            {photoPreview && (
+              <img src={photoPreview} alt="Preview" className="mt-2 h-24 w-24 object-cover rounded" />
+            )}
+          </div>
+          <Button type="submit" disabled={loading || !photoFile} className="w-full">
             {loading ? "Adding..." : "Add Helper"}
           </Button>
         </form>

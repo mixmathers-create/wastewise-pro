@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Plus, Eye, Printer } from "lucide-react";
+import { Plus, Eye, Printer, Download } from "lucide-react";
 import CreateReceiptForm from "../collection/CreateReceiptForm";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { Capacitor } from '@capacitor/core';
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { generateCSV, downloadCSV } from "@/lib/csvUtils";
 
 const CollectionsTab = ({ profile }: { profile: any }) => {
   const navigate = useNavigate();
@@ -87,6 +88,18 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
     }
   };
 
+  const handleExport = () => {
+    const data = receipts.map(r => ({
+      date: new Date(r.created_at).toLocaleString(),
+      qr_code: r.qr_code,
+      signed_by: r.signed_by || '-',
+      pdf_url: r.pdf_url || '-'
+    }));
+    const csv = generateCSV(data, ["date", "qr_code", "signed_by", "pdf_url"]);
+    downloadCSV(csv, "collections-export.csv");
+    toast({ title: "Success", description: "Collections exported successfully" });
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -96,6 +109,12 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
             <CardDescription>Create and view collection receipts</CardDescription>
           </div>
           <div className="flex gap-2 items-center">
+            {!isMobile && (
+              <Button variant="outline" size="sm" onClick={handleExport}>
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            )}
             {!isMobile && isAdmin && selectedReceipts.size > 0 && (
               <Button 
                 variant="destructive" 
