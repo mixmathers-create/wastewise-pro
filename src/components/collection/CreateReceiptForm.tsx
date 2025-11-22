@@ -40,7 +40,8 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const [selectedDriver, setSelectedDriver] = useState("");
   const [selectedHelpers, setSelectedHelpers] = useState<string[]>([]);
   const [items, setItems] = useState<{ waste_type: string; quantity: number; unit: string }[]>([]);
-  const [newItem, setNewItem] = useState({ waste_type: "", quantity: 0, unit: "kg" });
+  const [selectedWasteType, setSelectedWasteType] = useState<string>("");
+  const [newItem, setNewItem] = useState({ quantity: 0, unit: "kg" });
   const [signedBy, setSignedBy] = useState("");
   const [isScanning, setIsScanning] = useState(false);
 
@@ -208,16 +209,19 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   };
 
   const handleAddItem = () => {
+    if (!selectedWasteType) {
+      toast({ title: "No Waste Type", description: "Please select a waste type first", variant: "destructive" });
+      return;
+    }
+
     if (!newItem.quantity || newItem.quantity <= 0) {
       toast({ title: "Invalid Quantity", description: "Please enter a valid quantity", variant: "destructive" });
       return;
     }
-
-    const wasteType = newItem.waste_type || "Not specified";
     
     // Check if item with same waste_type and unit already exists
     const existingItemIndex = items.findIndex(
-      item => item.waste_type === wasteType && item.unit === newItem.unit
+      item => item.waste_type === selectedWasteType && item.unit === newItem.unit
     );
 
     if (existingItemIndex !== -1) {
@@ -228,14 +232,15 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     } else {
       // Add new item
       const item = {
-        waste_type: wasteType,
+        waste_type: selectedWasteType,
         quantity: newItem.quantity,
         unit: newItem.unit,
       };
       setItems([...items, item]);
     }
 
-    setNewItem({ waste_type: "", quantity: 0, unit: "kg" });
+    setNewItem({ quantity: 0, unit: "kg" });
+    toast({ title: "Item Added", description: `${newItem.quantity} ${newItem.unit} added` });
   };
 
   const updateItem = (idx: number, field: string, value: any) => {
@@ -454,7 +459,8 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     setSelectedDriver("");
     setSelectedHelpers([]);
     setItems([]);
-    setNewItem({ waste_type: "", quantity: 0, unit: "kg" });
+    setSelectedWasteType("");
+    setNewItem({ quantity: 0, unit: "kg" });
     setSignedBy("");
   };
 
@@ -555,22 +561,71 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
           </div>
 
           <div>
-            <Label>Items</Label>
-            {/* Static input area */}
-            <div className="sticky top-0 bg-background z-10 p-3 border rounded-md mt-2 mb-3">
-              <div className="flex gap-2">
-                <Select value={newItem.waste_type} onValueChange={(v) => setNewItem({ ...newItem, waste_type: v })}>
-                  <SelectTrigger className="flex-1"><SelectValue placeholder="Waste type" /></SelectTrigger>
+            <Label>Waste Collection</Label>
+            {/* Waste Type Selection (once) */}
+            {!selectedWasteType ? (
+              <div className="mt-2 p-3 border rounded-md bg-muted">
+                <Label className="mb-2 block">Select Waste Type</Label>
+                <Select value={selectedWasteType} onValueChange={setSelectedWasteType}>
+                  <SelectTrigger><SelectValue placeholder="Choose waste type..." /></SelectTrigger>
                   <SelectContent>{wasteTypes.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
                 </Select>
-                <Input type="number" placeholder="Qty" value={newItem.quantity || ""} onChange={(e) => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) || 0 })} className="w-24" />
-                <Select value={newItem.unit} onValueChange={(v) => setNewItem({ ...newItem, unit: v })}>
-                  <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-                  <SelectContent>{units.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-                </Select>
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={handleAddItem} className="mt-2 w-full">Add Item</Button>
-            </div>
+            ) : (
+              <div className="mt-2 p-3 border rounded-md bg-primary/10">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Waste Type</p>
+                    <p className="font-semibold">{selectedWasteType}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedWasteType("");
+                      setNewItem({ quantity: 0, unit: "kg" });
+                    }}
+                  >
+                    Change
+                  </Button>
+                </div>
+
+                {/* Quick Add Items */}
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">Quantity</Label>
+                      <MobileInput
+                        type="number"
+                        value={newItem.quantity.toString()}
+                        onChange={(v) => setNewItem({ ...newItem, quantity: parseFloat(v) || 0 })}
+                        placeholder="0"
+                        allowDecimal={true}
+                        maxLength={8}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Unit</Label>
+                      <Select value={newItem.unit} onValueChange={(v) => setNewItem({ ...newItem, unit: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>{units.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <Button 
+                    type="button" 
+                    variant="default" 
+                    size="sm" 
+                    onClick={handleAddItem} 
+                    className="w-full"
+                    disabled={!newItem.quantity || newItem.quantity <= 0}
+                  >
+                    + Add Item
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Signed By field */}
             <div className="mb-3">

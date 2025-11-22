@@ -5,12 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit, Trash2, ShoppingCart, Download } from "lucide-react";
+import { Plus, Edit, Trash2, ShoppingCart, Download, PackagePlus, AlertCircle } from "lucide-react";
 import { AddConsumableDialog } from "./AddConsumableDialog";
 import { EditConsumableDialog } from "./EditConsumableDialog";
 import { CheckoutConsumableDialog } from "./CheckoutConsumableDialog";
+import { RefillConsumableDialog } from "./RefillConsumableDialog";
 import { format } from "date-fns";
 import { generateCSV, downloadCSV } from "@/lib/csvUtils";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export function ConsumablesInventory() {
   const [consumables, setConsumables] = useState<any[]>([]);
@@ -18,6 +20,8 @@ export function ConsumablesInventory() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingConsumable, setEditingConsumable] = useState<any>(null);
   const [showCheckoutDialog, setShowCheckoutDialog] = useState(false);
+  const [refillingConsumable, setRefillingConsumable] = useState<any>(null);
+  const [lowStockItems, setLowStockItems] = useState<any[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -34,6 +38,10 @@ export function ConsumablesInventory() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       setConsumables(data || []);
+      
+      // Check for low stock items
+      const lowStock = (data || []).filter(item => item.quantity <= item.min_stock_level);
+      setLowStockItems(lowStock);
     }
   };
 
@@ -122,7 +130,34 @@ export function ConsumablesInventory() {
               </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {/* Low Stock Alert */}
+            {lowStockItems.length > 0 && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Low Stock Alert!</AlertTitle>
+                <AlertDescription>
+                  {lowStockItems.length} item(s) are at or below minimum stock level:
+                  <ul className="list-disc list-inside mt-2">
+                    {lowStockItems.map(item => (
+                      <li key={item.id} className="flex items-center justify-between">
+                        <span>
+                          {item.name} - {item.quantity} {item.unit} (Min: {item.min_stock_level})
+                        </span>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => setRefillingConsumable(item)}
+                        >
+                          <PackagePlus className="h-4 w-4 mr-1" />
+                          Refill
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -158,6 +193,11 @@ export function ConsumablesInventory() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
+                        {item.quantity <= item.min_stock_level && (
+                          <Button variant="default" size="sm" onClick={() => setRefillingConsumable(item)}>
+                            <PackagePlus className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button variant="ghost" size="sm" onClick={() => setEditingConsumable(item)}>
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -262,6 +302,18 @@ export function ConsumablesInventory() {
           setShowCheckoutDialog(false);
         }}
       />
+
+      {refillingConsumable && (
+        <RefillConsumableDialog 
+          consumable={refillingConsumable}
+          open={!!refillingConsumable}
+          onOpenChange={(open) => !open && setRefillingConsumable(null)}
+          onSuccess={() => {
+            fetchConsumables();
+            setRefillingConsumable(null);
+          }}
+        />
+      )}
     </Tabs>
   );
 }
