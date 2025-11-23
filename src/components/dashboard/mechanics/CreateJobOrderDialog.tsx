@@ -17,7 +17,7 @@ interface CreateJobOrderDialogProps {
 export function CreateJobOrderDialog({ open, onOpenChange, onSuccess }: CreateJobOrderDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [mechanicId, setMechanicId] = useState("");
+  const [mechanicIds, setMechanicIds] = useState<string[]>([]);
   const [truckId, setTruckId] = useState("");
   const [priority, setPriority] = useState("medium");
   const [scheduledDate, setScheduledDate] = useState("");
@@ -58,7 +58,7 @@ export function CreateJobOrderDialog({ open, onOpenChange, onSuccess }: CreateJo
         job_number: jobNumber,
         title,
         description: description || null,
-        mechanic_id: mechanicId || null,
+        mechanic_ids: mechanicIds.length > 0 ? mechanicIds : [],
         truck_id: truckId || null,
         priority,
         scheduled_date: scheduledDate || null,
@@ -93,7 +93,7 @@ export function CreateJobOrderDialog({ open, onOpenChange, onSuccess }: CreateJo
       onOpenChange(false);
       setTitle("");
       setDescription("");
-      setMechanicId("");
+      setMechanicIds([]);
       setTruckId("");
       setPriority("medium");
       setScheduledDate("");
@@ -117,37 +117,42 @@ export function CreateJobOrderDialog({ open, onOpenChange, onSuccess }: CreateJo
             <Label htmlFor="description">Description</Label>
             <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="mechanic">Assign to Mechanic</Label>
-              <Select value={mechanicId} onValueChange={setMechanicId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select mechanic" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mechanics.map((mechanic) => (
-                    <SelectItem key={mechanic.id} value={mechanic.id}>
-                      {mechanic.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div>
+            <Label>Assign to Mechanics</Label>
+            <div className="border rounded-md p-3 max-h-40 overflow-y-auto">
+              {mechanics.map((mechanic) => (
+                <label key={mechanic.id} className="flex items-center gap-2 py-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={mechanicIds.includes(mechanic.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setMechanicIds([...mechanicIds, mechanic.id]);
+                      } else {
+                        setMechanicIds(mechanicIds.filter(id => id !== mechanic.id));
+                      }
+                    }}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm">{mechanic.name}</span>
+                </label>
+              ))}
             </div>
-            <div>
-              <Label htmlFor="truck">Truck</Label>
-              <Select value={truckId} onValueChange={setTruckId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select truck" />
-                </SelectTrigger>
-                <SelectContent>
-                  {trucks.map((truck) => (
-                    <SelectItem key={truck.id} value={truck.id}>
-                      {truck.code}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          </div>
+          <div>
+            <Label htmlFor="truck">Truck</Label>
+            <Select value={truckId} onValueChange={setTruckId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select truck" />
+              </SelectTrigger>
+              <SelectContent>
+                {trucks.map((truck) => (
+                  <SelectItem key={truck.id} value={truck.id}>
+                    {truck.code}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

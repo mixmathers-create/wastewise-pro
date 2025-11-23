@@ -46,9 +46,27 @@ export function JobOrders() {
   const fetchJobOrders = async () => {
     const { data } = await supabase
       .from("job_orders")
-      .select("*, mechanics(name), trucks(code)")
+      .select("*, trucks(code)")
       .order("created_at", { ascending: false });
-    setJobOrders(data || []);
+    
+    // Fetch mechanics for each job order
+    if (data) {
+      const jobOrdersWithMechanics = await Promise.all(
+        data.map(async (job) => {
+          if (job.mechanic_ids && job.mechanic_ids.length > 0) {
+            const { data: mechanicsData } = await supabase
+              .from("mechanics")
+              .select("name")
+              .in("id", job.mechanic_ids);
+            return { ...job, mechanics: mechanicsData || [] };
+          }
+          return { ...job, mechanics: [] };
+        })
+      );
+      setJobOrders(jobOrdersWithMechanics);
+    } else {
+      setJobOrders([]);
+    }
   };
 
   const handleStart = async (job: any) => {
@@ -145,7 +163,11 @@ export function JobOrders() {
                 <TableCell className="font-mono">{job.job_number}</TableCell>
                 <TableCell className="font-medium">{job.title}</TableCell>
                 <TableCell>{job.trucks?.code || "N/A"}</TableCell>
-                <TableCell>{job.mechanics?.name || "Unassigned"}</TableCell>
+                <TableCell>
+                  {job.mechanics && job.mechanics.length > 0 
+                    ? job.mechanics.map((m: any) => m.name).join(", ")
+                    : "Unassigned"}
+                </TableCell>
                 <TableCell>
                   <span className={`px-2 py-1 rounded text-xs ${
                     job.priority === "high" ? "bg-red-100 text-red-800" :
