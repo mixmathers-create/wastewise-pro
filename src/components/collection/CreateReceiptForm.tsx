@@ -12,7 +12,7 @@ import { useNavigate } from "react-router-dom";
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { Capacitor } from "@capacitor/core";
-import { BarcodeScanner } from "@capacitor-mlkit/barcode-scanning";
+import { BarcodeScanner } from '@capacitor-community/barcode-scanner';
 import { MobileInput } from "@/components/mobile/MobileInput";
 import { printerService } from "@/lib/printerService";
 import { Card } from "@/components/ui/card";
@@ -40,8 +40,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const [selectedDriver, setSelectedDriver] = useState("");
   const [selectedHelpers, setSelectedHelpers] = useState<string[]>([]);
   const [items, setItems] = useState<{ waste_type: string; quantity: number; unit: string }[]>([]);
-  const [selectedWasteType, setSelectedWasteType] = useState<string>("");
-  const [newItem, setNewItem] = useState({ quantity: 0, unit: "kg" });
+  const [newItem, setNewItem] = useState({ waste_type: "", quantity: 0, unit: "kg" });
   const [signedBy, setSignedBy] = useState("");
   const [isScanning, setIsScanning] = useState(false);
 
@@ -86,72 +85,49 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   };
 
   const handleCamera = async () => {
-    try {
-      if (!Capacitor.isNativePlatform()) {
-        toast({
-          title: "Camera not available",
-          description: "Please use mobile app to scan QR codes",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      const scannerAny = BarcodeScanner as any;
-      if (typeof scannerAny?.initialize === "function") {
-        await scannerAny.initialize();
-      }
-      if (typeof scannerAny?.isGoogleBarcodeScannerModuleAvailable === "function") {
-        const moduleReady = await scannerAny.isGoogleBarcodeScannerModuleAvailable();
-        if (!moduleReady && typeof scannerAny.installGoogleBarcodeScannerModule === "function") {
-          await scannerAny.installGoogleBarcodeScannerModule();
-        }
-      }
-
-      // Request camera permission
-      const { camera } = await BarcodeScanner.requestPermissions();
-      if (camera !== 'granted') {
-        toast({
-          title: "Permission denied",
-          description: "Camera permission is required to scan QR codes. Please enable it in your device settings.", 
-          variant: "destructive" 
-        });
-        return;
-      }
-
-      setIsScanning(true);
-
-      // Start scanning and wait for result
-      const { barcodes } = await BarcodeScanner.scan();
-      
-      if (barcodes && barcodes.length > 0) {
-        const qrCode = barcodes[0].rawValue;
-        await handleQRDetected(qrCode);
-      } else {
-        toast({ 
-          title: "No QR Code Found", 
-          description: "Please try again and ensure the QR code is clearly visible", 
-          variant: "destructive" 
-        });
-      }
-      
-      setIsScanning(false);
-    } catch (error: any) {
-      console.error("Camera error:", error);
-      toast({ 
-        title: "Camera Error", 
-        description: error.message || "Could not access camera. Ensure ML Kit is installed and camera permissions are granted.", 
-        variant: "destructive" 
+  try {
+    if (!Capacitor.isNativePlatform()) {
+      toast({
+        title: "Camera not available",
+        description: "Use the mobile app to scan QR codes",
+        variant: "destructive",
       });
-      setIsScanning(false);
+      return;
     }
-  };
+
+    const status = await BarcodeScanner.checkPermission({ force: true });
+    if (!status.granted) return;
+
+    await BarcodeScanner.prepare();
+
+    setIsScanning(true);
+    BarcodeScanner.hideBackground();
+    document.body.classList.add("scanner-active");
+
+    const result = await BarcodeScanner.startScan();
+
+    BarcodeScanner.showBackground();
+    document.body.classList.remove("scanner-active");
+    setIsScanning(false);
+
+    if (result.hasContent) handleQRDetected(result.content);
+
+  } catch (err) {
+    BarcodeScanner.showBackground();
+    document.body.classList.remove("scanner-active");
+    setIsScanning(false);
+  }
+};
+
 
   const stopScanning = async () => {
     try {
       await BarcodeScanner.stopScan();
+      BarcodeScanner.showBackground();
       setIsScanning(false);
     } catch (error) {
       console.error("Error stopping scanner:", error);
+      BarcodeScanner.showBackground();
       setIsScanning(false);
     }
   };
@@ -209,19 +185,16 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   };
 
   const handleAddItem = () => {
-    if (!selectedWasteType) {
-      toast({ title: "No Waste Type", description: "Please select a waste type first", variant: "destructive" });
-      return;
-    }
-
     if (!newItem.quantity || newItem.quantity <= 0) {
       toast({ title: "Invalid Quantity", description: "Please enter a valid quantity", variant: "destructive" });
       return;
     }
+
+    const wasteType = newItem.waste_type || "Not specified";
     
     // Check if item with same waste_type and unit already exists
     const existingItemIndex = items.findIndex(
-      item => item.waste_type === selectedWasteType && item.unit === newItem.unit
+      item => item.waste_type === wasteType && item.unit === newItem.unit
     );
 
     if (existingItemIndex !== -1) {
@@ -232,15 +205,14 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     } else {
       // Add new item
       const item = {
-        waste_type: selectedWasteType,
+        waste_type: wasteType,
         quantity: newItem.quantity,
         unit: newItem.unit,
       };
       setItems([...items, item]);
     }
 
-    setNewItem({ quantity: 0, unit: "kg" });
-    toast({ title: "Item Added", description: `${newItem.quantity} ${newItem.unit} added` });
+    setNewItem({ waste_type: "", quantity: 0, unit: "kg" });
   };
 
   const updateItem = (idx: number, field: string, value: any) => {
@@ -459,31 +431,15 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     setSelectedDriver("");
     setSelectedHelpers([]);
     setItems([]);
-    setSelectedWasteType("");
-    setNewItem({ quantity: 0, unit: "kg" });
+    setNewItem({ waste_type: "", quantity: 0, unit: "kg" });
     setSignedBy("");
   };
 
   return (
     <>
-      {/* Mobile Scanner Overlay */}
-      {isScanning && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center">
-          <div className="text-white text-center p-4 mb-8">
-            <p className="text-xl font-semibold mb-2">Scan QR Code</p>
-            <p className="text-sm text-gray-300">Point camera at QR code</p>
-          </div>
-          <Button 
-            variant="outline" 
-            onClick={stopScanning}
-            className="absolute bottom-8 left-1/2 transform -translate-x-1/2"
-          >
-            Cancel
-          </Button>
-        </div>
-      )}
 
-      <div className="space-y-4">
+
+    <div className={`space-y-4 ${isScanning ? 'hidden' : ''}`}>
         <div>
           <Label>Select Client</Label>
         <Select onValueChange={handleClientSelect}>
@@ -504,6 +460,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
           <Input value={qrInput} onChange={(e) => setQrInput(e.target.value)} placeholder="Enter or scan QR" />
           <Button type="button" variant="outline" onClick={handleCamera} title="Use Camera">
             <Camera className="h-4 w-4" />
+            📷
           </Button>
           <Button type="button" variant="outline" asChild title="Upload QR Image">
             <label className="cursor-pointer">
@@ -561,71 +518,22 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
           </div>
 
           <div>
-            <Label>Waste Collection</Label>
-            {/* Waste Type Selection (once) */}
-            {!selectedWasteType ? (
-              <div className="mt-2 p-3 border rounded-md bg-muted">
-                <Label className="mb-2 block">Select Waste Type</Label>
-                <Select value={selectedWasteType} onValueChange={setSelectedWasteType}>
-                  <SelectTrigger><SelectValue placeholder="Choose waste type..." /></SelectTrigger>
+            <Label>Items</Label>
+            {/* Static input area */}
+            <div className="sticky top-0 bg-background z-10 p-3 border rounded-md mt-2 mb-3">
+              <div className="flex gap-2">
+                <Select value={newItem.waste_type} onValueChange={(v) => setNewItem({ ...newItem, waste_type: v })}>
+                  <SelectTrigger className="flex-1"><SelectValue placeholder="Waste type" /></SelectTrigger>
                   <SelectContent>{wasteTypes.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
                 </Select>
+                <Input type="number" placeholder="Qty" value={newItem.quantity || ""} onChange={(e) => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) || 0 })} className="w-24" />
+                <Select value={newItem.unit} onValueChange={(v) => setNewItem({ ...newItem, unit: v })}>
+                  <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+                  <SelectContent>{units.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                </Select>
               </div>
-            ) : (
-              <div className="mt-2 p-3 border rounded-md bg-primary/10">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Waste Type</p>
-                    <p className="font-semibold">{selectedWasteType}</p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedWasteType("");
-                      setNewItem({ quantity: 0, unit: "kg" });
-                    }}
-                  >
-                    Change
-                  </Button>
-                </div>
-
-                {/* Quick Add Items */}
-                <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs">Quantity</Label>
-                      <MobileInput
-                        type="number"
-                        value={newItem.quantity.toString()}
-                        onChange={(v) => setNewItem({ ...newItem, quantity: parseFloat(v) || 0 })}
-                        placeholder="0"
-                        allowDecimal={true}
-                        maxLength={8}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Unit</Label>
-                      <Select value={newItem.unit} onValueChange={(v) => setNewItem({ ...newItem, unit: v })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>{units.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <Button 
-                    type="button" 
-                    variant="default" 
-                    size="sm" 
-                    onClick={handleAddItem} 
-                    className="w-full"
-                    disabled={!newItem.quantity || newItem.quantity <= 0}
-                  >
-                    + Add Item
-                  </Button>
-                </div>
-              </div>
-            )}
+              <Button type="button" variant="outline" size="sm" onClick={handleAddItem} className="mt-2 w-full">Add Item</Button>
+            </div>
 
             {/* Signed By field */}
             <div className="mb-3">
@@ -658,6 +566,17 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
         </>
       )}
       </div>
+      
+      {isScanning && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center pb-20">
+          <button 
+            onClick={stopScanning}
+            className="bg-red-500 text-white px-6 py-3 rounded-lg font-semibold"
+          >
+            Cancel Scan
+          </button>
+        </div>
+      )}
     </>
   )
 };
