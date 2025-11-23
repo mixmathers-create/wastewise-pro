@@ -51,7 +51,7 @@ export function CheckoutConsumableDialog({ open, onOpenChange, onSuccess }: Chec
   const fetchJobOrders = async () => {
     const { data } = await supabase
       .from("job_orders")
-      .select("*, mechanics(id, name), trucks(id, code, plate_number)")
+      .select("*, trucks(id, code, plate_number)")
       .in("status", ["pending", "in_progress"])
       .order("created_at", { ascending: false });
     setJobOrders(data || []);
