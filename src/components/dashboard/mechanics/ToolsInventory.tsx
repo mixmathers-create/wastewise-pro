@@ -18,6 +18,7 @@ import QRCode from "qrcode";
 import jsPDF from "jspdf";
 import { format } from "date-fns";
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from "@capacitor/camera";
+import { isNativePlatform } from "@/lib/capacitorUtils";
 
 export function ToolsInventory() {
   const [tools, setTools] = useState<any[]>([]);
@@ -128,7 +129,7 @@ export function ToolsInventory() {
         quality: 90,
         allowEditing: false,
         resultType: CameraResultType.DataUrl,
-        source: CameraSource.Prompt // Prompt works better on web browsers
+        source: isNativePlatform() ? CameraSource.Camera : CameraSource.Prompt
       });
       setCheckinPhoto(photo.dataUrl || null);
       setCameraActive(false);

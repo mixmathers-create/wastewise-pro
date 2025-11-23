@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Camera as CameraIcon, Eye } from "lucide-react";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
+import { isNativePlatform } from "@/lib/capacitorUtils";
 
 interface AddMechanicDialogProps {
   open: boolean;
@@ -28,7 +29,7 @@ export function AddMechanicDialog({ open, onOpenChange, onSuccess }: AddMechanic
         quality: 90,
         allowEditing: false,
         resultType: CameraResultType.DataUrl,
-        source: CameraSource.Prompt // Prompt works better on web browsers
+        source: isNativePlatform() ? CameraSource.Camera : CameraSource.Prompt
       });
       
       // Convert base64 to Blob
