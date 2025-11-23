@@ -17,7 +17,7 @@ import { EditToolDialog } from "./EditToolDialog";
 import QRCode from "qrcode";
 import jsPDF from "jspdf";
 import { format } from "date-fns";
-import { Camera as CapacitorCamera } from "@capacitor/camera";
+import { Camera as CapacitorCamera, CameraResultType, CameraSource } from "@capacitor/camera";
 
 export function ToolsInventory() {
   const [tools, setTools] = useState<any[]>([]);
@@ -124,16 +124,20 @@ export function ToolsInventory() {
 
   const capturePhoto = async () => {
     try {
-      const { CameraResultType } = await import("@capacitor/camera");
       const photo = await CapacitorCamera.getPhoto({
-        quality: 80,
+        quality: 90,
         allowEditing: false,
-        resultType: CameraResultType.DataUrl
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Camera
       });
       setCheckinPhoto(photo.dataUrl || null);
       setCameraActive(false);
     } catch (error: any) {
-      toast({ title: "Error", description: "Failed to capture photo", variant: "destructive" });
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to capture photo", 
+        variant: "destructive" 
+      });
     }
   };
 
