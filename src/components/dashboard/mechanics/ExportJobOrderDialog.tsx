@@ -16,7 +16,9 @@ interface ExportJobOrderDialogProps {
 export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrderDialogProps) {
   const [consumableUsage, setConsumableUsage] = useState<any[]>([]);
   const [toolsUsed, setToolsUsed] = useState<any[]>([]);
-  const [totalCost, setTotalCost] = useState(0);
+  const [services, setServices] = useState<any[]>([]);
+  const [consumableCost, setConsumableCost] = useState(0);
+  const [serviceCost, setServiceCost] = useState(0);
   const [totalHours, setTotalHours] = useState(0);
   const [mechanicsNames, setMechanicsNames] = useState("Unassigned");
   const { toast } = useToast();
@@ -52,12 +54,12 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
       setConsumableUsage(checkouts);
       
       // Calculate total consumable costs
-      const consumableCost = checkouts.reduce((sum, checkout) => {
+      const calcConsumableCost = checkouts.reduce((sum, checkout) => {
         const unitCost = checkout.mechanic_consumables?.unit_cost || 0;
         return sum + (checkout.quantity_used * unitCost);
       }, 0);
       
-      setTotalCost(consumableCost);
+      setConsumableCost(calcConsumableCost);
     }
 
     // Fetch tools used for this job order
@@ -74,14 +76,17 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
     }
 
     // Fetch third-party services
-    const { data: services } = await supabase
+    const { data: servicesData } = await supabase
       .from("job_order_services")
       .select("*")
       .eq("job_order_id", job.id);
 
-    // Calculate service costs
-    const serviceCost = (services || []).reduce((sum, s) => sum + (s.cost || 0), 0);
-    setTotalCost(prevCost => prevCost + serviceCost);
+    if (servicesData) {
+      setServices(servicesData);
+      // Calculate service costs
+      const calcServiceCost = servicesData.reduce((sum, s) => sum + (s.cost || 0), 0);
+      setServiceCost(calcServiceCost);
+    }
 
     // Calculate man hours
     if (job.started_at) {
@@ -91,12 +96,8 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
   };
 
   const handleExport = async () => {
-    // Fetch third-party services for export
-    const { data: services } = await supabase
-      .from("job_order_services")
-      .select("*")
-      .eq("job_order_id", job.id);
-
+    const totalCost = consumableCost + serviceCost;
+    
     const csvData = [
       { Label: 'Job Order #', Value: job.job_number },
       { Label: 'Title', Value: job.title },
@@ -127,6 +128,9 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
         Value: `${service.provider_name || 'N/A'} - ₱${(service.cost || 0).toFixed(2)}`
       })),
       { Label: '', Value: '' },
+      { Label: 'COST SUMMARY', Value: '' },
+      { Label: 'Consumables Cost', Value: `₱${consumableCost.toFixed(2)}` },
+      { Label: 'Services Cost', Value: `₱${serviceCost.toFixed(2)}` },
       { Label: 'Total Cost', Value: `₱${totalCost.toFixed(2)}` }
     ];
 
@@ -148,7 +152,13 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
               <span className="font-semibold">Total Man Hours:</span> {totalHours.toFixed(2)} hours
             </div>
             <div>
-              <span className="font-semibold">Total Consumables Cost:</span> ₱{totalCost.toFixed(2)}
+              <span className="font-semibold">Consumables Cost:</span> ₱{consumableCost.toFixed(2)}
+            </div>
+            <div>
+              <span className="font-semibold">Services Cost:</span> ₱{serviceCost.toFixed(2)}
+            </div>
+            <div>
+              <span className="font-semibold">Total Cost:</span> ₱{(consumableCost + serviceCost).toFixed(2)}
             </div>
           </div>
           
@@ -173,6 +183,20 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
                   <li key={idx}>
                     {usage.mechanic_consumables?.name}: {usage.quantity_used} {usage.mechanic_consumables?.unit} 
                     @ ₱{usage.mechanic_consumables?.unit_cost} = ₱{(usage.quantity_used * (usage.mechanic_consumables?.unit_cost || 0)).toFixed(2)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {services.length > 0 && (
+            <div>
+              <h4 className="font-semibold mb-2">Third-Party Services:</h4>
+              <ul className="space-y-1 text-sm">
+                {services.map((service, idx) => (
+                  <li key={idx}>
+                    {service.service_type} - {service.category}
+                    {service.provider_name && ` (${service.provider_name})`}: ₱{(service.cost || 0).toFixed(2)}
                   </li>
                 ))}
               </ul>
