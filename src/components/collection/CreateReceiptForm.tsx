@@ -47,6 +47,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
 
 useEffect(() => {
+  loadClients();
   if (!Capacitor.isNativePlatform()) return;
 
   let listenerHandle: PluginListenerHandle | null = null;
