@@ -9,12 +9,12 @@ import com.capacitorjs.plugins.camera.CameraPlugin;
 public class MainActivity extends BridgeActivity {
   @Override
     public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
         Log.d("MainActivity", "Registering custom plugins");
         // Register custom plugins
         registerPlugin(PrinterPlugin.class);
         Log.d("MainActivity", "Registered PrinterPlugin");
         registerPlugin(CameraPlugin.class);
         Log.d("MainActivity", "Registered CameraPlugin");
+        super.onCreate(savedInstanceState);
     }
 }
