@@ -24,11 +24,20 @@ export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: C
     }
 
     try {
+      // Calculate final active time
+      let totalMinutes = job.total_active_minutes || 0;
+      if (job.status === 'in_progress' && job.last_resume_at) {
+        const elapsed = Math.floor((Date.now() - new Date(job.last_resume_at).getTime()) / 1000 / 60);
+        totalMinutes += elapsed;
+      }
+
       const { error } = await supabase
         .from("job_orders")
         .update({
           status: "completed",
           completed_at: new Date().toISOString(),
+          total_active_minutes: totalMinutes,
+          last_resume_at: null,
           description: job.description ? `${job.description}\n\nCompletion Remarks: ${remarks}` : `Completion Remarks: ${remarks}`
         })
         .eq("id", job.id);
