@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { ServicesList } from "./ServicesList";
 
 interface CompleteJobOrderDialogProps {
   job: any;
@@ -15,11 +16,39 @@ interface CompleteJobOrderDialogProps {
 
 export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: CompleteJobOrderDialogProps) {
   const [remarks, setRemarks] = useState("");
+  const [unpaidServices, setUnpaidServices] = useState(0);
+  const [servicesChecked, setServicesChecked] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (open && job) {
+      checkUnpaidServices();
+    }
+  }, [open, job]);
+
+  const checkUnpaidServices = async () => {
+    const { data } = await supabase
+      .from("job_order_services")
+      .select("*")
+      .eq("job_order_id", job.id)
+      .or("cost.is.null,cost.eq.0");
+    
+    setUnpaidServices(data?.length || 0);
+    setServicesChecked(true);
+  };
 
   const handleComplete = async () => {
     if (!remarks.trim()) {
       toast({ title: "Error", description: "Remarks are required to complete the job order", variant: "destructive" });
+      return;
+    }
+
+    if (unpaidServices > 0) {
+      toast({ 
+        title: "Cannot Complete", 
+        description: `${unpaidServices} third-party service(s) need cost added before completing this job order`, 
+        variant: "destructive" 
+      });
       return;
     }
 
@@ -55,7 +84,7 @@ export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: C
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Complete Job Order</DialogTitle>
         </DialogHeader>
@@ -64,6 +93,20 @@ export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: C
             <p className="text-sm font-medium">Job #: {job.job_number}</p>
             <p className="text-sm">{job.title}</p>
           </div>
+
+          <ServicesList jobOrderId={job.id} onServicesUpdate={checkUnpaidServices} />
+
+          {unpaidServices > 0 && (
+            <div className="p-4 bg-destructive/10 border border-destructive rounded-lg">
+              <p className="text-sm font-semibold text-destructive">
+                ⚠️ {unpaidServices} service(s) require cost to be added before completing
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Please add costs to all third-party services above before completing this job order.
+              </p>
+            </div>
+          )}
+
           <div>
             <Label htmlFor="remarks">Completion Remarks *</Label>
             <Textarea
@@ -77,7 +120,12 @@ export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: C
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={handleComplete}>Complete Job Order</Button>
+            <Button 
+              onClick={handleComplete}
+              disabled={unpaidServices > 0}
+            >
+              Complete Job Order
+            </Button>
           </div>
         </div>
       </DialogContent>

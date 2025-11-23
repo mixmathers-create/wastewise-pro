@@ -73,6 +73,16 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
       setToolsUsed(toolCheckouts);
     }
 
+    // Fetch third-party services
+    const { data: services } = await supabase
+      .from("job_order_services")
+      .select("*")
+      .eq("job_order_id", job.id);
+
+    // Calculate service costs
+    const serviceCost = (services || []).reduce((sum, s) => sum + (s.cost || 0), 0);
+    setTotalCost(prevCost => prevCost + serviceCost);
+
     // Calculate man hours
     if (job.started_at) {
       const totalMinutes = job.total_active_minutes || 0;
@@ -80,7 +90,13 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
     }
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
+    // Fetch third-party services for export
+    const { data: services } = await supabase
+      .from("job_order_services")
+      .select("*")
+      .eq("job_order_id", job.id);
+
     const csvData = [
       { Label: 'Job Order #', Value: job.job_number },
       { Label: 'Title', Value: job.title },
@@ -105,7 +121,13 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
         Value: `${usage.quantity_used} ${usage.mechanic_consumables?.unit} @ ₱${usage.mechanic_consumables?.unit_cost} = ₱${(usage.quantity_used * (usage.mechanic_consumables?.unit_cost || 0)).toFixed(2)}`
       })),
       { Label: '', Value: '' },
-      { Label: 'Total Consumables Cost', Value: `₱${totalCost.toFixed(2)}` }
+      { Label: 'THIRD-PARTY SERVICES', Value: '' },
+      ...(services || []).map(service => ({
+        Label: `${service.service_type} - ${service.category}`,
+        Value: `${service.provider_name || 'N/A'} - ₱${(service.cost || 0).toFixed(2)}`
+      })),
+      { Label: '', Value: '' },
+      { Label: 'Total Cost', Value: `₱${totalCost.toFixed(2)}` }
     ];
 
     const csv = generateCSV(csvData, ['Label', 'Value']);

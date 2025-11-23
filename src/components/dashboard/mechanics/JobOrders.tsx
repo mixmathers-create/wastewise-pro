@@ -5,13 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, CheckCircle2, PauseCircle, Trash2, Play, Download, FileSpreadsheet } from "lucide-react";
+import { Plus, CheckCircle2, PauseCircle, Trash2, Play, Download, FileSpreadsheet, Wrench } from "lucide-react";
 import { format } from "date-fns";
 import { generateCSV, downloadCSV } from "@/lib/csvUtils";
 import { CreateJobOrderDialog } from "./CreateJobOrderDialog";
 import { CompleteJobOrderDialog } from "./CompleteJobOrderDialog";
 import { SuspendJobOrderDialog } from "./SuspendJobOrderDialog";
 import { ExportJobOrderDialog } from "./ExportJobOrderDialog";
+import { AddServiceDialog } from "./AddServiceDialog";
+import { ServicesList } from "./ServicesList";
 
 export function JobOrders() {
   const [jobOrders, setJobOrders] = useState<any[]>([]);
@@ -19,6 +21,8 @@ export function JobOrders() {
   const [completingJob, setCompletingJob] = useState<any>(null);
   const [suspendingJob, setSuspendingJob] = useState<any>(null);
   const [exportingJob, setExportingJob] = useState<any>(null);
+  const [addingServiceToJob, setAddingServiceToJob] = useState<string | null>(null);
+  const [viewingServicesJob, setViewingServicesJob] = useState<any>(null);
   const [selectedJobOrders, setSelectedJobOrders] = useState<Set<string>>(new Set());
   const [activeTimers, setActiveTimers] = useState<{[key: string]: number}>({});
   const { toast } = useToast();
@@ -201,10 +205,22 @@ export function JobOrders() {
           `)
           .eq("job_order_id", job.id);
 
+        // Fetch third-party services
+        const { data: services } = await supabase
+          .from("job_order_services")
+          .select("*")
+          .eq("job_order_id", job.id);
+
+        const serviceCost = (services || []).reduce((sum, s) => sum + (s.cost || 0), 0);
+        const totalCost = consumableCost + serviceCost;
+
         const totalHours = (job.total_active_minutes || 0) / 60;
         const toolsList = (toolCheckouts || []).map(t => t.tools?.code).filter(Boolean).join(", ");
         const consumablesList = (checkouts || []).map(c => 
           `${c.mechanic_consumables?.name} (${c.quantity_used} ${c.mechanic_consumables?.unit})`
+        ).join("; ");
+        const servicesList = (services || []).map(s => 
+          `${s.service_type} - ${s.provider_name || 'N/A'} (₱${(s.cost || 0).toFixed(2)})`
         ).join("; ");
 
         allData.push({
@@ -220,7 +236,10 @@ export function JobOrders() {
           'Total Man Hours': totalHours.toFixed(2),
           'Tools Used': toolsList || 'None',
           'Consumables Used': consumablesList || 'None',
-          'Consumables Cost': `₱${consumableCost.toFixed(2)}`
+          'Consumables Cost': `₱${consumableCost.toFixed(2)}`,
+          'Third-Party Services': servicesList || 'None',
+          'Services Cost': `₱${serviceCost.toFixed(2)}`,
+          'Total Cost': `₱${totalCost.toFixed(2)}`
         });
       }
 
@@ -324,6 +343,15 @@ export function JobOrders() {
                         <Play className="h-4 w-4 mr-1" /> Start
                       </Button>
                     )}
+                    {(job.status === "in_progress" || job.status === "suspended") && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setAddingServiceToJob(job.id)}
+                      >
+                        <Wrench className="h-4 w-4 mr-1" /> Add Service
+                      </Button>
+                    )}
                     {job.status === "in_progress" && (
                       <>
                         <Button
@@ -413,6 +441,15 @@ export function JobOrders() {
           job={exportingJob}
           open={!!exportingJob}
           onOpenChange={(open) => !open && setExportingJob(null)}
+        />
+      )}
+
+      {addingServiceToJob && (
+        <AddServiceDialog
+          jobOrderId={addingServiceToJob}
+          open={!!addingServiceToJob}
+          onOpenChange={(open) => !open && setAddingServiceToJob(null)}
+          onSuccess={fetchJobOrders}
         />
       )}
     </Card>
