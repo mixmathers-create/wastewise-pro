@@ -81,64 +81,57 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary">
-              <Recycle className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold">WasteWise</h1>
-              <p className="text-xs text-muted-foreground">Waste Management System</p>
-            </div>
+      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto flex h-14 items-center justify-between px-6">
+          <div className="flex items-center gap-2">
+            <Recycle className="h-5 w-5 text-primary" />
+            <h1 className="text-lg font-semibold">WasteWise</h1>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="text-sm font-medium">{profile?.full_name}</p>
-              <p className="text-xs text-muted-foreground capitalize">{profile?.role}</p>
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-muted-foreground">
+              {profile?.full_name} <span className="text-xs">({profile?.role})</span>
             </div>
-            <Button variant="outline" size="sm" onClick={handleLogout}>
-              <LogOut className="mr-2 h-4 w-4" />
-              Logout
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
+              <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto p-4">
-        <Tabs defaultValue="collections" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-8">
-            <TabsTrigger value="collections">
-              <QrCode className="mr-2 h-4 w-4" />
-              Collections
+      <main className="container mx-auto px-6 py-8 max-w-[1400px]">
+        <Tabs defaultValue="collections" className="space-y-6">
+          <TabsList className="inline-flex h-auto w-auto bg-muted/50 p-1 rounded-lg gap-1">
+            <TabsTrigger value="collections" className="gap-2 data-[state=active]:bg-background">
+              <QrCode className="h-4 w-4" />
+              <span className="hidden sm:inline">Collections</span>
             </TabsTrigger>
-            <TabsTrigger value="clients">
-              <Users className="mr-2 h-4 w-4" />
-              Clients
+            <TabsTrigger value="clients" className="gap-2 data-[state=active]:bg-background">
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">Clients</span>
             </TabsTrigger>
-            <TabsTrigger value="trucks">
-              <Truck className="mr-2 h-4 w-4" />
-              Trucks
+            <TabsTrigger value="trucks" className="gap-2 data-[state=active]:bg-background">
+              <Truck className="h-4 w-4" />
+              <span className="hidden sm:inline">Trucks</span>
             </TabsTrigger>
-            <TabsTrigger value="drivers">
-              <UserCog className="mr-2 h-4 w-4" />
-              Drivers & Helpers
+            <TabsTrigger value="drivers" className="gap-2 data-[state=active]:bg-background">
+              <UserCog className="h-4 w-4" />
+              <span className="hidden sm:inline">Personnel</span>
             </TabsTrigger>
-            <TabsTrigger value="mechanics">
-              <Wrench className="mr-2 h-4 w-4" />
-              Mechanics
+            <TabsTrigger value="mechanics" className="gap-2 data-[state=active]:bg-background">
+              <Wrench className="h-4 w-4" />
+              <span className="hidden sm:inline">Mechanics</span>
             </TabsTrigger>
-            <TabsTrigger value="scheduling">
-              <Calendar className="mr-2 h-4 w-4" />
-              Scheduling
+            <TabsTrigger value="scheduling" className="gap-2 data-[state=active]:bg-background">
+              <Calendar className="h-4 w-4" />
+              <span className="hidden sm:inline">Schedule</span>
             </TabsTrigger>
-            <TabsTrigger value="analytics">
-              <BarChart3 className="mr-2 h-4 w-4" />
-              Analytics
+            <TabsTrigger value="analytics" className="gap-2 data-[state=active]:bg-background">
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden sm:inline">Analytics</span>
             </TabsTrigger>
-            <TabsTrigger value="settings">
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
+            <TabsTrigger value="settings" className="gap-2 data-[state=active]:bg-background">
+              <Settings className="h-4 w-4" />
+              <span className="hidden sm:inline">Settings</span>
             </TabsTrigger>
           </TabsList>
 
