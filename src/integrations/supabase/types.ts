@@ -333,11 +333,15 @@ export type Database = {
           description: string | null
           id: string
           job_number: string
+          last_resume_at: string | null
           mechanic_id: string | null
           priority: string | null
           scheduled_date: string | null
+          started_at: string | null
           status: string | null
+          suspended_periods: Json | null
           title: string
+          total_active_minutes: number | null
           truck_id: string | null
           updated_at: string | null
         }
@@ -348,11 +352,15 @@ export type Database = {
           description?: string | null
           id?: string
           job_number: string
+          last_resume_at?: string | null
           mechanic_id?: string | null
           priority?: string | null
           scheduled_date?: string | null
+          started_at?: string | null
           status?: string | null
+          suspended_periods?: Json | null
           title: string
+          total_active_minutes?: number | null
           truck_id?: string | null
           updated_at?: string | null
         }
@@ -363,11 +371,15 @@ export type Database = {
           description?: string | null
           id?: string
           job_number?: string
+          last_resume_at?: string | null
           mechanic_id?: string | null
           priority?: string | null
           scheduled_date?: string | null
+          started_at?: string | null
           status?: string | null
+          suspended_periods?: Json | null
           title?: string
+          total_active_minutes?: number | null
           truck_id?: string | null
           updated_at?: string | null
         }
@@ -467,6 +479,7 @@ export type Database = {
           quantity: number | null
           status: string | null
           unit: string
+          unit_cost: number | null
         }
         Insert: {
           category: string
@@ -478,6 +491,7 @@ export type Database = {
           quantity?: number | null
           status?: string | null
           unit: string
+          unit_cost?: number | null
         }
         Update: {
           category?: string
@@ -489,6 +503,7 @@ export type Database = {
           quantity?: number | null
           status?: string | null
           unit?: string
+          unit_cost?: number | null
         }
         Relationships: []
       }

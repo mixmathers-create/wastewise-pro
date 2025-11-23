@@ -4,22 +4,44 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, CheckCircle2, PauseCircle, Trash2 } from "lucide-react";
+import { Plus, CheckCircle2, PauseCircle, Trash2, Play, Download } from "lucide-react";
 import { CreateJobOrderDialog } from "./CreateJobOrderDialog";
 import { CompleteJobOrderDialog } from "./CompleteJobOrderDialog";
 import { SuspendJobOrderDialog } from "./SuspendJobOrderDialog";
+import { ExportJobOrderDialog } from "./ExportJobOrderDialog";
 
 export function JobOrders() {
   const [jobOrders, setJobOrders] = useState<any[]>([]);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [completingJob, setCompletingJob] = useState<any>(null);
   const [suspendingJob, setSuspendingJob] = useState<any>(null);
+  const [exportingJob, setExportingJob] = useState<any>(null);
+  const [activeTimers, setActiveTimers] = useState<{[key: string]: number}>({});
   const { toast } = useToast();
 
   useEffect(() => {
     fetchJobOrders();
     checkEndOfDayJobs();
+    
+    // Update timers every second for in-progress jobs
+    const interval = setInterval(() => {
+      updateActiveTimers();
+    }, 1000);
+    
+    return () => clearInterval(interval);
   }, []);
+
+  const updateActiveTimers = () => {
+    const newTimers: {[key: string]: number} = {};
+    jobOrders.forEach(job => {
+      if (job.status === 'in_progress' && job.last_resume_at) {
+        const elapsed = Math.floor((Date.now() - new Date(job.last_resume_at).getTime()) / 1000);
+        const totalMinutes = job.total_active_minutes || 0;
+        newTimers[job.id] = totalMinutes * 60 + elapsed;
+      }
+    });
+    setActiveTimers(newTimers);
+  };
 
   const fetchJobOrders = async () => {
     const { data } = await supabase
@@ -27,6 +49,27 @@ export function JobOrders() {
       .select("*, mechanics(name), trucks(code)")
       .order("created_at", { ascending: false });
     setJobOrders(data || []);
+  };
+
+  const handleStart = async (job: any) => {
+    try {
+      const now = new Date().toISOString();
+      const { error } = await supabase
+        .from("job_orders")
+        .update({
+          status: "in_progress",
+          started_at: job.started_at || now,
+          last_resume_at: now,
+          updated_at: now
+        })
+        .eq("id", job.id);
+
+      if (error) throw error;
+      toast({ title: "Success", description: "Job order started" });
+      fetchJobOrders();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -65,6 +108,13 @@ export function JobOrders() {
     }
   };
 
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -85,7 +135,7 @@ export function JobOrders() {
               <TableHead>Mechanic</TableHead>
               <TableHead>Priority</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Scheduled</TableHead>
+              <TableHead>Time Elapsed</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -115,36 +165,67 @@ export function JobOrders() {
                     {job.status.replace('_', ' ')}
                   </span>
                 </TableCell>
-                <TableCell>
-                  {job.scheduled_date ? new Date(job.scheduled_date).toLocaleDateString() : "N/A"}
+                <TableCell className="font-mono">
+                  {job.status === 'in_progress' && activeTimers[job.id] 
+                    ? formatTime(activeTimers[job.id])
+                    : job.total_active_minutes 
+                    ? formatTime(job.total_active_minutes * 60)
+                    : '00:00:00'}
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-2">
-                    {job.status !== "completed" && job.status !== "suspended" && (
+                    {job.status === "pending" && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => handleStart(job)}
+                      >
+                        <Play className="h-4 w-4 mr-1" /> Start
+                      </Button>
+                    )}
+                    {job.status === "in_progress" && (
                       <>
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => setCompletingJob(job)}
                         >
-                          <CheckCircle2 className="h-4 w-4 mr-2" /> Complete
+                          <CheckCircle2 className="h-4 w-4 mr-1" /> Complete
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => setSuspendingJob(job)}
                         >
-                          <PauseCircle className="h-4 w-4 mr-2" /> Suspend
+                          <PauseCircle className="h-4 w-4 mr-1" /> Suspend
                         </Button>
                       </>
                     )}
                     {job.status === "suspended" && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => handleStart(job)}
+                        >
+                          <Play className="h-4 w-4 mr-1" /> Resume
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setCompletingJob(job)}
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-1" /> Complete
+                        </Button>
+                      </>
+                    )}
+                    {job.status === "completed" && (
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setCompletingJob(job)}
+                        onClick={() => setExportingJob(job)}
                       >
-                        <CheckCircle2 className="h-4 w-4 mr-2" /> Resume & Complete
+                        <Download className="h-4 w-4 mr-1" /> Export
                       </Button>
                     )}
                     <Button
@@ -183,6 +264,14 @@ export function JobOrders() {
           open={!!suspendingJob}
           onOpenChange={(open) => !open && setSuspendingJob(null)}
           onSuccess={fetchJobOrders}
+        />
+      )}
+
+      {exportingJob && (
+        <ExportJobOrderDialog
+          job={exportingJob}
+          open={!!exportingJob}
+          onOpenChange={(open) => !open && setExportingJob(null)}
         />
       )}
     </Card>

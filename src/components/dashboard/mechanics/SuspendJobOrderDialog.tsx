@@ -38,13 +38,31 @@ export function SuspendJobOrderDialog({ job, open, onOpenChange, onSuccess }: Su
     }
 
     try {
+      // Calculate elapsed time before suspending
+      let totalMinutes = job.total_active_minutes || 0;
+      if (job.status === 'in_progress' && job.last_resume_at) {
+        const elapsed = Math.floor((Date.now() - new Date(job.last_resume_at).getTime()) / 1000 / 60);
+        totalMinutes += elapsed;
+      }
+
       const reasonLabel = suspensionReasons.find(r => r.value === reason)?.label || reason;
       const suspensionNote = `\n\nSuspended: ${reasonLabel}\nRemarks: ${remarks}\nSuspended At: ${new Date().toLocaleString()}`;
+
+      // Store suspension period
+      const suspendedPeriods = job.suspended_periods || [];
+      suspendedPeriods.push({
+        suspended_at: new Date().toISOString(),
+        reason: reasonLabel,
+        remarks
+      });
 
       const { error } = await supabase
         .from("job_orders")
         .update({
           status: "suspended",
+          total_active_minutes: totalMinutes,
+          last_resume_at: null,
+          suspended_periods: suspendedPeriods,
           description: job.description ? `${job.description}${suspensionNote}` : suspensionNote
         })
         .eq("id", job.id);

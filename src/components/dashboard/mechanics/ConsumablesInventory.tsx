@@ -79,10 +79,11 @@ export function ConsumablesInventory() {
       Category: item.category,
       Unit: item.unit,
       Quantity: item.quantity,
+      'Unit Cost': item.unit_cost,
       'Min Stock': item.min_stock_level,
       Status: item.status
     }));
-    const csv = generateCSV(csvData, ['Code', 'Name', 'Category', 'Unit', 'Quantity', 'Min Stock', 'Status']);
+    const csv = generateCSV(csvData, ['Code', 'Name', 'Category', 'Unit', 'Quantity', 'Unit Cost', 'Min Stock', 'Status']);
     downloadCSV(csv, `consumables-inventory-${format(new Date(), 'yyyy-MM-dd')}.csv`);
     toast({ title: "Success", description: "Inventory exported" });
   };
@@ -166,6 +167,7 @@ export function ConsumablesInventory() {
                   <TableHead>Category</TableHead>
                   <TableHead>Unit</TableHead>
                   <TableHead>Quantity</TableHead>
+                  <TableHead>Unit Cost</TableHead>
                   <TableHead>Min Stock</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Actions</TableHead>
@@ -181,6 +183,7 @@ export function ConsumablesInventory() {
                     <TableCell className={item.quantity <= item.min_stock_level ? 'text-orange-600 font-bold' : ''}>
                       {item.quantity}
                     </TableCell>
+                    <TableCell>₱{item.unit_cost?.toFixed(2) || '0.00'}</TableCell>
                     <TableCell>{item.min_stock_level}</TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 rounded-full text-xs ${
