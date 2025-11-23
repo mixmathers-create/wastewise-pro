@@ -325,6 +325,45 @@ export type Database = {
         }
         Relationships: []
       }
+      job_order_services: {
+        Row: {
+          category: string
+          cost: number | null
+          cost_added_at: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          job_order_id: string
+          provider_name: string | null
+          service_type: string
+        }
+        Insert: {
+          category: string
+          cost?: number | null
+          cost_added_at?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          job_order_id: string
+          provider_name?: string | null
+          service_type: string
+        }
+        Update: {
+          category?: string
+          cost?: number | null
+          cost_added_at?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          job_order_id?: string
+          provider_name?: string | null
+          service_type?: string
+        }
+        Relationships: []
+      }
       job_orders: {
         Row: {
           completed_at: string | null
