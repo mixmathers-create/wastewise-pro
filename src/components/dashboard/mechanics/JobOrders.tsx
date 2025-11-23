@@ -3,8 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, CheckCircle2, PauseCircle, Trash2, Play, Download } from "lucide-react";
+import { Plus, CheckCircle2, PauseCircle, Trash2, Play, Download, FileSpreadsheet } from "lucide-react";
+import { format } from "date-fns";
+import { generateCSV, downloadCSV } from "@/lib/csvUtils";
 import { CreateJobOrderDialog } from "./CreateJobOrderDialog";
 import { CompleteJobOrderDialog } from "./CompleteJobOrderDialog";
 import { SuspendJobOrderDialog } from "./SuspendJobOrderDialog";
@@ -16,6 +19,7 @@ export function JobOrders() {
   const [completingJob, setCompletingJob] = useState<any>(null);
   const [suspendingJob, setSuspendingJob] = useState<any>(null);
   const [exportingJob, setExportingJob] = useState<any>(null);
+  const [selectedJobOrders, setSelectedJobOrders] = useState<Set<string>>(new Set());
   const [activeTimers, setActiveTimers] = useState<{[key: string]: number}>({});
   const { toast } = useToast();
 
@@ -133,20 +137,129 @@ export function JobOrders() {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const toggleJobOrderSelection = (jobId: string) => {
+    const newSelection = new Set(selectedJobOrders);
+    if (newSelection.has(jobId)) {
+      newSelection.delete(jobId);
+    } else {
+      newSelection.add(jobId);
+    }
+    setSelectedJobOrders(newSelection);
+  };
+
+  const toggleAllSelection = () => {
+    if (selectedJobOrders.size === jobOrders.length) {
+      setSelectedJobOrders(new Set());
+    } else {
+      setSelectedJobOrders(new Set(jobOrders.map(j => j.id)));
+    }
+  };
+
+  const handleMassExport = async () => {
+    if (selectedJobOrders.size === 0) {
+      toast({ title: "Error", description: "Please select at least one job order", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const selectedJobs = jobOrders.filter(j => selectedJobOrders.has(j.id));
+      const allData: any[] = [];
+
+      for (const job of selectedJobs) {
+        // Fetch mechanics for this job
+        let mechanicsNames = "Unassigned";
+        if (job.mechanic_ids && job.mechanic_ids.length > 0) {
+          const { data: mechanicsData } = await supabase
+            .from("mechanics")
+            .select("name")
+            .in("id", job.mechanic_ids);
+          if (mechanicsData && mechanicsData.length > 0) {
+            mechanicsNames = mechanicsData.map(m => m.name).join(", ");
+          }
+        }
+
+        // Fetch consumables
+        const { data: checkouts } = await supabase
+          .from("mechanic_consumable_checkouts")
+          .select(`
+            *,
+            mechanic_consumables(name, unit, unit_cost)
+          `)
+          .eq("job_order_id", job.id);
+
+        const consumableCost = (checkouts || []).reduce((sum, checkout) => {
+          const unitCost = checkout.mechanic_consumables?.unit_cost || 0;
+          return sum + (checkout.quantity_used * unitCost);
+        }, 0);
+
+        // Fetch tools
+        const { data: toolCheckouts } = await supabase
+          .from("tool_checkouts")
+          .select(`
+            *,
+            tools(name, code)
+          `)
+          .eq("job_order_id", job.id);
+
+        const totalHours = (job.total_active_minutes || 0) / 60;
+        const toolsList = (toolCheckouts || []).map(t => t.tools?.code).filter(Boolean).join(", ");
+        const consumablesList = (checkouts || []).map(c => 
+          `${c.mechanic_consumables?.name} (${c.quantity_used} ${c.mechanic_consumables?.unit})`
+        ).join("; ");
+
+        allData.push({
+          'Job Order #': job.job_number,
+          'Title': job.title,
+          'Truck': job.trucks?.code || 'N/A',
+          'Mechanics': mechanicsNames,
+          'Priority': job.priority,
+          'Status': job.status,
+          'Scheduled Date': job.scheduled_date ? format(new Date(job.scheduled_date), 'MMM dd, yyyy') : 'N/A',
+          'Started': job.started_at ? format(new Date(job.started_at), 'MMM dd, yyyy HH:mm') : 'Not started',
+          'Completed': job.completed_at ? format(new Date(job.completed_at), 'MMM dd, yyyy HH:mm') : 'Not completed',
+          'Total Man Hours': totalHours.toFixed(2),
+          'Tools Used': toolsList || 'None',
+          'Consumables Used': consumablesList || 'None',
+          'Consumables Cost': `₱${consumableCost.toFixed(2)}`
+        });
+      }
+
+      const csv = generateCSV(allData, Object.keys(allData[0]));
+      downloadCSV(csv, `job-orders-export-${format(new Date(), 'yyyy-MM-dd-HHmmss')}.csv`);
+      toast({ title: "Success", description: `${selectedJobOrders.size} job order(s) exported` });
+      setSelectedJobOrders(new Set());
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>Job Orders</CardTitle>
-          <Button onClick={() => setShowCreateDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" /> Create Job Order
-          </Button>
+          <div className="flex gap-2">
+            {selectedJobOrders.size > 0 && (
+              <Button variant="outline" onClick={handleMassExport}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" /> Export Selected ({selectedJobOrders.size})
+              </Button>
+            )}
+            <Button onClick={() => setShowCreateDialog(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Create Job Order
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12">
+                <Checkbox 
+                  checked={selectedJobOrders.size === jobOrders.length && jobOrders.length > 0}
+                  onCheckedChange={toggleAllSelection}
+                />
+              </TableHead>
               <TableHead>Job #</TableHead>
               <TableHead>Title</TableHead>
               <TableHead>Truck</TableHead>
@@ -160,6 +273,12 @@ export function JobOrders() {
           <TableBody>
             {jobOrders.map((job) => (
               <TableRow key={job.id}>
+                <TableCell>
+                  <Checkbox 
+                    checked={selectedJobOrders.has(job.id)}
+                    onCheckedChange={() => toggleJobOrderSelection(job.id)}
+                  />
+                </TableCell>
                 <TableCell className="font-mono">{job.job_number}</TableCell>
                 <TableCell className="font-medium">{job.title}</TableCell>
                 <TableCell>{job.trucks?.code || "N/A"}</TableCell>
