@@ -95,27 +95,50 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       return;
     }
 
+    // Check camera permission
     const status = await BarcodeScanner.checkPermission({ force: true });
-    if (!status.granted) return;
+    if (!status.granted) {
+      toast({
+        title: "Camera permission denied",
+        description: "Please allow camera access to scan QR codes",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    await BarcodeScanner.prepare();
+    // Stop any existing scan first
+    try {
+      await BarcodeScanner.stopScan();
+    } catch (e) {
+      // Ignore if no scan was running
+    }
 
+    // Start scanning
     setIsScanning(true);
     BarcodeScanner.hideBackground();
     document.body.classList.add("scanner-active");
 
     const result = await BarcodeScanner.startScan();
 
+    // Clean up
     BarcodeScanner.showBackground();
     document.body.classList.remove("scanner-active");
     setIsScanning(false);
 
-    if (result.hasContent) handleQRDetected(result.content);
+    if (result.hasContent) {
+      handleQRDetected(result.content);
+    }
 
   } catch (err) {
+    console.error("Camera error:", err);
     BarcodeScanner.showBackground();
     document.body.classList.remove("scanner-active");
     setIsScanning(false);
+    toast({
+      title: "Camera error",
+      description: "Failed to start camera scanner",
+      variant: "destructive",
+    });
   }
 };
 
@@ -568,10 +591,10 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       </div>
       
       {isScanning && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center pb-20">
+        <div className="scanner-overlay fixed inset-0 z-50 flex items-end justify-center pb-20">
           <button 
             onClick={stopScanning}
-            className="bg-red-500 text-white px-6 py-3 rounded-lg font-semibold"
+            className="bg-red-500 text-white px-6 py-3 rounded-lg font-semibold shadow-lg"
           >
             Cancel Scan
           </button>
