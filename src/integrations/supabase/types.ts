@@ -78,6 +78,7 @@ export type Database = {
           qr_code: string
           signature_data: string | null
           signed_by: string | null
+          tally_entries: Json | null
           truck_id: string
           waste_types: string[]
         }
@@ -93,6 +94,7 @@ export type Database = {
           qr_code: string
           signature_data?: string | null
           signed_by?: string | null
+          tally_entries?: Json | null
           truck_id: string
           waste_types: string[]
         }
@@ -108,6 +110,7 @@ export type Database = {
           qr_code?: string
           signature_data?: string | null
           signed_by?: string | null
+          tally_entries?: Json | null
           truck_id?: string
           waste_types?: string[]
         }

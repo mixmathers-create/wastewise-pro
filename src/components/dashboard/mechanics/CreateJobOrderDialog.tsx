@@ -54,7 +54,7 @@ export function CreateJobOrderDialog({ open, onOpenChange, onSuccess }: CreateJo
       const numbers = Array.from({length: 9}, () => Math.floor(Math.random() * 10)).join('');
       const jobNumber = `${letters}-${numbers}`;
 
-      const { error } = await supabase.from("job_orders").insert({
+      const { error: jobError } = await supabase.from("job_orders").insert({
         job_number: jobNumber,
         title,
         description: description || null,
@@ -66,7 +66,27 @@ export function CreateJobOrderDialog({ open, onOpenChange, onSuccess }: CreateJo
         created_by: userData.user.id
       });
 
-      if (error) throw error;
+      if (jobError) throw jobError;
+
+      // If truck is assigned and scheduled date exists, create maintenance block
+      if (truckId && scheduledDate) {
+        // Calculate end date (7 days after start for default)
+        const startDate = new Date(scheduledDate);
+        const endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 7);
+
+        const { error: blockError } = await supabase.from("truck_maintenance_blocks").insert({
+          truck_id: truckId,
+          start_date: scheduledDate,
+          end_date: endDate.toISOString().split('T')[0],
+          reason: `Job Order: ${title} (${jobNumber})`
+        });
+
+        if (blockError) {
+          console.error("Failed to create maintenance block:", blockError);
+          // Don't fail the whole operation if maintenance block creation fails
+        }
+      }
 
       toast({ title: "Success", description: "Job order created successfully" });
       onSuccess();

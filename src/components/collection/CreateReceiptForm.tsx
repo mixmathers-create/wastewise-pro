@@ -40,6 +40,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const [selectedDriver, setSelectedDriver] = useState("");
   const [selectedHelpers, setSelectedHelpers] = useState<string[]>([]);
   const [items, setItems] = useState<{ waste_type: string; quantity: number; unit: string }[]>([]);
+  const [tallyEntries, setTallyEntries] = useState<{ waste_type: string; quantity: number; unit: string }[]>([]);
   const [selectedWasteType, setSelectedWasteType] = useState<string>("");
   const [newItem, setNewItem] = useState({ quantity: 0, unit: "kg" });
   const [signedBy, setSignedBy] = useState("");
@@ -219,7 +220,15 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       return;
     }
     
-    // Check if item with same waste_type and unit already exists
+    // Add to tally entries (individual records)
+    const newTallyEntry = {
+      waste_type: selectedWasteType,
+      quantity: newItem.quantity,
+      unit: newItem.unit,
+    };
+    setTallyEntries([...tallyEntries, newTallyEntry]);
+    
+    // Check if item with same waste_type and unit already exists for aggregated display
     const existingItemIndex = items.findIndex(
       item => item.waste_type === selectedWasteType && item.unit === newItem.unit
     );
@@ -281,6 +290,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
           driver_id: selectedDriver,
           helper_ids: selectedHelpers,
           items,
+          tally_entries: tallyEntries,
           waste_types: items.map((i) => i.waste_type),
           qr_code: receiptQR,
           signed_by: signedBy,
@@ -459,6 +469,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     setSelectedDriver("");
     setSelectedHelpers([]);
     setItems([]);
+    setTallyEntries([]);
     setSelectedWasteType("");
     setNewItem({ quantity: 0, unit: "kg" });
     setSignedBy("");
