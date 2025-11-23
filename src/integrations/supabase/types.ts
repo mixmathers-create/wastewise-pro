@@ -334,7 +334,7 @@ export type Database = {
           id: string
           job_number: string
           last_resume_at: string | null
-          mechanic_id: string | null
+          mechanic_ids: string[] | null
           priority: string | null
           scheduled_date: string | null
           started_at: string | null
@@ -353,7 +353,7 @@ export type Database = {
           id?: string
           job_number: string
           last_resume_at?: string | null
-          mechanic_id?: string | null
+          mechanic_ids?: string[] | null
           priority?: string | null
           scheduled_date?: string | null
           started_at?: string | null
@@ -372,7 +372,7 @@ export type Database = {
           id?: string
           job_number?: string
           last_resume_at?: string | null
-          mechanic_id?: string | null
+          mechanic_ids?: string[] | null
           priority?: string | null
           scheduled_date?: string | null
           started_at?: string | null
@@ -384,13 +384,6 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "job_orders_mechanic_id_fkey"
-            columns: ["mechanic_id"]
-            isOneToOne: false
-            referencedRelation: "mechanics"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "job_orders_truck_id_fkey"
             columns: ["truck_id"]

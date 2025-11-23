@@ -17,6 +17,7 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
   const [consumableUsage, setConsumableUsage] = useState<any[]>([]);
   const [totalCost, setTotalCost] = useState(0);
   const [totalHours, setTotalHours] = useState(0);
+  const [mechanicsNames, setMechanicsNames] = useState("Unassigned");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -26,6 +27,17 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
   }, [open, job]);
 
   const fetchJobData = async () => {
+    // Fetch mechanics for this job order
+    if (job.mechanic_ids && job.mechanic_ids.length > 0) {
+      const { data: mechanicsData } = await supabase
+        .from("mechanics")
+        .select("name")
+        .in("id", job.mechanic_ids);
+      if (mechanicsData && mechanicsData.length > 0) {
+        setMechanicsNames(mechanicsData.map(m => m.name).join(", "));
+      }
+    }
+
     // Fetch consumable usage for this job order
     const { data: checkouts } = await supabase
       .from("mechanic_consumable_checkouts")
@@ -59,7 +71,7 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
       { Label: 'Job Order #', Value: job.job_number },
       { Label: 'Title', Value: job.title },
       { Label: 'Truck', Value: job.trucks?.code || 'N/A' },
-      { Label: 'Mechanic', Value: job.mechanics?.name || 'Unassigned' },
+      { Label: 'Mechanics', Value: mechanicsNames },
       { Label: 'Priority', Value: job.priority },
       { Label: 'Status', Value: job.status },
       { Label: 'Scheduled Date', Value: job.scheduled_date ? format(new Date(job.scheduled_date), 'MMM dd, yyyy') : 'N/A' },
