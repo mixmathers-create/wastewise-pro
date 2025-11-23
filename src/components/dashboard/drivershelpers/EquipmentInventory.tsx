@@ -177,9 +177,14 @@ export default function EquipmentInventory() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Equipment Checkouts</CardTitle>
-              <Button onClick={() => setShowCheckoutDialog(true)}>
-                <LogOut className="h-4 w-4 mr-2" /> Check Out Equipment
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={handleExportCheckouts}>
+                  <Download className="h-4 w-4 mr-2" /> Export Audit
+                </Button>
+                <Button onClick={() => setShowCheckoutDialog(true)}>
+                  <LogOut className="h-4 w-4 mr-2" /> Check Out Equipment
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>

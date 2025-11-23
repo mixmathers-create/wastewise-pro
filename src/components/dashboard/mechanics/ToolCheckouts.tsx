@@ -6,16 +6,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, LogIn, Camera } from "lucide-react";
+import { LogOut, LogIn, Camera, Download } from "lucide-react";
+import { generateCSV, downloadCSV } from "@/lib/csvUtils";
+import { format } from "date-fns";
 
 export function ToolCheckouts() {
   const [checkouts, setCheckouts] = useState<any[]>([]);
-  const [mechanics, setMechanics] = useState<any[]>([]);
   const [tools, setTools] = useState<any[]>([]);
   const [jobOrders, setJobOrders] = useState<any[]>([]);
-  const [selectedMechanic, setSelectedMechanic] = useState("");
   const [selectedTool, setSelectedTool] = useState("");
   const [selectedJobOrder, setSelectedJobOrder] = useState("");
+  const [selectedJobData, setSelectedJobData] = useState<any>(null);
   const [showCamera, setShowCamera] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [checkingInId, setCheckingInId] = useState<string | null>(null);
@@ -26,7 +27,6 @@ export function ToolCheckouts() {
 
   useEffect(() => {
     fetchCheckouts();
-    fetchMechanics();
     fetchAvailableTools();
     fetchOpenJobOrders();
   }, []);
@@ -52,11 +52,6 @@ export function ToolCheckouts() {
     setCheckouts(data || []);
   };
 
-  const fetchMechanics = async () => {
-    const { data } = await supabase.from("mechanics").select("*").order("name");
-    setMechanics(data || []);
-  };
-
   const fetchAvailableTools = async () => {
     const { data } = await supabase
       .from("tools")
@@ -69,15 +64,26 @@ export function ToolCheckouts() {
   const fetchOpenJobOrders = async () => {
     const { data } = await supabase
       .from("job_orders")
-      .select("*")
+      .select("*, trucks(id, code)")
       .in("status", ["pending", "in_progress"])
       .order("created_at", { ascending: false });
     setJobOrders(data || []);
   };
 
+  const handleJobOrderChange = (jobOrderId: string) => {
+    setSelectedJobOrder(jobOrderId);
+    const job = jobOrders.find(j => j.id === jobOrderId);
+    setSelectedJobData(job);
+  };
+
   const handleCheckout = async () => {
-    if (!selectedMechanic || !selectedTool || !selectedJobOrder) {
-      toast({ title: "Error", description: "Please select mechanic, tool, and job order", variant: "destructive" });
+    if (!selectedTool || !selectedJobOrder || !selectedJobData) {
+      toast({ title: "Error", description: "Please select tool and job order", variant: "destructive" });
+      return;
+    }
+
+    if (!selectedJobData.mechanic_ids || selectedJobData.mechanic_ids.length === 0) {
+      toast({ title: "Error", description: "Job order must have assigned mechanics", variant: "destructive" });
       return;
     }
 
@@ -85,8 +91,11 @@ export function ToolCheckouts() {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) throw new Error("Not authenticated");
 
+      // Use the first mechanic from the job order
+      const mechanicId = selectedJobData.mechanic_ids[0];
+
       const { error: checkoutError } = await supabase.from("tool_checkouts").insert({
-        mechanic_id: selectedMechanic,
+        mechanic_id: mechanicId,
         tool_id: selectedTool,
         job_order_id: selectedJobOrder,
         checked_out_by_user_id: userData.user.id,
@@ -105,12 +114,27 @@ export function ToolCheckouts() {
       toast({ title: "Success", description: "Tool checked out successfully" });
       fetchCheckouts();
       fetchAvailableTools();
-      setSelectedMechanic("");
       setSelectedTool("");
       setSelectedJobOrder("");
+      setSelectedJobData(null);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     }
+  };
+
+  const handleExportCheckouts = () => {
+    const csvData = checkouts.map(checkout => ({
+      Tool: checkout.tools?.code || '',
+      Name: checkout.tools?.name || '',
+      Mechanic: checkout.mechanics?.name || '',
+      'Job Order': checkout.job_orders?.job_number || '',
+      'Checked Out': format(new Date(checkout.checked_out_at), 'yyyy-MM-dd HH:mm'),
+      'Checked In': checkout.checked_in_at ? format(new Date(checkout.checked_in_at), 'yyyy-MM-dd HH:mm') : '',
+      Status: checkout.status
+    }));
+    const csv = generateCSV(csvData, ['Tool', 'Name', 'Mechanic', 'Job Order', 'Checked Out', 'Checked In', 'Status']);
+    downloadCSV(csv, `tool-checkouts-${format(new Date(), 'yyyy-MM-dd')}.csv`);
+    toast({ title: "Success", description: "Tool checkouts exported" });
   };
 
   const startCamera = async (checkoutId: string) => {
@@ -205,20 +229,25 @@ export function ToolCheckouts() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Tool Checkouts</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle>Tool Checkouts</CardTitle>
+          <Button variant="outline" onClick={handleExportCheckouts}>
+            <Download className="h-4 w-4 mr-2" /> Export Audit
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="flex gap-4 items-end">
           <div className="flex-1">
-            <label className="text-sm font-medium mb-2 block">Mechanic</label>
-            <Select value={selectedMechanic} onValueChange={setSelectedMechanic}>
+            <label className="text-sm font-medium mb-2 block">Job Order</label>
+            <Select value={selectedJobOrder} onValueChange={handleJobOrderChange}>
               <SelectTrigger>
-                <SelectValue placeholder="Select mechanic" />
+                <SelectValue placeholder="Select job order" />
               </SelectTrigger>
               <SelectContent className="bg-background z-50">
-                {mechanics.map((mechanic) => (
-                  <SelectItem key={mechanic.id} value={mechanic.id}>
-                    {mechanic.name}
+                {jobOrders.map((job) => (
+                  <SelectItem key={job.id} value={job.id}>
+                    {job.job_number} - {job.title} ({job.trucks?.code || 'No truck'})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -234,21 +263,6 @@ export function ToolCheckouts() {
                 {tools.map((tool) => (
                   <SelectItem key={tool.id} value={tool.id}>
                     {tool.code} - {tool.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex-1">
-            <label className="text-sm font-medium mb-2 block">Job Order</label>
-            <Select value={selectedJobOrder} onValueChange={setSelectedJobOrder}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select job order" />
-              </SelectTrigger>
-              <SelectContent className="bg-background z-50">
-                {jobOrders.map((job) => (
-                  <SelectItem key={job.id} value={job.id}>
-                    {job.job_number} - {job.title}
                   </SelectItem>
                 ))}
               </SelectContent>

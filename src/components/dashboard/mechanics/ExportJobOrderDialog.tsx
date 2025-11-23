@@ -15,6 +15,7 @@ interface ExportJobOrderDialogProps {
 
 export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrderDialogProps) {
   const [consumableUsage, setConsumableUsage] = useState<any[]>([]);
+  const [toolsUsed, setToolsUsed] = useState<any[]>([]);
   const [totalCost, setTotalCost] = useState(0);
   const [totalHours, setTotalHours] = useState(0);
   const [mechanicsNames, setMechanicsNames] = useState("Unassigned");
@@ -59,6 +60,19 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
       setTotalCost(consumableCost);
     }
 
+    // Fetch tools used for this job order
+    const { data: toolCheckouts } = await supabase
+      .from("tool_checkouts")
+      .select(`
+        *,
+        tools(name, code)
+      `)
+      .eq("job_order_id", job.id);
+
+    if (toolCheckouts) {
+      setToolsUsed(toolCheckouts);
+    }
+
     // Calculate man hours
     if (job.started_at) {
       const totalMinutes = job.total_active_minutes || 0;
@@ -78,6 +92,12 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
       { Label: 'Started', Value: job.started_at ? format(new Date(job.started_at), 'MMM dd, yyyy HH:mm') : 'Not started' },
       { Label: 'Completed', Value: job.completed_at ? format(new Date(job.completed_at), 'MMM dd, yyyy HH:mm') : 'Not completed' },
       { Label: 'Total Man Hours', Value: totalHours.toFixed(2) },
+      { Label: '', Value: '' },
+      { Label: 'TOOLS USED', Value: '' },
+      ...toolsUsed.map(tool => ({
+        Label: tool.tools?.name || 'Unknown Tool',
+        Value: `${tool.tools?.code || 'N/A'} - Checked Out: ${format(new Date(tool.checked_out_at), 'MMM dd, yyyy HH:mm')}`
+      })),
       { Label: '', Value: '' },
       { Label: 'CONSUMABLES USED', Value: '' },
       ...consumableUsage.map(usage => ({
@@ -110,6 +130,19 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
             </div>
           </div>
           
+          {toolsUsed.length > 0 && (
+            <div>
+              <h4 className="font-semibold mb-2">Tools Used:</h4>
+              <ul className="space-y-1 text-sm">
+                {toolsUsed.map((tool, idx) => (
+                  <li key={idx}>
+                    {tool.tools?.code} - {tool.tools?.name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {consumableUsage.length > 0 && (
             <div>
               <h4 className="font-semibold mb-2">Consumables Used:</h4>
