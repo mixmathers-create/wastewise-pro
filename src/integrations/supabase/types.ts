@@ -432,6 +432,63 @@ export type Database = {
           },
         ]
       }
+      leaves: {
+        Row: {
+          created_at: string
+          end_date: string
+          id: string
+          leave_type: string
+          medical_certificate_url: string | null
+          personnel_id: string
+          personnel_id_number: string
+          personnel_name: string
+          personnel_type: string
+          reason: string
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          start_date: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          id?: string
+          leave_type: string
+          medical_certificate_url?: string | null
+          personnel_id: string
+          personnel_id_number: string
+          personnel_name: string
+          personnel_type: string
+          reason: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          start_date: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          id?: string
+          leave_type?: string
+          medical_certificate_url?: string | null
+          personnel_id?: string
+          personnel_id_number?: string
+          personnel_name?: string
+          personnel_type?: string
+          reason?: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          start_date?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       mechanic_consumable_checkouts: {
         Row: {
           checked_out_at: string | null

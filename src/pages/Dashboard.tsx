@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Recycle, LogOut, QrCode, Users, Truck, UserCog, BarChart3, Settings, Calendar, Wrench } from "lucide-react";
+import { Recycle, LogOut, QrCode, Users, Truck, UserCog, BarChart3, Settings, Calendar, Wrench, Briefcase } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import CollectionsTab from "@/components/dashboard/CollectionsTab";
 import ClientsTab from "@/components/dashboard/ClientsTab";
@@ -15,6 +15,7 @@ import SchedulingTab from "@/components/dashboard/SchedulingTab";
 import EnhancedAnalyticsTab from "@/components/dashboard/EnhancedAnalyticsTab";
 import EnhancedSettingsTab from "@/components/dashboard/EnhancedSettingsTab";
 import { MechanicsTab } from "@/components/dashboard/MechanicsTab";
+import { HRTab } from "@/components/dashboard/HRTab";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -125,6 +126,10 @@ const Dashboard = () => {
               <Calendar className="h-4 w-4" />
               <span className="hidden sm:inline">Schedule</span>
             </TabsTrigger>
+            <TabsTrigger value="hr" className="gap-2 data-[state=active]:bg-background hidden md:flex">
+              <Briefcase className="h-4 w-4" />
+              <span className="hidden sm:inline">HR</span>
+            </TabsTrigger>
             <TabsTrigger value="analytics" className="gap-2 data-[state=active]:bg-background">
               <BarChart3 className="h-4 w-4" />
               <span className="hidden sm:inline">Analytics</span>
@@ -161,6 +166,10 @@ const Dashboard = () => {
 
           <TabsContent value="mechanics">
             <MechanicsTab />
+          </TabsContent>
+
+          <TabsContent value="hr" className="hidden md:block">
+            <HRTab />
           </TabsContent>
 
           <TabsContent value="settings">
