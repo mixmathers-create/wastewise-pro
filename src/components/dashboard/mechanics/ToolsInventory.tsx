@@ -147,12 +147,14 @@ export function ToolsInventory() {
       let photoUrl = null;
 
       if (checkinPhoto) {
-        const base64Data = checkinPhoto.split(",")[1];
+        // Convert base64 to Blob for browser upload
+        const response = await fetch(checkinPhoto);
+        const blob = await response.blob();
         const fileName = `tool-checkin-${Date.now()}.jpg`;
         
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from("personnel-photos")
-          .upload(fileName, Buffer.from(base64Data, "base64"), {
+          .upload(fileName, blob, {
             contentType: "image/jpeg"
           });
 
