@@ -28,7 +28,7 @@ export function AddMechanicDialog({ open, onOpenChange, onSuccess }: AddMechanic
         quality: 90,
         allowEditing: false,
         resultType: CameraResultType.DataUrl,
-        source: CameraSource.Camera
+        source: CameraSource.Prompt // Prompt works better on web browsers
       });
       
       // Convert base64 to Blob
@@ -39,11 +39,13 @@ export function AddMechanicDialog({ open, onOpenChange, onSuccess }: AddMechanic
       setPhotoFile(file);
       setPhotoPreview(image.dataUrl!);
     } catch (error: any) {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to capture photo", 
-        variant: "destructive" 
-      });
+      if (error.message !== 'User cancelled photos app') {
+        toast({ 
+          title: "Error", 
+          description: error.message || "Failed to capture photo", 
+          variant: "destructive" 
+        });
+      }
     }
   };
 
