@@ -124,23 +124,47 @@ export function ToolsInventory() {
   };
 
   const capturePhoto = async () => {
-    try {
-      const photo = await CapacitorCamera.getPhoto({
-        quality: 90,
-        allowEditing: false,
-        resultType: CameraResultType.DataUrl,
-        source: isNativePlatform() ? CameraSource.Camera : CameraSource.Prompt
-      });
-      setCheckinPhoto(photo.dataUrl || null);
-      setCameraActive(false);
-    } catch (error: any) {
-      if (error.message !== 'User cancelled photos app') {
-        toast({ 
-          title: "Error", 
-          description: error.message || "Failed to capture photo", 
-          variant: "destructive" 
+    if (isNativePlatform()) {
+      // Use Capacitor Camera for native platforms
+      try {
+        const photo = await CapacitorCamera.getPhoto({
+          quality: 90,
+          allowEditing: false,
+          resultType: CameraResultType.DataUrl,
+          source: CameraSource.Camera
         });
+        setCheckinPhoto(photo.dataUrl || null);
+        setCameraActive(false);
+      } catch (error: any) {
+        if (error.message !== 'User cancelled photos app') {
+          toast({ 
+            title: "Error", 
+            description: error.message || "Failed to capture photo", 
+            variant: "destructive" 
+          });
+        }
       }
+    } else {
+      // Use file input for web browsers
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.capture = 'environment'; // Use rear camera on mobile
+      
+      input.onchange = async (e: any) => {
+        const file = e.target.files?.[0];
+        if (file) {
+          // Create preview
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            setCheckinPhoto(event.target?.result as string);
+            setCameraActive(false);
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+      
+      input.click();
     }
   };
 

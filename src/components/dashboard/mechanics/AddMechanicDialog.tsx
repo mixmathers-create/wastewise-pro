@@ -24,29 +24,53 @@ export function AddMechanicDialog({ open, onOpenChange, onSuccess }: AddMechanic
   const { toast } = useToast();
 
   const handlePhotoCapture = async () => {
-    try {
-      const image = await Camera.getPhoto({
-        quality: 90,
-        allowEditing: false,
-        resultType: CameraResultType.DataUrl,
-        source: isNativePlatform() ? CameraSource.Camera : CameraSource.Prompt
-      });
-      
-      // Convert base64 to Blob
-      const response = await fetch(image.dataUrl!);
-      const blob = await response.blob();
-      const file = new File([blob], "mechanic-photo.jpg", { type: "image/jpeg" });
-      
-      setPhotoFile(file);
-      setPhotoPreview(image.dataUrl!);
-    } catch (error: any) {
-      if (error.message !== 'User cancelled photos app') {
-        toast({ 
-          title: "Error", 
-          description: error.message || "Failed to capture photo", 
-          variant: "destructive" 
+    if (isNativePlatform()) {
+      // Use Capacitor Camera for native platforms
+      try {
+        const image = await Camera.getPhoto({
+          quality: 90,
+          allowEditing: false,
+          resultType: CameraResultType.DataUrl,
+          source: CameraSource.Camera
         });
+        
+        const response = await fetch(image.dataUrl!);
+        const blob = await response.blob();
+        const file = new File([blob], "mechanic-photo.jpg", { type: "image/jpeg" });
+        
+        setPhotoFile(file);
+        setPhotoPreview(image.dataUrl!);
+      } catch (error: any) {
+        if (error.message !== 'User cancelled photos app') {
+          toast({ 
+            title: "Error", 
+            description: error.message || "Failed to capture photo", 
+            variant: "destructive" 
+          });
+        }
       }
+    } else {
+      // Use file input for web browsers
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.capture = 'environment'; // Use rear camera on mobile
+      
+      input.onchange = async (e: any) => {
+        const file = e.target.files?.[0];
+        if (file) {
+          setPhotoFile(file);
+          
+          // Create preview
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            setPhotoPreview(event.target?.result as string);
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+      
+      input.click();
     }
   };
 
