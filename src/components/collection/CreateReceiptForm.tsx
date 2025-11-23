@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { App, type PluginListenerHandle } from '@capacitor/app';
 
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
@@ -44,9 +45,46 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const [signedBy, setSignedBy] = useState("");
   const [isScanning, setIsScanning] = useState(false);
 
-  useEffect(() => {
-    loadClients();
-  }, []);
+
+useEffect(() => {
+  if (!Capacitor.isNativePlatform()) return;
+
+  let listenerHandle: PluginListenerHandle | null = null;
+
+  const setupBackHandler = async () => {
+    listenerHandle = await App.addListener("backButton", async (data) => {
+      const isScannerActive = document.body.classList.contains("scanner-active");
+
+      if (isScannerActive) {
+        console.log("Back button pressed, cancelling scan.");
+        try {
+          await BarcodeScanner.stopScan();
+        } catch (e) {
+          console.warn("Failed to stop scanner", e);
+        }
+
+        BarcodeScanner.showBackground();
+        document.body.classList.remove("scanner-active");
+        setIsScanning(false); 
+      } else {
+        App.exitApp();
+      }
+    });
+  };
+
+  setupBackHandler();
+
+  return () => {
+    if (listenerHandle) {
+      listenerHandle.remove();
+    }
+    if (document.body.classList.contains("scanner-active")) {
+        BarcodeScanner.showBackground();
+        document.body.classList.remove("scanner-active");
+        BarcodeScanner.stopScan(); 
+    }
+  };
+}, []);
 
   const handleQRDetected = async (decodedText: string) => {
     setQrInput(decodedText);
@@ -146,14 +184,13 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const stopScanning = async () => {
     try {
       await BarcodeScanner.stopScan();
+    } finally {
       BarcodeScanner.showBackground();
-      setIsScanning(false);
-    } catch (error) {
-      console.error("Error stopping scanner:", error);
-      BarcodeScanner.showBackground();
+      document.body.classList.remove("scanner-active");
       setIsScanning(false);
     }
   };
+
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
