@@ -86,7 +86,7 @@ export function CheckoutConsumableDialog({ open, onOpenChange, onSuccess }: Chec
   };
 
   const handleCheckout = async () => {
-    if (!selectedConsumable || !selectedMechanic || !selectedJobOrder || quantityUsed <= 0) {
+    if (!selectedConsumable || !selectedJobOrder || quantityUsed <= 0) {
       toast({ title: "Error", description: "Please fill all required fields", variant: "destructive" });
       return;
     }
@@ -107,7 +107,7 @@ export function CheckoutConsumableDialog({ open, onOpenChange, onSuccess }: Chec
 
       const { error: checkoutError } = await supabase.from("mechanic_consumable_checkouts").insert({
         consumable_id: selectedConsumable,
-        mechanic_id: selectedMechanic,
+        mechanic_id: selectedMechanic || null,
         truck_id: autoFilledTruck.id,
         job_order_id: selectedJobOrder,
         quantity_used: quantityUsed,
@@ -184,7 +184,7 @@ export function CheckoutConsumableDialog({ open, onOpenChange, onSuccess }: Chec
 
           {mechanics.length > 0 && (
             <div>
-              <Label htmlFor="mechanic">Mechanic *</Label>
+              <Label htmlFor="mechanic">Mechanic (Optional)</Label>
               <Select value={selectedMechanic} onValueChange={setSelectedMechanic}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select mechanic from job order" />
