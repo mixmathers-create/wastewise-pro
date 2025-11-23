@@ -195,14 +195,14 @@ const LeaveAdminPanel = () => {
 
                         {leave.medical_certificate_url && (
                           <div>
-                            <p className="text-sm font-medium text-muted-foreground">Medical Certificate</p>
+                            <p className="text-sm font-medium text-muted-foreground">Medical Documentation</p>
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => window.open(leave.medical_certificate_url!, "_blank")}
                             >
                               <ExternalLink className="h-4 w-4 mr-2" />
-                              View Document
+                              View Document/Photo
                             </Button>
                           </div>
                         )}

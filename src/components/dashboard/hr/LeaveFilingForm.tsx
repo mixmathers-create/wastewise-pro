@@ -123,11 +123,11 @@ const LeaveFilingForm = () => {
         return;
       }
 
-      // Check if medical certificate is required
+      // Check if medical documentation is required
       if (leaveType === "medical" && !medicalFile) {
         toast({
-          title: "Medical Certificate Required",
-          description: "Please upload a medical certificate for medical leave",
+          title: "Medical Documentation Required",
+          description: "Please upload a medical certificate or photo of injury for medical leave",
           variant: "destructive",
         });
         return;
@@ -315,11 +315,11 @@ const LeaveFilingForm = () => {
 
             {leaveType === "medical" && (
               <div className="space-y-2">
-                <FormLabel>Medical Certificate {leaveType === "medical" && "*"}</FormLabel>
+                <FormLabel>Medical Certificate or Injury Photo *</FormLabel>
                 <div className="flex items-center gap-4">
                   <Input
                     type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
+                    accept=".pdf,.jpg,.jpeg,.png,.heic"
                     onChange={handleFileChange}
                     className="flex-1"
                   />
@@ -328,9 +328,7 @@ const LeaveFilingForm = () => {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {leaveType === "medical" 
-                    ? "Medical certificate is required for medical leave" 
-                    : "Upload if available (PDF, JPG, PNG)"}
+                  Required: Upload either a medical certificate (PDF) or photo of injury (JPG, PNG)
                 </p>
               </div>
             )}
