@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, Clock, Download, X } from "lucide-react";
+import { Camera, Clock, Download, X, Upload } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { format, differenceInMinutes } from "date-fns";
@@ -104,6 +104,22 @@ export function MechanicsTimeTracking() {
     }
 
     setShowCamera(true);
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({ title: "Error", description: "Please select an image file", variant: "destructive" });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setCapturedPhoto(reader.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const capturePhoto = () => {
@@ -284,7 +300,7 @@ export function MechanicsTimeTracking() {
         <Dialog open={showCamera || !!capturedPhoto} onOpenChange={handleCancel}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Time In - Capture Photo</DialogTitle>
+              <DialogTitle>Time In - Photo</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               {showCamera && !capturedPhoto && (
@@ -297,8 +313,19 @@ export function MechanicsTimeTracking() {
                     className="w-full rounded-lg bg-black" 
                   />
                   <canvas ref={canvasRef} className="hidden" />
-                  <div className="flex justify-center gap-2 mt-4">
-                    <Button onClick={capturePhoto}>Capture Photo</Button>
+                  <div className="flex flex-col gap-4 mt-4">
+                    <Button onClick={capturePhoto}>
+                      <Camera className="h-4 w-4 mr-2" /> Capture Photo
+                    </Button>
+                    <div className="relative">
+                      <div className="text-center text-sm text-muted-foreground mb-2">Or</div>
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileUpload}
+                        className="cursor-pointer"
+                      />
+                    </div>
                     <Button variant="outline" onClick={handleCancel}>Cancel</Button>
                   </div>
                 </div>
