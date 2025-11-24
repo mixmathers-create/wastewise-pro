@@ -8,12 +8,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { App, type PluginListenerHandle } from '@capacitor/app'; 
+import { App } from '@capacitor/app'; 
 import { BarcodeScanner } from '@capacitor-community/barcode-scanner';
 
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { MobileInput } from "@/components/mobile/MobileInput";
 import { printerService } from "@/lib/printerService";
 import { Card } from "@/components/ui/card";
