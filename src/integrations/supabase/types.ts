@@ -456,6 +456,8 @@ export type Database = {
           created_at: string
           end_date: string
           id: string
+          is_paid: boolean
+          leave_days: number
           leave_type: string
           medical_certificate_url: string | null
           personnel_id: string
@@ -474,6 +476,8 @@ export type Database = {
           created_at?: string
           end_date: string
           id?: string
+          is_paid?: boolean
+          leave_days?: number
           leave_type: string
           medical_certificate_url?: string | null
           personnel_id: string
@@ -492,6 +496,8 @@ export type Database = {
           created_at?: string
           end_date?: string
           id?: string
+          is_paid?: boolean
+          leave_days?: number
           leave_type?: string
           medical_certificate_url?: string | null
           personnel_id?: string

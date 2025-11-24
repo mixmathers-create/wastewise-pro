@@ -16,7 +16,7 @@ const leaveFormSchema = z.object({
   personnel_type: z.enum(["driver", "helper", "mechanic", "recycler", "management"]),
   personnel_id: z.string().min(1, "Please select personnel"),
   personnel_id_number: z.string().min(1, "Personnel ID number is required for confirmation"),
-  leave_type: z.enum(["sick", "vacation", "emergency", "medical", "personal"]),
+  leave_type: z.enum(["sick", "vacation", "emergency", "medical", "personal", "unpaid"]),
   start_date: z.string().min(1, "Start date is required"),
   end_date: z.string().min(1, "End date is required"),
   reason: z.string().min(10, "Please provide a detailed reason (at least 10 characters)"),
@@ -30,6 +30,8 @@ const LeaveFilingForm = () => {
   const [personnel, setPersonnel] = useState<any[]>([]);
   const [medicalFile, setMedicalFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [availableLeaves, setAvailableLeaves] = useState<number>(0);
+  const [insufficientCredits, setInsufficientCredits] = useState(false);
 
   const form = useForm<LeaveFormValues>({
     resolver: zodResolver(leaveFormSchema),
@@ -46,18 +48,59 @@ const LeaveFilingForm = () => {
 
   const personnelType = form.watch("personnel_type");
   const leaveType = form.watch("leave_type");
+  const personnelId = form.watch("personnel_id");
+  const startDate = form.watch("start_date");
+  const endDate = form.watch("end_date");
 
   useEffect(() => {
     fetchPersonnel();
   }, [personnelType]);
 
+  useEffect(() => {
+    if (personnelId) {
+      checkAvailableLeaves();
+    }
+  }, [personnelId]);
+
+  useEffect(() => {
+    if (startDate && endDate) {
+      const days = calculateLeaveDays(startDate, endDate);
+      if (days > availableLeaves && leaveType !== "unpaid") {
+        setInsufficientCredits(true);
+        form.setValue("leave_type", "unpaid");
+        toast({
+          title: "Insufficient Leave Credits",
+          description: `You only have ${availableLeaves} leave days available. This leave has been set to unpaid.`,
+          variant: "destructive",
+        });
+      } else {
+        setInsufficientCredits(false);
+      }
+    }
+  }, [startDate, endDate, availableLeaves]);
+
   const fetchPersonnel = async () => {
     const { data } = await supabase
       .from(`${personnelType}s`)
-      .select("id, name, id_number")
+      .select("id, name, id_number, leaves_available")
       .order("name");
     
     setPersonnel(data || []);
+  };
+
+  const checkAvailableLeaves = async () => {
+    const selectedPerson = personnel.find(p => p.id === personnelId);
+    if (selectedPerson) {
+      setAvailableLeaves(selectedPerson.leaves_available || 0);
+    }
+  };
+
+  const calculateLeaveDays = (start: string, end: string): number => {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end date
+    return diffDays;
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,6 +182,9 @@ const LeaveFilingForm = () => {
         if (!medicalCertUrl) return;
       }
 
+      const leaveDays = calculateLeaveDays(values.start_date, values.end_date);
+      const isPaid = values.leave_type !== "unpaid" && leaveDays <= availableLeaves;
+
       const { error } = await supabase.from("leaves").insert({
         personnel_type: values.personnel_type,
         personnel_id: values.personnel_id,
@@ -150,6 +196,8 @@ const LeaveFilingForm = () => {
         reason: values.reason,
         medical_certificate_url: medicalCertUrl,
         status: "pending",
+        leave_days: leaveDays,
+        is_paid: isPaid,
       });
 
       if (error) throw error;
@@ -246,6 +294,15 @@ const LeaveFilingForm = () => {
               )}
             />
 
+            {personnelId && (
+              <div className="p-4 border rounded-lg bg-muted/50">
+                <p className="text-sm font-medium">Available Leave Credits: <span className="text-primary">{availableLeaves} days</span></p>
+                {insufficientCredits && (
+                  <p className="text-sm text-destructive mt-1">⚠️ Insufficient credits - Leave will be unpaid</p>
+                )}
+              </div>
+            )}
+
             <FormField
               control={form.control}
               name="leave_type"
@@ -258,13 +315,14 @@ const LeaveFilingForm = () => {
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
-                      <SelectItem value="sick">Sick Leave</SelectItem>
-                      <SelectItem value="vacation">Vacation Leave</SelectItem>
-                      <SelectItem value="emergency">Emergency Leave</SelectItem>
-                      <SelectItem value="medical">Medical Leave</SelectItem>
-                      <SelectItem value="personal">Personal Leave</SelectItem>
-                    </SelectContent>
+                      <SelectContent>
+                        <SelectItem value="sick">Sick Leave</SelectItem>
+                        <SelectItem value="vacation">Vacation Leave</SelectItem>
+                        <SelectItem value="emergency">Emergency Leave</SelectItem>
+                        <SelectItem value="medical">Medical Leave</SelectItem>
+                        <SelectItem value="personal">Personal Leave</SelectItem>
+                        <SelectItem value="unpaid">Unpaid Leave</SelectItem>
+                      </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
