@@ -103,8 +103,38 @@ body.scanner-active {
   --background: 0 0% 0%;
   --foreground: 0 0% 100%;
   background-color: transparent;
+  --ion-background-color: transparent !important;
+  background: transparent !important;
+}
+
+html, body {
+  background: #000;
+}
+
+.scanner-overlay {
+  pointer-events: none;
+}
+
+ion-app, ion-content, #root {
+  background: transparent !important;
+}
+
+.scanner-overlay {
+  background: rgba(0, 0, 0, 0.5);
 }
 
 body.scanner-active .barcode-scanner-modal {
   visibility: visible;
+}
+
+body.scanner-active {
+  background: transparent !important;
+}
+
+body.scanner-active * {
+  visibility: hidden;
+}
+
+body.scanner-active .scanner-overlay {
+  visibility: visible !important;
 }

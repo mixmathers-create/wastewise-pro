@@ -8,11 +8,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { App, type PluginListenerHandle } from '@capacitor/app'; 
+import { BarcodeScanner } from '@capacitor-community/barcode-scanner';
 
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { Capacitor } from "@capacitor/core";
-import { BarcodeScanner } from "@capacitor-mlkit/barcode-scanning";
 import { MobileInput } from "@/components/mobile/MobileInput";
 import { printerService } from "@/lib/printerService";
 import { Card } from "@/components/ui/card";
@@ -48,6 +49,43 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
   useEffect(() => {
     loadClients();
+    if (!Capacitor.isNativePlatform()) return;
+
+    let listenerHandle: PluginListenerHandle | null = null;
+
+    const setupBackHandler = async () => {
+      listenerHandle = await App.addListener("backButton", async (data) => {
+        const isScannerActive = document.body.classList.contains("scanner-active");
+
+        if (isScannerActive) {
+          console.log("Back button pressed, cancelling scan.");
+          try {
+            await BarcodeScanner.stopScan();
+          } catch (e) {
+            console.warn("Failed to stop scanner", e);
+          }
+
+          BarcodeScanner.showBackground();
+          document.body.classList.remove("scanner-active");
+          setIsScanning(false); 
+        } else {
+          App.exitApp();
+        }
+      });
+    };
+
+    setupBackHandler();
+
+    return () => {
+      if (listenerHandle) {
+        listenerHandle.remove();
+      }
+      if (document.body.classList.contains("scanner-active")) {
+          BarcodeScanner.showBackground();
+          document.body.classList.remove("scanner-active");
+          BarcodeScanner.stopScan(); 
+      }
+    };
   }, []);
 
   const handleQRDetected = async (decodedText: string) => {
@@ -91,71 +129,68 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       if (!Capacitor.isNativePlatform()) {
         toast({
           title: "Camera not available",
-          description: "Please use mobile app to scan QR codes",
-          variant: "destructive"
+          description: "Use the mobile app to scan QR codes",
+          variant: "destructive",
         });
         return;
       }
 
-      const scannerAny = BarcodeScanner as any;
-      if (typeof scannerAny?.initialize === "function") {
-        await scannerAny.initialize();
-      }
-      if (typeof scannerAny?.isGoogleBarcodeScannerModuleAvailable === "function") {
-        const moduleReady = await scannerAny.isGoogleBarcodeScannerModuleAvailable();
-        if (!moduleReady && typeof scannerAny.installGoogleBarcodeScannerModule === "function") {
-          await scannerAny.installGoogleBarcodeScannerModule();
-        }
-      }
-
-      // Request camera permission
-      const { camera } = await BarcodeScanner.requestPermissions();
-      if (camera !== 'granted') {
+      // Check camera permission
+      const status = await BarcodeScanner.checkPermission({ force: true });
+      if (!status.granted) {
         toast({
-          title: "Permission denied",
-          description: "Camera permission is required to scan QR codes. Please enable it in your device settings.", 
-          variant: "destructive" 
+          title: "Camera permission denied",
+          description: "Please allow camera access to scan QR codes",
+          variant: "destructive",
         });
         return;
       }
 
-      setIsScanning(true);
-
-      // Start scanning and wait for result
-      const { barcodes } = await BarcodeScanner.scan();
-      
-      if (barcodes && barcodes.length > 0) {
-        const qrCode = barcodes[0].rawValue;
-        await handleQRDetected(qrCode);
-      } else {
-        toast({ 
-          title: "No QR Code Found", 
-          description: "Please try again and ensure the QR code is clearly visible", 
-          variant: "destructive" 
-        });
+      // Stop any existing scan first
+      try {
+        await BarcodeScanner.stopScan();
+      } catch (e) {
+        // Ignore if no scan was running
       }
-      
+
+      // Start scanning
+      setIsScanning(true);
+      BarcodeScanner.hideBackground();
+      document.body.classList.add("scanner-active");
+
+      const result = await BarcodeScanner.startScan();
+
+      // Clean up
+      BarcodeScanner.showBackground();
+      document.body.classList.remove("scanner-active");
       setIsScanning(false);
-    } catch (error: any) {
-      console.error("Camera error:", error);
-      toast({ 
-        title: "Camera Error", 
-        description: error.message || "Could not access camera. Ensure ML Kit is installed and camera permissions are granted.", 
-        variant: "destructive" 
+
+      if (result.hasContent) {
+        handleQRDetected(result.content);
+      }
+
+    } catch (err: any) {
+      console.error("Camera error:", err);
+      BarcodeScanner.showBackground();
+      document.body.classList.remove("scanner-active");
+      setIsScanning(false);
+      toast({
+        title: "Camera error",
+        description: err.message || "Failed to start camera scanner",
+        variant: "destructive",
       });
-      setIsScanning(false);
     }
   };
-
   const stopScanning = async () => {
     try {
       await BarcodeScanner.stopScan();
-      setIsScanning(false);
-    } catch (error) {
-      console.error("Error stopping scanner:", error);
+    } finally {
+      BarcodeScanner.showBackground();
+      document.body.classList.remove("scanner-active");
       setIsScanning(false);
     }
   };
+
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -220,6 +255,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       return;
     }
     
+
     // Add to tally entries (individual records)
     const newTallyEntry = {
       waste_type: selectedWasteType,
@@ -477,24 +513,18 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
   return (
     <>
-      {/* Mobile Scanner Overlay */}
       {isScanning && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center">
-          <div className="text-white text-center p-4 mb-8">
-            <p className="text-xl font-semibold mb-2">Scan QR Code</p>
-            <p className="text-sm text-gray-300">Point camera at QR code</p>
-          </div>
-          <Button 
-            variant="outline" 
+        <div className="scanner-overlay fixed inset-0 z-50 flex items-end justify-center pb-20">
+          <button 
             onClick={stopScanning}
-            className="absolute bottom-8 left-1/2 transform -translate-x-1/2"
+            className="bg-red-500 text-white px-6 py-3 rounded-lg font-semibold shadow-lg"
           >
-            Cancel
-          </Button>
+            Cancel Scan
+          </button>
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className={`space-y-4 ${isScanning ? 'hidden' : ''}`}>
         <div>
           <Label>Select Client</Label>
         <Select onValueChange={handleClientSelect}>
@@ -573,7 +603,6 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
           <div>
             <Label>Waste Collection</Label>
-            {/* Waste Type Selection (once) */}
             {!selectedWasteType ? (
               <div className="mt-2 p-3 border rounded-md bg-muted">
                 <Label className="mb-2 block">Select Waste Type</Label>
@@ -602,7 +631,6 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
                   </Button>
                 </div>
 
-                {/* Quick Add Items */}
                 <div className="space-y-2">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
@@ -638,13 +666,11 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
               </div>
             )}
 
-            {/* Signed By field */}
             <div className="mb-3">
               <Label>Signed By (Name)</Label>
               <Input value={signedBy} onChange={(e) => setSignedBy(e.target.value)} placeholder="Client representative name" />
             </div>
 
-            {/* List of added items */}
             {items.length > 0 && (
               <div className="space-y-2 mb-3">
                 <p className="text-sm font-semibold">Added Items:</p>
