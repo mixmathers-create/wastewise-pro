@@ -16,7 +16,7 @@ interface PersonnelEditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUpdated: () => void;
-  table: "helpers" | "recyclers" | "management";
+  table: "helpers" | "recyclers" | "management" | "mechanics";
   title: string;
 }
 

@@ -21,25 +21,30 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
   const [helpers, setHelpers] = useState<any[]>([]);
   const [recyclers, setRecyclers] = useState<any[]>([]);
   const [management, setManagement] = useState<any[]>([]);
+  const [mechanics, setMechanics] = useState<any[]>([]);
   const [editingDriver, setEditingDriver] = useState<any>(null);
   const [editingHelper, setEditingHelper] = useState<any>(null);
   const [editingRecycler, setEditingRecycler] = useState<any>(null);
   const [editingManagement, setEditingManagement] = useState<any>(null);
+  const [editingMechanic, setEditingMechanic] = useState<any>(null);
   const [viewingLicense, setViewingLicense] = useState<{url: string; name: string} | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<{url: string; name: string} | null>(null);
   const [selectedHelpers, setSelectedHelpers] = useState<string[]>([]);
   const [selectedRecyclers, setSelectedRecyclers] = useState<string[]>([]);
   const [selectedManagement, setSelectedManagement] = useState<string[]>([]);
+  const [selectedMechanics, setSelectedMechanics] = useState<string[]>([]);
   const driverFileInputRef = useRef<HTMLInputElement>(null);
   const helperFileInputRef = useRef<HTMLInputElement>(null);
   const recyclerFileInputRef = useRef<HTMLInputElement>(null);
   const managementFileInputRef = useRef<HTMLInputElement>(null);
+  const mechanicFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchDrivers();
     fetchHelpers();
     fetchRecyclers();
     fetchManagement();
+    fetchMechanics();
   }, []);
 
   const fetchDrivers = async () => {
@@ -87,6 +92,18 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       setManagement(data || []);
+    }
+  };
+
+  const fetchMechanics = async () => {
+    const { data, error } = await supabase
+      .from("mechanics")
+      .select("*")
+      .order("name");
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setMechanics(data || []);
     }
   };
 
@@ -154,6 +171,25 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
     };
     const csv = generateCSV([templateRow], headers);
     downloadCSV(csv, 'management_import_template.csv');
+  };
+
+  const exportMechanics = () => {
+    const csv = generateCSV(mechanics, [
+      "name", "contact_number", "address", "leaves_available"
+    ]);
+    downloadCSV(csv, "mechanics-export.csv");
+  };
+
+  const downloadMechanicTemplate = () => {
+    const headers = ['name', 'contact_number', 'address', 'leaves_available'];
+    const templateRow = {
+      name: 'Roberto Cruz',
+      contact_number: '09171234567',
+      address: '321 Main St, Cebu City',
+      leaves_available: '15'
+    };
+    const csv = generateCSV([templateRow], headers);
+    downloadCSV(csv, 'mechanics_import_template.csv');
   };
 
   const handleDriverImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -296,6 +332,42 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
     if (managementFileInputRef.current) managementFileInputRef.current.value = "";
   };
 
+  const handleMechanicImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const text = await file.text();
+    const rows = parseCSV(text);
+    
+    if (rows.length === 0) {
+      toast({ title: "No data found in CSV", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const mechanicsToInsert = rows.map(row => ({
+        name: row.name || row.Name,
+        contact_number: row.contact_number || row.contact_number,
+        address: row.address || row.Address || null,
+        leaves_available: parseInt(row.leaves_available || row.leaves_available || '15'),
+        status: "available"
+      }));
+
+      const { error } = await supabase.from("mechanics").insert(mechanicsToInsert);
+      if (error) throw error;
+
+      toast({ 
+        title: "Success", 
+        description: `Imported ${rows.length} mechanic(s)` 
+      });
+      fetchMechanics();
+    } catch (error: any) {
+      toast({ title: "Import Error", description: error.message, variant: "destructive" });
+    }
+
+    if (mechanicFileInputRef.current) mechanicFileInputRef.current.value = "";
+  };
+
   const deleteDriver = async (id: string) => {
     if (!confirm("Are you sure you want to delete this driver?")) return;
 
@@ -343,6 +415,19 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
       if (error) throw error;
       toast({ title: "Success", description: "Management personnel deleted" });
       fetchManagement();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const deleteMechanic = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this mechanic?")) return;
+
+    try {
+      const { error } = await supabase.from("mechanics").delete().eq("id", id);
+      if (error) throw error;
+      toast({ title: "Success", description: "Mechanic deleted" });
+      fetchMechanics();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     }
@@ -468,6 +553,46 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
     }
   };
 
+  const toggleSelectMechanic = (mechanicId: string) => {
+    setSelectedMechanics(prev =>
+      prev.includes(mechanicId)
+        ? prev.filter(id => id !== mechanicId)
+        : [...prev, mechanicId]
+    );
+  };
+
+  const toggleSelectAllMechanics = () => {
+    if (selectedMechanics.length === mechanics.length) {
+      setSelectedMechanics([]);
+    } else {
+      setSelectedMechanics(mechanics.map(m => m.id));
+    }
+  };
+
+  const handleMassDeleteMechanics = async () => {
+    if (selectedMechanics.length === 0) return;
+    
+    if (!confirm(`Are you sure you want to delete ${selectedMechanics.length} mechanic(s)?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from("mechanics")
+        .delete()
+        .in("id", selectedMechanics);
+      
+      if (error) throw error;
+      
+      toast({ 
+        title: "Success", 
+        description: `${selectedMechanics.length} mechanic(s) deleted` 
+      });
+      setSelectedMechanics([]);
+      fetchMechanics();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
   return (
     <Tabs defaultValue="drivers" className="w-full">
       <TabsList>
@@ -486,6 +611,10 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
         <TabsTrigger value="management">
           <Users className="h-4 w-4 mr-2" />
           Management
+        </TabsTrigger>
+        <TabsTrigger value="mechanics">
+          <Users className="h-4 w-4 mr-2" />
+          Mechanics
         </TabsTrigger>
       </TabsList>
 
@@ -970,6 +1099,128 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
         </Card>
       </TabsContent>
 
+      <TabsContent value="mechanics">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Mechanics</CardTitle>
+              <div className="flex gap-2">
+                {selectedMechanics.length > 0 && (
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={handleMassDeleteMechanics}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete ({selectedMechanics.length})
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={downloadMechanicTemplate}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Template
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportMechanics}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => mechanicFileInputRef.current?.click()}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import
+                </Button>
+                <input
+                  ref={mechanicFileInputRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleMechanicImport}
+                  className="hidden"
+                />
+                <AddHelperDialog profile={profile} onAdded={fetchMechanics} />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedMechanics.length === mechanics.length && mechanics.length > 0}
+                      onCheckedChange={toggleSelectAllMechanics}
+                    />
+                  </TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Address</TableHead>
+                  <TableHead>Leaves Available</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Photo</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {mechanics.map((mechanic) => (
+                  <TableRow key={mechanic.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedMechanics.includes(mechanic.id)}
+                        onCheckedChange={() => toggleSelectMechanic(mechanic.id)}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">{mechanic.name}</TableCell>
+                    <TableCell>{mechanic.contact_number || "—"}</TableCell>
+                    <TableCell>{mechanic.address || "—"}</TableCell>
+                    <TableCell>{mechanic.leaves_available ?? 15}</TableCell>
+                    <TableCell>
+                      <span className={`px-2 py-1 rounded text-xs ${
+                        mechanic.status === "available" ? "bg-green-100 text-green-800" :
+                        mechanic.status === "on_duty" ? "bg-blue-100 text-blue-800" :
+                        "bg-red-100 text-red-800"
+                      }`}>
+                        {mechanic.status?.replace('_', ' ')}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {mechanic.photo_url ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setViewingPhoto({url: mechanic.photo_url, name: mechanic.name})}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View
+                        </Button>
+                      ) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingMechanic(mechanic)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteMechanic(mechanic.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </TabsContent>
+
       {editingDriver && (
         <DriverEditDialog
           driver={editingDriver}
@@ -1007,6 +1258,17 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
           onUpdated={fetchManagement}
           table="management"
           title="Management"
+        />
+      )}
+
+      {editingMechanic && (
+        <PersonnelEditDialog
+          personnel={editingMechanic}
+          open={!!editingMechanic}
+          onOpenChange={(open) => !open && setEditingMechanic(null)}
+          onUpdated={fetchMechanics}
+          table="mechanics"
+          title="Mechanic"
         />
       )}
 
