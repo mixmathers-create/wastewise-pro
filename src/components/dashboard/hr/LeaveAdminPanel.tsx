@@ -13,6 +13,7 @@ import { format } from "date-fns";
 interface Leave {
   id: string;
   personnel_type: string;
+  personnel_id: string;
   personnel_name: string;
   leave_type: string;
   start_date: string;
@@ -23,6 +24,8 @@ interface Leave {
   created_at: string;
   reviewed_at: string | null;
   review_notes: string | null;
+  leave_days: number;
+  is_paid: boolean;
 }
 
 const LeaveAdminPanel = () => {
@@ -58,8 +61,14 @@ const LeaveAdminPanel = () => {
     try {
       setProcessing(true);
       const { data: { user } } = await supabase.auth.getUser();
+      const leave = leaves.find(l => l.id === leaveId);
 
-      const { error } = await supabase
+      if (!leave) {
+        throw new Error("Leave not found");
+      }
+
+      // Update leave status
+      const { error: leaveError } = await supabase
         .from("leaves")
         .update({
           status,
@@ -69,11 +78,36 @@ const LeaveAdminPanel = () => {
         })
         .eq("id", leaveId);
 
-      if (error) throw error;
+      if (leaveError) throw leaveError;
+
+      // If approved and paid, deduct from personnel's available leaves
+      if (status === "approved" && leave.is_paid) {
+        const tableName = `${leave.personnel_type}s`;
+        
+        // Fetch current leaves_available
+        const { data: personnelData, error: fetchError } = await supabase
+          .from(tableName)
+          .select("leaves_available")
+          .eq("id", leave.personnel_id)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        const currentLeaves = personnelData?.leaves_available || 0;
+        const newLeaves = Math.max(0, currentLeaves - leave.leave_days);
+
+        // Update personnel's leaves_available
+        const { error: updateError } = await supabase
+          .from(tableName)
+          .update({ leaves_available: newLeaves })
+          .eq("id", leave.personnel_id);
+
+        if (updateError) throw updateError;
+      }
 
       toast({
         title: `Leave ${status}`,
-        description: `The leave request has been ${status}`,
+        description: `The leave request has been ${status}${status === "approved" && leave.is_paid ? `. ${leave.leave_days} days deducted from available leaves.` : ""}`,
       });
 
       setSelectedLeave(null);
@@ -185,6 +219,9 @@ const LeaveAdminPanel = () => {
                           <p className="text-sm font-medium text-muted-foreground">Period</p>
                           <p className="text-sm">
                             {format(new Date(leave.start_date), "MMMM d, yyyy")} - {format(new Date(leave.end_date), "MMMM d, yyyy")}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {leave.leave_days} day(s) • {leave.is_paid ? "Paid" : "Unpaid"}
                           </p>
                         </div>
 
