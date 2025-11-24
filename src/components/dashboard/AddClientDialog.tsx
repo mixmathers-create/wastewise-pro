@@ -40,6 +40,9 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
   const [collectionDays, setCollectionDays] = useState<string[]>(["Mon", "Tue", "Wed", "Thu", "Fri"]);
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  const [status, setStatus] = useState("active");
+  const [contractFile, setContractFile] = useState<File | null>(null);
+  const [contractExpiryDate, setContractExpiryDate] = useState("");
 
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -55,6 +58,18 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
     try {
       const qrCode = `CLIENT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
+      let contractFileUrl = null;
+      if (contractFile) {
+        const fileExt = contractFile.name.split('.').pop();
+        const fileName = `${qrCode}-contract.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('client-contracts')
+          .upload(fileName, contractFile);
+        
+        if (uploadError) throw uploadError;
+        contractFileUrl = fileName;
+      }
+
       const { error } = await supabase.from("clients").insert({
         name,
         industry,
@@ -68,6 +83,9 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
         collection_days: collectionDays,
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
+        status,
+        contract_file_url: contractFileUrl,
+        contract_expiry_date: contractExpiryDate || null,
       });
 
       if (error) throw error;
@@ -85,6 +103,9 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
       setCollectionDays(["Mon", "Tue", "Wed", "Thu", "Fri"]);
       setLatitude("");
       setLongitude("");
+      setStatus("active");
+      setContractFile(null);
+      setContractExpiryDate("");
       onAdded();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -195,6 +216,37 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
               value={longitude} 
               onChange={(e) => setLongitude(e.target.value)}
               placeholder="e.g., 123.9059"
+            />
+          </div>
+          <div>
+            <Label htmlFor="status">Client Status</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="suspended">Suspended</SelectItem>
+                <SelectItem value="end_of_service">End of Service</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="contract">Contract PDF</Label>
+            <Input 
+              id="contract" 
+              type="file" 
+              accept="application/pdf"
+              onChange={(e) => setContractFile(e.target.files?.[0] || null)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="contractExpiry">Contract Expiry Date</Label>
+            <Input 
+              id="contractExpiry" 
+              type="date"
+              value={contractExpiryDate} 
+              onChange={(e) => setContractExpiryDate(e.target.value)}
             />
           </div>
           <Button type="submit" disabled={loading} className="w-full">

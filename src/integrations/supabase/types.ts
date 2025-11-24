@@ -22,6 +22,8 @@ export type Database = {
           contact_info: string | null
           contact_number: string | null
           contact_person: string | null
+          contract_expiry_date: string | null
+          contract_file_url: string | null
           created_at: string
           id: string
           industry: string
@@ -30,6 +32,7 @@ export type Database = {
           mt_requirement: number | null
           name: string
           qr_code: string
+          status: string | null
         }
         Insert: {
           address?: string | null
@@ -38,6 +41,8 @@ export type Database = {
           contact_info?: string | null
           contact_number?: string | null
           contact_person?: string | null
+          contract_expiry_date?: string | null
+          contract_file_url?: string | null
           created_at?: string
           id?: string
           industry: string
@@ -46,6 +51,7 @@ export type Database = {
           mt_requirement?: number | null
           name: string
           qr_code: string
+          status?: string | null
         }
         Update: {
           address?: string | null
@@ -54,6 +60,8 @@ export type Database = {
           contact_info?: string | null
           contact_number?: string | null
           contact_person?: string | null
+          contract_expiry_date?: string | null
+          contract_file_url?: string | null
           created_at?: string
           id?: string
           industry?: string
@@ -62,6 +70,7 @@ export type Database = {
           mt_requirement?: number | null
           name?: string
           qr_code?: string
+          status?: string | null
         }
         Relationships: []
       }
