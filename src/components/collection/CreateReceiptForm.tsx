@@ -8,12 +8,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { App, type PluginListenerHandle } from '@capacitor/app';
+// Start of 'my branch' camera/useClass imports
+import { App, type PluginListenerHandle } from '@capacitor/app'; 
+import { BarcodeScanner } from '@capacitor-community/barcode-scanner';
+// End of 'my branch' camera/useClass imports
 
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { Capacitor } from "@capacitor/core";
-import { BarcodeScanner } from '@capacitor-community/barcode-scanner';
+// Removed: import { BarcodeScanner } from "@capacitor-mlkit/barcode-scanning";
 import { MobileInput } from "@/components/mobile/MobileInput";
 import { printerService } from "@/lib/printerService";
 import { Card } from "@/components/ui/card";
@@ -41,51 +44,52 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const [selectedDriver, setSelectedDriver] = useState("");
   const [selectedHelpers, setSelectedHelpers] = useState<string[]>([]);
   const [items, setItems] = useState<{ waste_type: string; quantity: number; unit: string }[]>([]);
-  const [newItem, setNewItem] = useState({ waste_type: "", quantity: 0, unit: "kg" });
+  const [tallyEntries, setTallyEntries] = useState<{ waste_type: string; quantity: number; unit: string }[]>([]);
+  const [selectedWasteType, setSelectedWasteType] = useState<string>("");
+  const [newItem, setNewItem] = useState({ quantity: 0, unit: "kg" });
   const [signedBy, setSignedBy] = useState("");
   const [isScanning, setIsScanning] = useState(false);
 
+  useEffect(() => {
+    loadClients();
+    if (!Capacitor.isNativePlatform()) return;
 
-useEffect(() => {
-  loadClients();
-  if (!Capacitor.isNativePlatform()) return;
+    let listenerHandle: PluginListenerHandle | null = null;
 
-  let listenerHandle: PluginListenerHandle | null = null;
+    const setupBackHandler = async () => {
+      listenerHandle = await App.addListener("backButton", async (data) => {
+        const isScannerActive = document.body.classList.contains("scanner-active");
 
-  const setupBackHandler = async () => {
-    listenerHandle = await App.addListener("backButton", async (data) => {
-      const isScannerActive = document.body.classList.contains("scanner-active");
+        if (isScannerActive) {
+          console.log("Back button pressed, cancelling scan.");
+          try {
+            await BarcodeScanner.stopScan();
+          } catch (e) {
+            console.warn("Failed to stop scanner", e);
+          }
 
-      if (isScannerActive) {
-        console.log("Back button pressed, cancelling scan.");
-        try {
-          await BarcodeScanner.stopScan();
-        } catch (e) {
-          console.warn("Failed to stop scanner", e);
+          BarcodeScanner.showBackground();
+          document.body.classList.remove("scanner-active");
+          setIsScanning(false); 
+        } else {
+          App.exitApp();
         }
+      });
+    };
 
-        BarcodeScanner.showBackground();
-        document.body.classList.remove("scanner-active");
-        setIsScanning(false); 
-      } else {
-        App.exitApp();
+    setupBackHandler();
+
+    return () => {
+      if (listenerHandle) {
+        listenerHandle.remove();
       }
-    });
-  };
-
-  setupBackHandler();
-
-  return () => {
-    if (listenerHandle) {
-      listenerHandle.remove();
-    }
-    if (document.body.classList.contains("scanner-active")) {
-        BarcodeScanner.showBackground();
-        document.body.classList.remove("scanner-active");
-        BarcodeScanner.stopScan(); 
-    }
-  };
-}, []);
+      if (document.body.classList.contains("scanner-active")) {
+          BarcodeScanner.showBackground();
+          document.body.classList.remove("scanner-active");
+          BarcodeScanner.stopScan(); 
+      }
+    };
+  }, []);
 
   const handleQRDetected = async (decodedText: string) => {
     setQrInput(decodedText);
@@ -124,64 +128,62 @@ useEffect(() => {
   };
 
   const handleCamera = async () => {
-  try {
-    if (!Capacitor.isNativePlatform()) {
-      toast({
-        title: "Camera not available",
-        description: "Use the mobile app to scan QR codes",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Check camera permission
-    const status = await BarcodeScanner.checkPermission({ force: true });
-    if (!status.granted) {
-      toast({
-        title: "Camera permission denied",
-        description: "Please allow camera access to scan QR codes",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Stop any existing scan first
     try {
-      await BarcodeScanner.stopScan();
-    } catch (e) {
-      // Ignore if no scan was running
+      if (!Capacitor.isNativePlatform()) {
+        toast({
+          title: "Camera not available",
+          description: "Use the mobile app to scan QR codes",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Check camera permission
+      const status = await BarcodeScanner.checkPermission({ force: true });
+      if (!status.granted) {
+        toast({
+          title: "Camera permission denied",
+          description: "Please allow camera access to scan QR codes",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Stop any existing scan first
+      try {
+        await BarcodeScanner.stopScan();
+      } catch (e) {
+        // Ignore if no scan was running
+      }
+
+      // Start scanning
+      setIsScanning(true);
+      BarcodeScanner.hideBackground();
+      document.body.classList.add("scanner-active");
+
+      const result = await BarcodeScanner.startScan();
+
+      // Clean up
+      BarcodeScanner.showBackground();
+      document.body.classList.remove("scanner-active");
+      setIsScanning(false);
+
+      if (result.hasContent) {
+        handleQRDetected(result.content);
+      }
+
+    } catch (err: any) {
+      console.error("Camera error:", err);
+      BarcodeScanner.showBackground();
+      document.body.classList.remove("scanner-active");
+      setIsScanning(false);
+      toast({
+        title: "Camera error",
+        description: err.message || "Failed to start camera scanner",
+        variant: "destructive",
+      });
     }
-
-    // Start scanning
-    setIsScanning(true);
-    BarcodeScanner.hideBackground();
-    document.body.classList.add("scanner-active");
-
-    const result = await BarcodeScanner.startScan();
-
-    // Clean up
-    BarcodeScanner.showBackground();
-    document.body.classList.remove("scanner-active");
-    setIsScanning(false);
-
-    if (result.hasContent) {
-      handleQRDetected(result.content);
-    }
-
-  } catch (err) {
-    console.error("Camera error:", err);
-    BarcodeScanner.showBackground();
-    document.body.classList.remove("scanner-active");
-    setIsScanning(false);
-    toast({
-      title: "Camera error",
-      description: "Failed to start camera scanner",
-      variant: "destructive",
-    });
-  }
-};
-
-
+  };
   const stopScanning = async () => {
     try {
       await BarcodeScanner.stopScan();
@@ -246,16 +248,27 @@ useEffect(() => {
   };
 
   const handleAddItem = () => {
+    if (!selectedWasteType) {
+      toast({ title: "No Waste Type", description: "Please select a waste type first", variant: "destructive" });
+      return;
+    }
+
     if (!newItem.quantity || newItem.quantity <= 0) {
       toast({ title: "Invalid Quantity", description: "Please enter a valid quantity", variant: "destructive" });
       return;
     }
-
-    const wasteType = newItem.waste_type || "Not specified";
     
-    // Check if item with same waste_type and unit already exists
+    // Add to tally entries (individual records) - Kept from main branch
+    const newTallyEntry = {
+      waste_type: selectedWasteType,
+      quantity: newItem.quantity,
+      unit: newItem.unit,
+    };
+    setTallyEntries([...tallyEntries, newTallyEntry]);
+    
+    // Check if item with same waste_type and unit already exists for aggregated display
     const existingItemIndex = items.findIndex(
-      item => item.waste_type === wasteType && item.unit === newItem.unit
+      item => item.waste_type === selectedWasteType && item.unit === newItem.unit
     );
 
     if (existingItemIndex !== -1) {
@@ -266,14 +279,15 @@ useEffect(() => {
     } else {
       // Add new item
       const item = {
-        waste_type: wasteType,
+        waste_type: selectedWasteType,
         quantity: newItem.quantity,
         unit: newItem.unit,
       };
       setItems([...items, item]);
     }
 
-    setNewItem({ waste_type: "", quantity: 0, unit: "kg" });
+    setNewItem({ quantity: 0, unit: "kg" });
+    toast({ title: "Item Added", description: `${newItem.quantity} ${newItem.unit} added` });
   };
 
   const updateItem = (idx: number, field: string, value: any) => {
@@ -314,6 +328,7 @@ useEffect(() => {
           driver_id: selectedDriver,
           helper_ids: selectedHelpers,
           items,
+          tally_entries: tallyEntries,
           waste_types: items.map((i) => i.waste_type),
           qr_code: receiptQR,
           signed_by: signedBy,
@@ -492,15 +507,26 @@ useEffect(() => {
     setSelectedDriver("");
     setSelectedHelpers([]);
     setItems([]);
-    setNewItem({ waste_type: "", quantity: 0, unit: "kg" });
+    setTallyEntries([]);
+    setSelectedWasteType("");
+    setNewItem({ quantity: 0, unit: "kg" });
     setSignedBy("");
   };
 
   return (
     <>
+      {isScanning && (
+        <div className="scanner-overlay fixed inset-0 z-50 flex items-end justify-center pb-20">
+          <button 
+            onClick={stopScanning}
+            className="bg-red-500 text-white px-6 py-3 rounded-lg font-semibold shadow-lg"
+          >
+            Cancel Scan
+          </button>
+        </div>
+      )}
 
-
-    <div className={`space-y-4 ${isScanning ? 'hidden' : ''}`}>
+      <div className={`space-y-4 ${isScanning ? 'hidden' : ''}`}>
         <div>
           <Label>Select Client</Label>
         <Select onValueChange={handleClientSelect}>
@@ -521,7 +547,6 @@ useEffect(() => {
           <Input value={qrInput} onChange={(e) => setQrInput(e.target.value)} placeholder="Enter or scan QR" />
           <Button type="button" variant="outline" onClick={handleCamera} title="Use Camera">
             <Camera className="h-4 w-4" />
-            📷
           </Button>
           <Button type="button" variant="outline" asChild title="Upload QR Image">
             <label className="cursor-pointer">
@@ -579,30 +604,75 @@ useEffect(() => {
           </div>
 
           <div>
-            <Label>Items</Label>
-            {/* Static input area */}
-            <div className="sticky top-0 bg-background z-10 p-3 border rounded-md mt-2 mb-3">
-              <div className="flex gap-2">
-                <Select value={newItem.waste_type} onValueChange={(v) => setNewItem({ ...newItem, waste_type: v })}>
-                  <SelectTrigger className="flex-1"><SelectValue placeholder="Waste type" /></SelectTrigger>
+            <Label>Waste Collection</Label>
+            {!selectedWasteType ? (
+              <div className="mt-2 p-3 border rounded-md bg-muted">
+                <Label className="mb-2 block">Select Waste Type</Label>
+                <Select value={selectedWasteType} onValueChange={setSelectedWasteType}>
+                  <SelectTrigger><SelectValue placeholder="Choose waste type..." /></SelectTrigger>
                   <SelectContent>{wasteTypes.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
                 </Select>
-                <Input type="number" placeholder="Qty" value={newItem.quantity || ""} onChange={(e) => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) || 0 })} className="w-24" />
-                <Select value={newItem.unit} onValueChange={(v) => setNewItem({ ...newItem, unit: v })}>
-                  <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-                  <SelectContent>{units.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-                </Select>
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={handleAddItem} className="mt-2 w-full">Add Item</Button>
-            </div>
+            ) : (
+              <div className="mt-2 p-3 border rounded-md bg-primary/10">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Waste Type</p>
+                    <p className="font-semibold">{selectedWasteType}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedWasteType("");
+                      setNewItem({ quantity: 0, unit: "kg" });
+                    }}
+                  >
+                    Change
+                  </Button>
+                </div>
 
-            {/* Signed By field */}
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">Quantity</Label>
+                      <MobileInput
+                        type="number"
+                        value={newItem.quantity.toString()}
+                        onChange={(v) => setNewItem({ ...newItem, quantity: parseFloat(v) || 0 })}
+                        placeholder="0"
+                        allowDecimal={true}
+                        maxLength={8}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Unit</Label>
+                      <Select value={newItem.unit} onValueChange={(v) => setNewItem({ ...newItem, unit: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>{units.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <Button 
+                    type="button" 
+                    variant="default" 
+                    size="sm" 
+                    onClick={handleAddItem} 
+                    className="w-full"
+                    disabled={!newItem.quantity || newItem.quantity <= 0}
+                  >
+                    + Add Item
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="mb-3">
               <Label>Signed By (Name)</Label>
               <Input value={signedBy} onChange={(e) => setSignedBy(e.target.value)} placeholder="Client representative name" />
             </div>
 
-            {/* List of added items */}
             {items.length > 0 && (
               <div className="space-y-2 mb-3">
                 <p className="text-sm font-semibold">Added Items:</p>
@@ -627,17 +697,6 @@ useEffect(() => {
         </>
       )}
       </div>
-      
-      {isScanning && (
-        <div className="scanner-overlay fixed inset-0 z-50 flex items-end justify-center pb-20">
-          <button 
-            onClick={stopScanning}
-            className="bg-red-500 text-white px-6 py-3 rounded-lg font-semibold shadow-lg"
-          >
-            Cancel Scan
-          </button>
-        </div>
-      )}
     </>
   )
 };
