@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Download, Upload, Edit, Trash2, Users, UserCog, Eye } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { generateCSV, downloadCSV, parseCSV } from "@/lib/csvUtils";
 import AddDriverDialog from "../AddDriverDialog";
@@ -21,6 +22,7 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
   const [editingHelper, setEditingHelper] = useState<any>(null);
   const [viewingLicense, setViewingLicense] = useState<{url: string; name: string} | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<{url: string; name: string} | null>(null);
+  const [selectedHelpers, setSelectedHelpers] = useState<string[]>([]);
   const driverFileInputRef = useRef<HTMLInputElement>(null);
   const helperFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -175,6 +177,46 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
     }
   };
 
+  const toggleSelectHelper = (helperId: string) => {
+    setSelectedHelpers(prev =>
+      prev.includes(helperId)
+        ? prev.filter(id => id !== helperId)
+        : [...prev, helperId]
+    );
+  };
+
+  const toggleSelectAllHelpers = () => {
+    if (selectedHelpers.length === helpers.length) {
+      setSelectedHelpers([]);
+    } else {
+      setSelectedHelpers(helpers.map(h => h.id));
+    }
+  };
+
+  const handleMassDeleteHelpers = async () => {
+    if (selectedHelpers.length === 0) return;
+    
+    if (!confirm(`Are you sure you want to delete ${selectedHelpers.length} helper(s)?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from("helpers")
+        .delete()
+        .in("id", selectedHelpers);
+      
+      if (error) throw error;
+      
+      toast({ 
+        title: "Success", 
+        description: `${selectedHelpers.length} helper(s) deleted` 
+      });
+      setSelectedHelpers([]);
+      fetchHelpers();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
   return (
     <Tabs defaultValue="drivers" className="w-full">
       <TabsList>
@@ -309,6 +351,16 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
             <div className="flex items-center justify-between">
               <CardTitle>Helpers</CardTitle>
               <div className="flex gap-2">
+                {selectedHelpers.length > 0 && (
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={handleMassDeleteHelpers}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete ({selectedHelpers.length})
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" onClick={downloadHelperTemplate}>
                   <Download className="h-4 w-4 mr-2" />
                   Template
@@ -340,6 +392,12 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedHelpers.length === helpers.length && helpers.length > 0}
+                      onCheckedChange={toggleSelectAllHelpers}
+                    />
+                  </TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead>Address</TableHead>
@@ -352,6 +410,12 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
               <TableBody>
                 {helpers.map((helper) => (
                   <TableRow key={helper.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedHelpers.includes(helper.id)}
+                        onCheckedChange={() => toggleSelectHelper(helper.id)}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">{helper.name}</TableCell>
                     <TableCell>{helper.contact_number || "—"}</TableCell>
                     <TableCell>{helper.address || "—"}</TableCell>
