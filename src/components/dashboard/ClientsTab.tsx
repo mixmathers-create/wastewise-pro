@@ -28,7 +28,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
     setLoading(true);
     const { data, error } = await supabase
       .from("clients")
-      .select("id,name,industry,address,qr_code,contact_person,contact_number,mt_requirement,collection_days,collection_shift")
+      .select("id,name,industry,address,qr_code,contact_person,contact_number,mt_requirement,collection_days,collection_shift,status,contract_file_url,contract_expiry_date")
       .order("name");
     if (error) setError(error.message);
     setClients(data || []);
@@ -217,8 +217,10 @@ const ClientsTab = ({ profile }: { profile: any }) => {
                   )}
                   <TableHead>Name</TableHead>
                   <TableHead>Industry</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Contact Person</TableHead>
                   <TableHead>Contact Number</TableHead>
+                  <TableHead>Contract</TableHead>
                   <TableHead>QR Code</TableHead>
                   {!isMobile && <TableHead>Actions</TableHead>}
                 </TableRow>
@@ -236,8 +238,38 @@ const ClientsTab = ({ profile }: { profile: any }) => {
                     )}
                     <TableCell className="font-medium">{client.name}</TableCell>
                     <TableCell>{client.industry}</TableCell>
+                    <TableCell>
+                      <span className={`px-2 py-1 rounded text-xs ${
+                        client.status === 'active' ? 'bg-green-100 text-green-800' :
+                        client.status === 'suspended' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {client.status || 'active'}
+                      </span>
+                    </TableCell>
                     <TableCell>{client.contact_person || "—"}</TableCell>
                     <TableCell>{client.contact_number || "—"}</TableCell>
+                    <TableCell>
+                      {client.contract_file_url ? (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={async () => {
+                            const { data } = await supabase.storage
+                              .from('client-contracts')
+                              .createSignedUrl(client.contract_file_url.split('/').pop()!, 60);
+                            if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                          }}
+                        >
+                          View
+                        </Button>
+                      ) : "—"}
+                      {client.contract_expiry_date && (
+                        <div className="text-xs text-muted-foreground">
+                          Exp: {new Date(client.contract_expiry_date).toLocaleDateString()}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="sm" onClick={() => downloadQR(client.qr_code, client.name)}>
                         <Download className="h-4 w-4" />

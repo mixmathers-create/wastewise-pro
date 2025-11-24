@@ -21,6 +21,9 @@ interface Client {
   collection_shift?: string;
   latitude?: number | null;
   longitude?: number | null;
+  status?: string;
+  contract_file_url?: string | null;
+  contract_expiry_date?: string | null;
 }
 
 const ClientEditDialog = ({ 
@@ -37,6 +40,7 @@ const ClientEditDialog = ({
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState(client);
+  const [contractFile, setContractFile] = useState<File | null>(null);
 
   const industries = [
     "Restaurant",
@@ -73,6 +77,19 @@ const ClientEditDialog = ({
     e.preventDefault();
     setLoading(true);
     try {
+      let contractFileUrl = formData.contract_file_url;
+      
+      if (contractFile) {
+        const fileExt = contractFile.name.split('.').pop();
+        const fileName = `${client.id}-contract-${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('client-contracts')
+          .upload(fileName, contractFile);
+        
+        if (uploadError) throw uploadError;
+        contractFileUrl = fileName;
+      }
+
       const { error } = await supabase
         .from("clients")
         .update({
@@ -87,6 +104,9 @@ const ClientEditDialog = ({
           collection_days: formData.collection_days || [],
           latitude: formData.latitude,
           longitude: formData.longitude,
+          status: formData.status,
+          contract_file_url: contractFileUrl,
+          contract_expiry_date: formData.contract_expiry_date,
         })
         .eq("id", client.id);
 
@@ -183,6 +203,52 @@ const ClientEditDialog = ({
                 </div>
               ))}
             </div>
+          </div>
+          <div>
+            <Label>Client Status</Label>
+            <Select value={formData.status || 'active'} onValueChange={(val) => setFormData({...formData, status: val})}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="suspended">Suspended</SelectItem>
+                <SelectItem value="end_of_service">End of Service</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Contract PDF</Label>
+            {formData.contract_file_url && (
+              <div className="mb-2">
+                <Button 
+                  type="button"
+                  variant="outline" 
+                  size="sm"
+                  onClick={async () => {
+                    const { data } = await supabase.storage
+                      .from('client-contracts')
+                      .createSignedUrl(formData.contract_file_url!.split('/').pop()!, 60);
+                    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                  }}
+                >
+                  View Current Contract
+                </Button>
+              </div>
+            )}
+            <Input 
+              type="file" 
+              accept="application/pdf"
+              onChange={(e) => setContractFile(e.target.files?.[0] || null)}
+            />
+          </div>
+          <div>
+            <Label>Contract Expiry Date</Label>
+            <Input 
+              type="date"
+              value={formData.contract_expiry_date || ""} 
+              onChange={(e) => setFormData({...formData, contract_expiry_date: e.target.value})}
+            />
           </div>
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? "Saving..." : "Save Changes"}
