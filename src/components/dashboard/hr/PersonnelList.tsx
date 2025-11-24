@@ -44,10 +44,24 @@ const PersonnelList = () => {
         .select("id, name, contact_number, status, birthdate")
         .order("name");
 
+      // Fetch recyclers
+      const { data: recyclers } = await supabase
+        .from("recyclers")
+        .select("id, name, contact_number, status, birthdate")
+        .order("name");
+
+      // Fetch management
+      const { data: management } = await supabase
+        .from("management")
+        .select("id, name, contact_number, status, birthdate")
+        .order("name");
+
       const allPersonnel: Personnel[] = [
         ...(drivers?.map(d => ({ ...d, type: "Driver" })) || []),
         ...(helpers?.map(h => ({ ...h, type: "Helper" })) || []),
         ...(mechanics?.map(m => ({ ...m, type: "Mechanic" })) || []),
+        ...(recyclers?.map(r => ({ ...r, type: "Recycler" })) || []),
+        ...(management?.map(mg => ({ ...mg, type: "Management" })) || []),
       ];
 
       setPersonnel(allPersonnel);
