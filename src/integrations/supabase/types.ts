@@ -196,6 +196,7 @@ export type Database = {
           equipment_id: string
           helper_id: string | null
           id: string
+          mechanic_id: string | null
           notes: string | null
           quantity: number | null
           status: string | null
@@ -209,6 +210,7 @@ export type Database = {
           equipment_id: string
           helper_id?: string | null
           id?: string
+          mechanic_id?: string | null
           notes?: string | null
           quantity?: number | null
           status?: string | null
@@ -222,6 +224,7 @@ export type Database = {
           equipment_id?: string
           helper_id?: string | null
           id?: string
+          mechanic_id?: string | null
           notes?: string | null
           quantity?: number | null
           status?: string | null
@@ -246,6 +249,13 @@ export type Database = {
             columns: ["helper_id"]
             isOneToOne: false
             referencedRelation: "helpers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_checkouts_mechanic_id_fkey"
+            columns: ["mechanic_id"]
+            isOneToOne: false
+            referencedRelation: "mechanics"
             referencedColumns: ["id"]
           },
         ]

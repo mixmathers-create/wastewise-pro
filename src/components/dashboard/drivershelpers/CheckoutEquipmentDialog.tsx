@@ -17,8 +17,9 @@ export function CheckoutEquipmentDialog({ open, onOpenChange, onSuccess }: Check
   const [equipment, setEquipment] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
   const [helpers, setHelpers] = useState<any[]>([]);
+  const [mechanics, setMechanics] = useState<any[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState("");
-  const [assignToType, setAssignToType] = useState<"driver" | "helper">("driver");
+  const [assignToType, setAssignToType] = useState<"driver" | "helper" | "mechanic">("driver");
   const [selectedPerson, setSelectedPerson] = useState("");
   const [quantity, setQuantity] = useState(1);
   const { toast } = useToast();
@@ -28,6 +29,7 @@ export function CheckoutEquipmentDialog({ open, onOpenChange, onSuccess }: Check
       fetchEquipment();
       fetchDrivers();
       fetchHelpers();
+      fetchMechanics();
     }
   }, [open]);
 
@@ -50,6 +52,11 @@ export function CheckoutEquipmentDialog({ open, onOpenChange, onSuccess }: Check
     setHelpers(data || []);
   };
 
+  const fetchMechanics = async () => {
+    const { data } = await supabase.from("mechanics").select("*").order("name");
+    setMechanics(data || []);
+  };
+
   const handleCheckout = async () => {
     if (!selectedEquipment || !selectedPerson) {
       toast({ title: "Error", description: "Please select equipment and person", variant: "destructive" });
@@ -67,6 +74,7 @@ export function CheckoutEquipmentDialog({ open, onOpenChange, onSuccess }: Check
         assigned_to_type: assignToType,
         driver_id: assignToType === "driver" ? selectedPerson : null,
         helper_id: assignToType === "helper" ? selectedPerson : null,
+        mechanic_id: assignToType === "mechanic" ? selectedPerson : null,
         quantity,
         status: "checked_out"
       });
@@ -130,24 +138,27 @@ export function CheckoutEquipmentDialog({ open, onOpenChange, onSuccess }: Check
           </div>
           <div>
             <Label>Assign To *</Label>
-            <Select value={assignToType} onValueChange={(value) => setAssignToType(value as "driver" | "helper")}>
+            <Select value={assignToType} onValueChange={(value) => setAssignToType(value as "driver" | "helper" | "mechanic")}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-background z-50">
                 <SelectItem value="driver">Driver</SelectItem>
                 <SelectItem value="helper">Helper</SelectItem>
+                <SelectItem value="mechanic">Mechanic</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label htmlFor="person">{assignToType === "driver" ? "Driver" : "Helper"} *</Label>
+            <Label htmlFor="person">
+              {assignToType === "driver" ? "Driver" : assignToType === "helper" ? "Helper" : "Mechanic"} *
+            </Label>
             <Select value={selectedPerson} onValueChange={setSelectedPerson}>
               <SelectTrigger>
                 <SelectValue placeholder={`Select ${assignToType}`} />
               </SelectTrigger>
               <SelectContent className="bg-background z-50">
-                {(assignToType === "driver" ? drivers : helpers).map((person) => (
+                {(assignToType === "driver" ? drivers : assignToType === "helper" ? helpers : mechanics).map((person) => (
                   <SelectItem key={person.id} value={person.id}>
                     {person.name}
                   </SelectItem>
