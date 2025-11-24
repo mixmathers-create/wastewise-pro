@@ -64,10 +64,21 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
 
   const exportHelpers = () => {
     const csv = generateCSV(helpers, [
-      "name", "id_number", "birthdate", "contact_number", 
-      "status", "suspension_start_date", "suspension_end_date"
+      "name", "contact_number", "address", "leaves_available"
     ]);
     downloadCSV(csv, "helpers-export.csv");
+  };
+
+  const downloadHelperTemplate = () => {
+    const headers = ['name', 'contact_number', 'address', 'leaves_available'];
+    const templateRow = {
+      name: 'Juan Dela Cruz',
+      contact_number: '09171234567',
+      address: '123 Main St, Cebu City',
+      leaves_available: '15'
+    };
+    const csv = generateCSV([templateRow], headers);
+    downloadCSV(csv, 'helpers_import_template.csv');
   };
 
   const handleDriverImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,22 +119,28 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
 
     const text = await file.text();
     const rows = parseCSV(text);
+    
+    if (rows.length === 0) {
+      toast({ title: "No data found in CSV", variant: "destructive" });
+      return;
+    }
 
     try {
       const helpersToInsert = rows.map(row => ({
-        name: row.name,
-        id_number: row.id_number || null,
-        birthdate: row.birthdate || null,
-        contact_number: row.contact_number || null,
-        status: row.status || "available",
-        suspension_start_date: row.suspension_start_date || null,
-        suspension_end_date: row.suspension_end_date || null,
+        name: row.name || row.Name,
+        contact_number: row.contact_number || row.contact_number,
+        address: row.address || row.Address || null,
+        leaves_available: parseInt(row.leaves_available || row.leaves_available || '15'),
+        status: "available"
       }));
 
       const { error } = await supabase.from("helpers").insert(helpersToInsert);
       if (error) throw error;
 
-      toast({ title: "Success", description: `Imported ${rows.length} helpers` });
+      toast({ 
+        title: "Success", 
+        description: `Imported ${rows.length} helper(s)` 
+      });
       fetchHelpers();
     } catch (error: any) {
       toast({ title: "Import Error", description: error.message, variant: "destructive" });
@@ -292,6 +309,10 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
             <div className="flex items-center justify-between">
               <CardTitle>Helpers</CardTitle>
               <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={downloadHelperTemplate}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Template
+                </Button>
                 <Button variant="outline" size="sm" onClick={exportHelpers}>
                   <Download className="h-4 w-4 mr-2" />
                   Export
@@ -320,8 +341,9 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>ID #</TableHead>
                   <TableHead>Contact</TableHead>
+                  <TableHead>Address</TableHead>
+                  <TableHead>Leaves Available</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Photo</TableHead>
                   <TableHead>Actions</TableHead>
@@ -331,8 +353,9 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 {helpers.map((helper) => (
                   <TableRow key={helper.id}>
                     <TableCell className="font-medium">{helper.name}</TableCell>
-                    <TableCell>{helper.id_number || "—"}</TableCell>
                     <TableCell>{helper.contact_number || "—"}</TableCell>
+                    <TableCell>{helper.address || "—"}</TableCell>
+                    <TableCell>{helper.leaves_available ?? 15}</TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 rounded text-xs ${
                         helper.status === "available" ? "bg-green-100 text-green-800" :

@@ -295,12 +295,14 @@ export type Database = {
       }
       helpers: {
         Row: {
+          address: string | null
           availability: Json | null
           birthdate: string | null
           contact_number: string | null
           created_at: string
           id: string
           id_number: string | null
+          leaves_available: number | null
           name: string
           photo_url: string | null
           status: string | null
@@ -308,12 +310,14 @@ export type Database = {
           suspension_start_date: string | null
         }
         Insert: {
+          address?: string | null
           availability?: Json | null
           birthdate?: string | null
           contact_number?: string | null
           created_at?: string
           id?: string
           id_number?: string | null
+          leaves_available?: number | null
           name: string
           photo_url?: string | null
           status?: string | null
@@ -321,12 +325,14 @@ export type Database = {
           suspension_start_date?: string | null
         }
         Update: {
+          address?: string | null
           availability?: Json | null
           birthdate?: string | null
           contact_number?: string | null
           created_at?: string
           id?: string
           id_number?: string | null
+          leaves_available?: number | null
           name?: string
           photo_url?: string | null
           status?: string | null
