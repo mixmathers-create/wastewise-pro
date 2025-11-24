@@ -1126,7 +1126,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      generate_personnel_id: { Args: never; Returns: string }
       get_expiring_licenses: {
         Args: never
         Returns: {
