@@ -78,6 +78,7 @@ export type Database = {
           qr_code: string
           signature_data: string | null
           signed_by: string | null
+          tally_entries: Json | null
           truck_id: string
           waste_types: string[]
         }
@@ -93,6 +94,7 @@ export type Database = {
           qr_code: string
           signature_data?: string | null
           signed_by?: string | null
+          tally_entries?: Json | null
           truck_id: string
           waste_types: string[]
         }
@@ -108,6 +110,7 @@ export type Database = {
           qr_code?: string
           signature_data?: string | null
           signed_by?: string | null
+          tally_entries?: Json | null
           truck_id?: string
           waste_types?: string[]
         }
@@ -143,6 +146,7 @@ export type Database = {
           created_at: string
           id: string
           id_number: string | null
+          leaves_available: number | null
           license_expiry_date: string | null
           license_file_url: string | null
           license_number: string | null
@@ -158,6 +162,7 @@ export type Database = {
           created_at?: string
           id?: string
           id_number?: string | null
+          leaves_available?: number | null
           license_expiry_date?: string | null
           license_file_url?: string | null
           license_number?: string | null
@@ -173,6 +178,7 @@ export type Database = {
           created_at?: string
           id?: string
           id_number?: string | null
+          leaves_available?: number | null
           license_expiry_date?: string | null
           license_file_url?: string | null
           license_number?: string | null
@@ -193,6 +199,7 @@ export type Database = {
           equipment_id: string
           helper_id: string | null
           id: string
+          mechanic_id: string | null
           notes: string | null
           quantity: number | null
           status: string | null
@@ -206,6 +213,7 @@ export type Database = {
           equipment_id: string
           helper_id?: string | null
           id?: string
+          mechanic_id?: string | null
           notes?: string | null
           quantity?: number | null
           status?: string | null
@@ -219,6 +227,7 @@ export type Database = {
           equipment_id?: string
           helper_id?: string | null
           id?: string
+          mechanic_id?: string | null
           notes?: string | null
           quantity?: number | null
           status?: string | null
@@ -243,6 +252,13 @@ export type Database = {
             columns: ["helper_id"]
             isOneToOne: false
             referencedRelation: "helpers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_checkouts_mechanic_id_fkey"
+            columns: ["mechanic_id"]
+            isOneToOne: false
+            referencedRelation: "mechanics"
             referencedColumns: ["id"]
           },
         ]
@@ -282,12 +298,14 @@ export type Database = {
       }
       helpers: {
         Row: {
+          address: string | null
           availability: Json | null
           birthdate: string | null
           contact_number: string | null
           created_at: string
           id: string
           id_number: string | null
+          leaves_available: number | null
           name: string
           photo_url: string | null
           status: string | null
@@ -295,12 +313,14 @@ export type Database = {
           suspension_start_date: string | null
         }
         Insert: {
+          address?: string | null
           availability?: Json | null
           birthdate?: string | null
           contact_number?: string | null
           created_at?: string
           id?: string
           id_number?: string | null
+          leaves_available?: number | null
           name: string
           photo_url?: string | null
           status?: string | null
@@ -308,17 +328,58 @@ export type Database = {
           suspension_start_date?: string | null
         }
         Update: {
+          address?: string | null
           availability?: Json | null
           birthdate?: string | null
           contact_number?: string | null
           created_at?: string
           id?: string
           id_number?: string | null
+          leaves_available?: number | null
           name?: string
           photo_url?: string | null
           status?: string | null
           suspension_end_date?: string | null
           suspension_start_date?: string | null
+        }
+        Relationships: []
+      }
+      job_order_services: {
+        Row: {
+          category: string
+          cost: number | null
+          cost_added_at: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          job_order_id: string
+          provider_name: string | null
+          service_type: string
+        }
+        Insert: {
+          category: string
+          cost?: number | null
+          cost_added_at?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          job_order_id: string
+          provider_name?: string | null
+          service_type: string
+        }
+        Update: {
+          category?: string
+          cost?: number | null
+          cost_added_at?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          job_order_id?: string
+          provider_name?: string | null
+          service_type?: string
         }
         Relationships: []
       }
@@ -330,11 +391,15 @@ export type Database = {
           description: string | null
           id: string
           job_number: string
-          mechanic_id: string | null
+          last_resume_at: string | null
+          mechanic_ids: string[] | null
           priority: string | null
           scheduled_date: string | null
+          started_at: string | null
           status: string | null
+          suspended_periods: Json | null
           title: string
+          total_active_minutes: number | null
           truck_id: string | null
           updated_at: string | null
         }
@@ -345,11 +410,15 @@ export type Database = {
           description?: string | null
           id?: string
           job_number: string
-          mechanic_id?: string | null
+          last_resume_at?: string | null
+          mechanic_ids?: string[] | null
           priority?: string | null
           scheduled_date?: string | null
+          started_at?: string | null
           status?: string | null
+          suspended_periods?: Json | null
           title: string
+          total_active_minutes?: number | null
           truck_id?: string | null
           updated_at?: string | null
         }
@@ -360,22 +429,19 @@ export type Database = {
           description?: string | null
           id?: string
           job_number?: string
-          mechanic_id?: string | null
+          last_resume_at?: string | null
+          mechanic_ids?: string[] | null
           priority?: string | null
           scheduled_date?: string | null
+          started_at?: string | null
           status?: string | null
+          suspended_periods?: Json | null
           title?: string
+          total_active_minutes?: number | null
           truck_id?: string | null
           updated_at?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "job_orders_mechanic_id_fkey"
-            columns: ["mechanic_id"]
-            isOneToOne: false
-            referencedRelation: "mechanics"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "job_orders_truck_id_fkey"
             columns: ["truck_id"]
@@ -384,6 +450,117 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      leaves: {
+        Row: {
+          created_at: string
+          end_date: string
+          id: string
+          is_paid: boolean
+          leave_days: number
+          leave_type: string
+          medical_certificate_url: string | null
+          personnel_id: string
+          personnel_id_number: string
+          personnel_name: string
+          personnel_type: string
+          reason: string
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          start_date: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          id?: string
+          is_paid?: boolean
+          leave_days?: number
+          leave_type: string
+          medical_certificate_url?: string | null
+          personnel_id: string
+          personnel_id_number: string
+          personnel_name: string
+          personnel_type: string
+          reason: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          start_date: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          id?: string
+          is_paid?: boolean
+          leave_days?: number
+          leave_type?: string
+          medical_certificate_url?: string | null
+          personnel_id?: string
+          personnel_id_number?: string
+          personnel_name?: string
+          personnel_type?: string
+          reason?: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          start_date?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      management: {
+        Row: {
+          address: string | null
+          availability: Json | null
+          birthdate: string | null
+          contact_number: string | null
+          created_at: string | null
+          id: string
+          id_number: string | null
+          leaves_available: number | null
+          name: string
+          photo_url: string | null
+          status: string | null
+          suspension_end_date: string | null
+          suspension_start_date: string | null
+        }
+        Insert: {
+          address?: string | null
+          availability?: Json | null
+          birthdate?: string | null
+          contact_number?: string | null
+          created_at?: string | null
+          id?: string
+          id_number?: string | null
+          leaves_available?: number | null
+          name: string
+          photo_url?: string | null
+          status?: string | null
+          suspension_end_date?: string | null
+          suspension_start_date?: string | null
+        }
+        Update: {
+          address?: string | null
+          availability?: Json | null
+          birthdate?: string | null
+          contact_number?: string | null
+          created_at?: string | null
+          id?: string
+          id_number?: string | null
+          leaves_available?: number | null
+          name?: string
+          photo_url?: string | null
+          status?: string | null
+          suspension_end_date?: string | null
+          suspension_start_date?: string | null
+        }
+        Relationships: []
       }
       mechanic_consumable_checkouts: {
         Row: {
@@ -464,6 +641,7 @@ export type Database = {
           quantity: number | null
           status: string | null
           unit: string
+          unit_cost: number | null
         }
         Insert: {
           category: string
@@ -475,6 +653,7 @@ export type Database = {
           quantity?: number | null
           status?: string | null
           unit: string
+          unit_cost?: number | null
         }
         Update: {
           category?: string
@@ -486,6 +665,7 @@ export type Database = {
           quantity?: number | null
           status?: string | null
           unit?: string
+          unit_cost?: number | null
         }
         Relationships: []
       }
@@ -538,6 +718,7 @@ export type Database = {
           created_at: string
           id: string
           id_number: string | null
+          leaves_available: number | null
           name: string
           photo_url: string | null
           status: string | null
@@ -551,6 +732,7 @@ export type Database = {
           created_at?: string
           id?: string
           id_number?: string | null
+          leaves_available?: number | null
           name: string
           photo_url?: string | null
           status?: string | null
@@ -564,6 +746,7 @@ export type Database = {
           created_at?: string
           id?: string
           id_number?: string | null
+          leaves_available?: number | null
           name?: string
           photo_url?: string | null
           status?: string | null
@@ -596,6 +779,54 @@ export type Database = {
           id?: string
           role?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      recyclers: {
+        Row: {
+          address: string | null
+          availability: Json | null
+          birthdate: string | null
+          contact_number: string | null
+          created_at: string | null
+          id: string
+          id_number: string | null
+          leaves_available: number | null
+          name: string
+          photo_url: string | null
+          status: string | null
+          suspension_end_date: string | null
+          suspension_start_date: string | null
+        }
+        Insert: {
+          address?: string | null
+          availability?: Json | null
+          birthdate?: string | null
+          contact_number?: string | null
+          created_at?: string | null
+          id?: string
+          id_number?: string | null
+          leaves_available?: number | null
+          name: string
+          photo_url?: string | null
+          status?: string | null
+          suspension_end_date?: string | null
+          suspension_start_date?: string | null
+        }
+        Update: {
+          address?: string | null
+          availability?: Json | null
+          birthdate?: string | null
+          contact_number?: string | null
+          created_at?: string | null
+          id?: string
+          id_number?: string | null
+          leaves_available?: number | null
+          name?: string
+          photo_url?: string | null
+          status?: string | null
+          suspension_end_date?: string | null
+          suspension_start_date?: string | null
         }
         Relationships: []
       }

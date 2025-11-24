@@ -255,6 +255,8 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       return;
     }
     
+
+    // Add to tally entries (individual records)
     const newTallyEntry = {
       waste_type: selectedWasteType,
       quantity: newItem.quantity,

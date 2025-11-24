@@ -5,9 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, Eye } from "lucide-react";
-import { Camera, CameraResultType } from "@capacitor/camera";
-import { Capacitor } from "@capacitor/core";
+import { Camera as CameraIcon, Eye } from "lucide-react";
+import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
+import { isNativePlatform } from "@/lib/capacitorUtils";
 
 interface AddMechanicDialogProps {
   open: boolean;
@@ -22,28 +22,56 @@ export function AddMechanicDialog({ open, onOpenChange, onSuccess }: AddMechanic
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const { toast } = useToast();
-  const isMobile = Capacitor.isNativePlatform();
 
   const handlePhotoCapture = async () => {
-    if (isMobile) {
+    if (isNativePlatform()) {
+      // Use Capacitor Camera for native platforms
       try {
-        const image = await Camera.getPhoto({ quality: 90, allowEditing: false, resultType: CameraResultType.Uri });
-        const response = await fetch(image.webPath!);
+        const image = await Camera.getPhoto({
+          quality: 90,
+          allowEditing: false,
+          resultType: CameraResultType.DataUrl,
+          source: CameraSource.Camera
+        });
+        
+        const response = await fetch(image.dataUrl!);
         const blob = await response.blob();
         const file = new File([blob], "mechanic-photo.jpg", { type: "image/jpeg" });
+        
         setPhotoFile(file);
-        setPhotoPreview(image.webPath!);
+        setPhotoPreview(image.dataUrl!);
       } catch (error: any) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
+        if (error.message !== 'User cancelled photos app') {
+          toast({ 
+            title: "Error", 
+            description: error.message || "Failed to capture photo", 
+            variant: "destructive" 
+          });
+        }
       }
     } else {
-      document.getElementById('mechanic-photo-input')?.click();
+      // Use file input for web browsers
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.capture = 'environment'; // Use rear camera on mobile
+      
+      input.onchange = async (e: any) => {
+        const file = e.target.files?.[0];
+        if (file) {
+          setPhotoFile(file);
+          
+          // Create preview
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            setPhotoPreview(event.target?.result as string);
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+      
+      input.click();
     }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) { setPhotoFile(file); setPhotoPreview(URL.createObjectURL(file)); }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -104,11 +132,10 @@ export function AddMechanicDialog({ open, onOpenChange, onSuccess }: AddMechanic
             <Label>Photo *</Label>
             <div className="flex gap-2 items-center">
               <Button type="button" variant="outline" onClick={handlePhotoCapture}>
-                <Upload className="h-4 w-4 mr-2" />{isMobile ? 'Take Photo' : 'Upload Photo'}
+                <CameraIcon className="h-4 w-4 mr-2" />Take Photo
               </Button>
               {photoPreview && <Button type="button" variant="outline" size="sm" onClick={() => window.open(photoPreview, '_blank')}><Eye className="h-4 w-4 mr-2" />Preview</Button>}
             </div>
-            <input id="mechanic-photo-input" type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
             {photoPreview && <img src={photoPreview} alt="Preview" className="mt-2 h-24 w-24 object-cover rounded" />}
           </div>
           <div className="flex justify-end gap-2">

@@ -19,6 +19,7 @@ export function AddConsumableDialog({ open, onOpenChange, onSuccess }: AddConsum
   const [unit, setUnit] = useState("");
   const [quantity, setQuantity] = useState(0);
   const [minStockLevel, setMinStockLevel] = useState(10);
+  const [unitCost, setUnitCost] = useState(0);
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -35,6 +36,7 @@ export function AddConsumableDialog({ open, onOpenChange, onSuccess }: AddConsum
         unit,
         quantity,
         min_stock_level: minStockLevel,
+        unit_cost: unitCost,
         status
       });
 
@@ -47,6 +49,7 @@ export function AddConsumableDialog({ open, onOpenChange, onSuccess }: AddConsum
       setUnit("");
       setQuantity(0);
       setMinStockLevel(10);
+      setUnitCost(0);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     }
@@ -120,6 +123,18 @@ export function AddConsumableDialog({ open, onOpenChange, onSuccess }: AddConsum
                 required 
               />
             </div>
+          </div>
+          <div>
+            <Label htmlFor="unitCost">Unit Cost *</Label>
+            <Input 
+              id="unitCost" 
+              type="number" 
+              min="0"
+              step="0.01"
+              value={unitCost} 
+              onChange={(e) => setUnitCost(parseFloat(e.target.value))} 
+              required 
+            />
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

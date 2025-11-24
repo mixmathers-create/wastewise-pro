@@ -17,24 +17,27 @@ interface CheckoutConsumableDialogProps {
 export function CheckoutConsumableDialog({ open, onOpenChange, onSuccess }: CheckoutConsumableDialogProps) {
   const [consumables, setConsumables] = useState<any[]>([]);
   const [mechanics, setMechanics] = useState<any[]>([]);
-  const [trucks, setTrucks] = useState<any[]>([]);
   const [jobOrders, setJobOrders] = useState<any[]>([]);
   const [selectedConsumable, setSelectedConsumable] = useState("");
   const [selectedMechanic, setSelectedMechanic] = useState("");
-  const [selectedTruck, setSelectedTruck] = useState("");
   const [selectedJobOrder, setSelectedJobOrder] = useState("");
   const [quantityUsed, setQuantityUsed] = useState(1);
   const [notes, setNotes] = useState("");
+  const [autoFilledTruck, setAutoFilledTruck] = useState<any>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     if (open) {
       fetchConsumables();
-      fetchMechanics();
-      fetchTrucks();
       fetchJobOrders();
     }
   }, [open]);
+
+  useEffect(() => {
+    if (selectedJobOrder) {
+      handleJobOrderChange(selectedJobOrder);
+    }
+  }, [selectedJobOrder]);
 
   const fetchConsumables = async () => {
     const { data } = await supabase
@@ -45,28 +48,51 @@ export function CheckoutConsumableDialog({ open, onOpenChange, onSuccess }: Chec
     setConsumables(data || []);
   };
 
-  const fetchMechanics = async () => {
-    const { data } = await supabase.from("mechanics").select("*").order("name");
-    setMechanics(data || []);
-  };
-
-  const fetchTrucks = async () => {
-    const { data } = await supabase.from("trucks").select("*").order("code");
-    setTrucks(data || []);
-  };
-
   const fetchJobOrders = async () => {
     const { data } = await supabase
       .from("job_orders")
-      .select("*")
+      .select("*, trucks(id, code, plate_number)")
       .in("status", ["pending", "in_progress"])
       .order("created_at", { ascending: false });
     setJobOrders(data || []);
   };
 
+  const handleJobOrderChange = async (jobOrderId: string) => {
+    const jobOrder = jobOrders.find(jo => jo.id === jobOrderId);
+    if (!jobOrder) return;
+
+    // Auto-fill truck
+    setAutoFilledTruck(jobOrder.trucks);
+
+    // Fetch mechanics for this job order
+    if (jobOrder.mechanic_ids && jobOrder.mechanic_ids.length > 0) {
+      const { data: mechanicsData } = await supabase
+        .from("mechanics")
+        .select("*")
+        .in("id", jobOrder.mechanic_ids)
+        .order("name");
+      setMechanics(mechanicsData || []);
+      
+      // Auto-select first mechanic if only one
+      if (mechanicsData && mechanicsData.length === 1) {
+        setSelectedMechanic(mechanicsData[0].id);
+      } else {
+        setSelectedMechanic("");
+      }
+    } else {
+      setMechanics([]);
+      setSelectedMechanic("");
+    }
+  };
+
   const handleCheckout = async () => {
-    if (!selectedConsumable || !selectedMechanic || !selectedTruck || !selectedJobOrder || quantityUsed <= 0) {
+    if (!selectedConsumable || !selectedJobOrder || quantityUsed <= 0) {
       toast({ title: "Error", description: "Please fill all required fields", variant: "destructive" });
+      return;
+    }
+
+    if (!autoFilledTruck?.id) {
+      toast({ title: "Error", description: "Selected job order has no truck assigned", variant: "destructive" });
       return;
     }
 
@@ -81,8 +107,8 @@ export function CheckoutConsumableDialog({ open, onOpenChange, onSuccess }: Chec
 
       const { error: checkoutError } = await supabase.from("mechanic_consumable_checkouts").insert({
         consumable_id: selectedConsumable,
-        mechanic_id: selectedMechanic,
-        truck_id: selectedTruck,
+        mechanic_id: selectedMechanic || null,
+        truck_id: autoFilledTruck.id,
         job_order_id: selectedJobOrder,
         quantity_used: quantityUsed,
         checked_out_by_user_id: userData.user.id,
@@ -117,10 +143,11 @@ export function CheckoutConsumableDialog({ open, onOpenChange, onSuccess }: Chec
   const resetForm = () => {
     setSelectedConsumable("");
     setSelectedMechanic("");
-    setSelectedTruck("");
     setSelectedJobOrder("");
     setQuantityUsed(1);
     setNotes("");
+    setAutoFilledTruck(null);
+    setMechanics([]);
   };
 
   const selectedConsumableData = consumables.find(c => c.id === selectedConsumable);
@@ -133,27 +160,34 @@ export function CheckoutConsumableDialog({ open, onOpenChange, onSuccess }: Chec
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <Label htmlFor="consumable">Consumable *</Label>
-            <Select value={selectedConsumable} onValueChange={setSelectedConsumable}>
+            <Label htmlFor="jobOrder">Job Order *</Label>
+            <Select value={selectedJobOrder} onValueChange={setSelectedJobOrder}>
               <SelectTrigger>
-                <SelectValue placeholder="Select consumable" />
+                <SelectValue placeholder="Select job order first" />
               </SelectTrigger>
               <SelectContent>
-                {consumables.map((consumable) => (
-                  <SelectItem key={consumable.id} value={consumable.id}>
-                    {consumable.code} - {consumable.name} ({consumable.quantity} {consumable.unit} available)
+                {jobOrders.map((jo) => (
+                  <SelectItem key={jo.id} value={jo.id}>
+                    {jo.job_number} - {jo.title}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {autoFilledTruck && (
             <div>
-              <Label htmlFor="mechanic">Mechanic *</Label>
+              <Label>Truck (from Job Order)</Label>
+              <Input value={`${autoFilledTruck.code} - ${autoFilledTruck.plate_number}`} disabled />
+            </div>
+          )}
+
+          {mechanics.length > 0 && (
+            <div>
+              <Label htmlFor="mechanic">Mechanic (Optional)</Label>
               <Select value={selectedMechanic} onValueChange={setSelectedMechanic}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select mechanic" />
+                  <SelectValue placeholder="Select mechanic from job order" />
                 </SelectTrigger>
                 <SelectContent>
                   {mechanics.map((mechanic) => (
@@ -164,34 +198,18 @@ export function CheckoutConsumableDialog({ open, onOpenChange, onSuccess }: Chec
                 </SelectContent>
               </Select>
             </div>
-
-            <div>
-              <Label htmlFor="truck">Truck *</Label>
-              <Select value={selectedTruck} onValueChange={setSelectedTruck}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select truck" />
-                </SelectTrigger>
-                <SelectContent>
-                  {trucks.map((truck) => (
-                    <SelectItem key={truck.id} value={truck.id}>
-                      {truck.code} - {truck.plate_number}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          )}
 
           <div>
-            <Label htmlFor="jobOrder">Job Order *</Label>
-            <Select value={selectedJobOrder} onValueChange={setSelectedJobOrder}>
+            <Label htmlFor="consumable">Consumable *</Label>
+            <Select value={selectedConsumable} onValueChange={setSelectedConsumable}>
               <SelectTrigger>
-                <SelectValue placeholder="Select job order" />
+                <SelectValue placeholder="Select consumable" />
               </SelectTrigger>
               <SelectContent>
-                {jobOrders.map((jo) => (
-                  <SelectItem key={jo.id} value={jo.id}>
-                    {jo.job_number} - {jo.title}
+                {consumables.map((consumable) => (
+                  <SelectItem key={consumable.id} value={consumable.id}>
+                    {consumable.code} - {consumable.name} ({consumable.quantity} {consumable.unit} available)
                   </SelectItem>
                 ))}
               </SelectContent>

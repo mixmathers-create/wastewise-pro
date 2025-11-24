@@ -103,7 +103,7 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
 
   const handlePrintTally = async (receiptId: string) => {
     try {
-      // Fetch full receipt details with all items
+      // Fetch full receipt details with all tally entries
       const { data, error } = await supabase
         .from("collection_receipts")
         .select("*")
@@ -112,25 +112,49 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
 
       if (error) throw error;
 
-      const items = data.items as any[];
+      const tallyEntries = (data.tally_entries || []) as any[];
+      
+      // Calculate totals by waste type and unit
+      const totals: { [key: string]: { quantity: number; unit: string } } = {};
+      tallyEntries.forEach(entry => {
+        const key = `${entry.waste_type}-${entry.unit}`;
+        if (!totals[key]) {
+          totals[key] = { quantity: 0, unit: entry.unit };
+        }
+        totals[key].quantity += entry.quantity;
+      });
       
       if (isMobile) {
         // Print to internal printer on mobile
+        const printItems = [
+          { label: "Date:", value: new Date(data.created_at).toLocaleDateString() },
+          { label: "QR Code:", value: data.qr_code },
+          { label: "", value: "" },
+          { label: "TALLY ENTRIES:", value: "" }
+        ];
+
+        // Add each tally entry
+        tallyEntries.forEach((entry, idx) => {
+          printItems.push({
+            label: `${idx + 1}. ${entry.waste_type}`,
+            value: `${entry.quantity} ${entry.unit || 'pcs'}`
+          });
+        });
+
+        // Add totals
+        printItems.push({ label: "", value: "" });
+        printItems.push({ label: "TOTALS:", value: "" });
+        Object.entries(totals).forEach(([key, total]) => {
+          const wasteType = key.split('-')[0];
+          printItems.push({
+            label: wasteType,
+            value: `${total.quantity} ${total.unit || 'pcs'}`
+          });
+        });
+
         await printerService.printReceipt({
           header: "COLLECTION TALLY",
-          items: [
-            { label: "Date:", value: new Date(data.created_at).toLocaleDateString() },
-            { label: "QR Code:", value: data.qr_code },
-            { label: "Signed By:", value: data.signed_by || "-" },
-            { label: "", value: "" },
-            { label: "ITEMS COLLECTED:", value: "" },
-            ...items.map(item => ({
-              label: item.waste_type,
-              value: `${item.quantity} ${item.unit || 'pcs'}`
-            })),
-            { label: "", value: "" },
-            { label: "Total Items:", value: items.length.toString() }
-          ],
+          items: printItems,
           footer: `Printed: ${new Date().toLocaleString()}`
         });
         toast({ title: "Success", description: "Tally printed successfully" });
@@ -147,34 +171,52 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
             <head>
               <title>Collection Tally - ${data.qr_code}</title>
               <style>
-                body { font-family: 'Courier New', monospace; padding: 20px; }
+                body { font-family: 'Courier New', monospace; padding: 20px; max-width: 800px; margin: 0 auto; }
                 h1 { text-align: center; font-size: 24px; margin-bottom: 10px; }
-                .divider { border-top: 2px dashed #000; margin: 10px 0; }
+                .divider { border-top: 2px dashed #000; margin: 15px 0; }
                 .info { margin: 5px 0; }
-                .info-label { font-weight: bold; display: inline-block; width: 150px; }
-                .items { margin-top: 20px; }
-                .item { margin: 8px 0; padding: 8px; border: 1px solid #ccc; }
-                .item-type { font-weight: bold; font-size: 16px; }
-                .item-qty { color: #555; }
+                .info-label { font-weight: bold; display: inline-block; width: 120px; }
+                .section-title { font-weight: bold; font-size: 18px; margin-top: 20px; margin-bottom: 10px; }
+                .tally-entry { margin: 5px 0; padding: 8px; background: #f5f5f5; border-left: 3px solid #333; }
+                .entry-number { display: inline-block; width: 40px; font-weight: bold; }
+                .entry-type { font-weight: bold; }
+                .entry-qty { float: right; }
+                .totals { margin-top: 20px; padding: 10px; background: #e8e8e8; border: 2px solid #333; }
+                .total-item { margin: 5px 0; padding: 5px; }
+                .total-label { font-weight: bold; display: inline-block; width: 200px; }
+                .total-value { float: right; font-weight: bold; }
                 .footer { margin-top: 20px; text-align: center; font-size: 12px; color: #666; }
               </style>
             </head>
             <body>
-              <h1>COLLECTION TALLY</h1>
+              <h1>COLLECTION TALLY SHEET</h1>
               <div class="divider"></div>
               <div class="info"><span class="info-label">Date:</span> ${new Date(data.created_at).toLocaleString()}</div>
               <div class="info"><span class="info-label">QR Code:</span> ${data.qr_code}</div>
-              <div class="info"><span class="info-label">Signed By:</span> ${data.signed_by || '-'}</div>
               <div class="divider"></div>
-              <h2>Items Collected (${items.length})</h2>
-              <div class="items">
-                ${items.map(item => `
-                  <div class="item">
-                    <div class="item-type">${item.waste_type}</div>
-                    <div class="item-qty">Quantity: ${item.quantity} ${item.unit || 'pcs'}</div>
-                  </div>
-                `).join('')}
+              
+              <div class="section-title">Individual Tally Entries (${tallyEntries.length} entries)</div>
+              ${tallyEntries.map((entry, idx) => `
+                <div class="tally-entry">
+                  <span class="entry-number">#${idx + 1}</span>
+                  <span class="entry-type">${entry.waste_type}</span>
+                  <span class="entry-qty">${entry.quantity} ${entry.unit || 'pcs'}</span>
+                </div>
+              `).join('')}
+              
+              <div class="section-title">Summary Totals</div>
+              <div class="totals">
+                ${Object.entries(totals).map(([key, total]) => {
+                  const wasteType = key.split('-')[0];
+                  return `
+                    <div class="total-item">
+                      <span class="total-label">${wasteType}</span>
+                      <span class="total-value">${total.quantity} ${total.unit || 'pcs'}</span>
+                    </div>
+                  `;
+                }).join('')}
               </div>
+              
               <div class="divider"></div>
               <div class="footer">Printed: ${new Date().toLocaleString()}</div>
               <script>window.print(); window.onafterprint = function(){ window.close(); }</script>

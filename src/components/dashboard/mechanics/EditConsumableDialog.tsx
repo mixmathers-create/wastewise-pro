@@ -20,6 +20,7 @@ export function EditConsumableDialog({ consumable, open, onOpenChange, onSuccess
   const [unit, setUnit] = useState("");
   const [quantity, setQuantity] = useState(0);
   const [minStockLevel, setMinStockLevel] = useState(10);
+  const [unitCost, setUnitCost] = useState(0);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -29,6 +30,7 @@ export function EditConsumableDialog({ consumable, open, onOpenChange, onSuccess
       setUnit(consumable.unit || "");
       setQuantity(consumable.quantity || 0);
       setMinStockLevel(consumable.min_stock_level || 10);
+      setUnitCost(consumable.unit_cost || 0);
     }
   }, [consumable]);
 
@@ -46,6 +48,7 @@ export function EditConsumableDialog({ consumable, open, onOpenChange, onSuccess
           unit,
           quantity,
           min_stock_level: minStockLevel,
+          unit_cost: unitCost,
           status
         })
         .eq("id", consumable.id);
@@ -131,6 +134,18 @@ export function EditConsumableDialog({ consumable, open, onOpenChange, onSuccess
                 required 
               />
             </div>
+          </div>
+          <div>
+            <Label htmlFor="unitCost">Unit Cost *</Label>
+            <Input 
+              id="unitCost" 
+              type="number" 
+              min="0"
+              step="0.01"
+              value={unitCost} 
+              onChange={(e) => setUnitCost(parseFloat(e.target.value))} 
+              required 
+            />
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
