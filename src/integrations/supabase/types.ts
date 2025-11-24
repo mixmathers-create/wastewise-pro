@@ -505,6 +505,54 @@ export type Database = {
         }
         Relationships: []
       }
+      management: {
+        Row: {
+          address: string | null
+          availability: Json | null
+          birthdate: string | null
+          contact_number: string | null
+          created_at: string | null
+          id: string
+          id_number: string | null
+          leaves_available: number | null
+          name: string
+          photo_url: string | null
+          status: string | null
+          suspension_end_date: string | null
+          suspension_start_date: string | null
+        }
+        Insert: {
+          address?: string | null
+          availability?: Json | null
+          birthdate?: string | null
+          contact_number?: string | null
+          created_at?: string | null
+          id?: string
+          id_number?: string | null
+          leaves_available?: number | null
+          name: string
+          photo_url?: string | null
+          status?: string | null
+          suspension_end_date?: string | null
+          suspension_start_date?: string | null
+        }
+        Update: {
+          address?: string | null
+          availability?: Json | null
+          birthdate?: string | null
+          contact_number?: string | null
+          created_at?: string | null
+          id?: string
+          id_number?: string | null
+          leaves_available?: number | null
+          name?: string
+          photo_url?: string | null
+          status?: string | null
+          suspension_end_date?: string | null
+          suspension_start_date?: string | null
+        }
+        Relationships: []
+      }
       mechanic_consumable_checkouts: {
         Row: {
           checked_out_at: string | null
@@ -719,6 +767,54 @@ export type Database = {
           id?: string
           role?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      recyclers: {
+        Row: {
+          address: string | null
+          availability: Json | null
+          birthdate: string | null
+          contact_number: string | null
+          created_at: string | null
+          id: string
+          id_number: string | null
+          leaves_available: number | null
+          name: string
+          photo_url: string | null
+          status: string | null
+          suspension_end_date: string | null
+          suspension_start_date: string | null
+        }
+        Insert: {
+          address?: string | null
+          availability?: Json | null
+          birthdate?: string | null
+          contact_number?: string | null
+          created_at?: string | null
+          id?: string
+          id_number?: string | null
+          leaves_available?: number | null
+          name: string
+          photo_url?: string | null
+          status?: string | null
+          suspension_end_date?: string | null
+          suspension_start_date?: string | null
+        }
+        Update: {
+          address?: string | null
+          availability?: Json | null
+          birthdate?: string | null
+          contact_number?: string | null
+          created_at?: string | null
+          id?: string
+          id_number?: string | null
+          leaves_available?: number | null
+          name?: string
+          photo_url?: string | null
+          status?: string | null
+          suspension_end_date?: string | null
+          suspension_start_date?: string | null
         }
         Relationships: []
       }

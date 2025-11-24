@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Upload } from "lucide-react";
 
 const leaveFormSchema = z.object({
-  personnel_type: z.enum(["driver", "helper", "mechanic"]),
+  personnel_type: z.enum(["driver", "helper", "mechanic", "recycler", "management"]),
   personnel_id: z.string().min(1, "Please select personnel"),
   personnel_id_number: z.string().min(1, "Personnel ID number is required for confirmation"),
   leave_type: z.enum(["sick", "vacation", "emergency", "medical", "personal"]),
@@ -197,6 +197,8 @@ const LeaveFilingForm = () => {
                         <SelectItem value="driver">Driver</SelectItem>
                         <SelectItem value="helper">Helper</SelectItem>
                         <SelectItem value="mechanic">Mechanic</SelectItem>
+                        <SelectItem value="recycler">Recycler</SelectItem>
+                        <SelectItem value="management">Management</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
