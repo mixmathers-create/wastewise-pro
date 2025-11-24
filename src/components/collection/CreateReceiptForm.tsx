@@ -8,15 +8,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-// Start of 'my branch' camera/useClass imports
 import { App, type PluginListenerHandle } from '@capacitor/app'; 
 import { BarcodeScanner } from '@capacitor-community/barcode-scanner';
-// End of 'my branch' camera/useClass imports
 
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { Capacitor } from "@capacitor/core";
-// Removed: import { BarcodeScanner } from "@capacitor-mlkit/barcode-scanning";
 import { MobileInput } from "@/components/mobile/MobileInput";
 import { printerService } from "@/lib/printerService";
 import { Card } from "@/components/ui/card";
@@ -258,7 +255,6 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       return;
     }
     
-    // Add to tally entries (individual records) - Kept from main branch
     const newTallyEntry = {
       waste_type: selectedWasteType,
       quantity: newItem.quantity,
