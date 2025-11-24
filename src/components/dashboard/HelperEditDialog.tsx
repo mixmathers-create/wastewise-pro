@@ -34,6 +34,8 @@ const HelperEditDialog = ({
   const [status, setStatus] = useState("available");
   const [suspensionStartDate, setSuspensionStartDate] = useState("");
   const [suspensionEndDate, setSuspensionEndDate] = useState("");
+  const [leavesAvailable, setLeavesAvailable] = useState(15);
+  const [address, setAddress] = useState("");
 
   useEffect(() => {
     if (helper) {
@@ -44,6 +46,8 @@ const HelperEditDialog = ({
       setStatus(helper.status || "available");
       setSuspensionStartDate(helper.suspension_start_date || "");
       setSuspensionEndDate(helper.suspension_end_date || "");
+      setLeavesAvailable(helper.leaves_available ?? 15);
+      setAddress(helper.address || "");
       
       const availability = helper.availability || { days: ["Mon", "Tue", "Wed", "Thu", "Fri"], shifts: ["AM", "PM"], doubleShift: false };
       setAvailableDays(availability.days || []);
@@ -90,6 +94,8 @@ const HelperEditDialog = ({
           id_number: idNumber,
           birthdate: birthdate || null,
           contact_number: contactNumber || null,
+          address: address || null,
+          leaves_available: leavesAvailable,
           status,
           suspension_start_date: status === 'suspended' ? suspensionStartDate : null,
           suspension_end_date: status === 'suspended' ? suspensionEndDate : null,
@@ -139,6 +145,24 @@ const HelperEditDialog = ({
             <div>
               <Label htmlFor="contactNumber">Contact Number</Label>
               <Input id="contactNumber" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="+63 XXX XXX XXXX" required />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="address">Address</Label>
+              <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Enter address" />
+            </div>
+            <div>
+              <Label htmlFor="leavesAvailable">Leaves Available</Label>
+              <Input 
+                id="leavesAvailable" 
+                type="number" 
+                value={leavesAvailable} 
+                onChange={(e) => setLeavesAvailable(parseInt(e.target.value) || 0)} 
+                min="0"
+                required 
+              />
             </div>
           </div>
 

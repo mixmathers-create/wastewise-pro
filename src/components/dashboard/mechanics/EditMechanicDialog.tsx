@@ -26,6 +26,7 @@ export function EditMechanicDialog({ mechanic, open, onOpenChange, onSuccess }: 
   const [suspensionStart, setSuspensionStart] = useState("");
   const [suspensionEnd, setSuspensionEnd] = useState("");
   const [showSuspension, setShowSuspension] = useState(false);
+  const [leavesAvailable, setLeavesAvailable] = useState(15);
   const { toast } = useToast();
 
   const allDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -43,6 +44,7 @@ export function EditMechanicDialog({ mechanic, open, onOpenChange, onSuccess }: 
       setSuspensionStart(mechanic.suspension_start_date || "");
       setSuspensionEnd(mechanic.suspension_end_date || "");
       setShowSuspension(mechanic.status === "suspended");
+      setLeavesAvailable(mechanic.leaves_available ?? 15);
     }
   }, [mechanic]);
 
@@ -88,6 +90,7 @@ export function EditMechanicDialog({ mechanic, open, onOpenChange, onSuccess }: 
           contact_number: contactNumber || null,
           birthdate: birthdate || null,
           id_number: idNumber || null,
+          leaves_available: leavesAvailable,
           status,
           availability: {
             days: availableDays,
@@ -130,6 +133,18 @@ export function EditMechanicDialog({ mechanic, open, onOpenChange, onSuccess }: 
           <div>
             <Label htmlFor="birthdate">Birthdate</Label>
             <Input id="birthdate" type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} />
+          </div>
+          
+          <div>
+            <Label htmlFor="leavesAvailable">Leaves Available</Label>
+            <Input 
+              id="leavesAvailable" 
+              type="number" 
+              value={leavesAvailable} 
+              onChange={(e) => setLeavesAvailable(parseInt(e.target.value) || 0)} 
+              min="0"
+              required 
+            />
           </div>
           
           <div>

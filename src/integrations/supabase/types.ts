@@ -146,6 +146,7 @@ export type Database = {
           created_at: string
           id: string
           id_number: string | null
+          leaves_available: number | null
           license_expiry_date: string | null
           license_file_url: string | null
           license_number: string | null
@@ -161,6 +162,7 @@ export type Database = {
           created_at?: string
           id?: string
           id_number?: string | null
+          leaves_available?: number | null
           license_expiry_date?: string | null
           license_file_url?: string | null
           license_number?: string | null
@@ -176,6 +178,7 @@ export type Database = {
           created_at?: string
           id?: string
           id_number?: string | null
+          leaves_available?: number | null
           license_expiry_date?: string | null
           license_file_url?: string | null
           license_number?: string | null
@@ -709,6 +712,7 @@ export type Database = {
           created_at: string
           id: string
           id_number: string | null
+          leaves_available: number | null
           name: string
           photo_url: string | null
           status: string | null
@@ -722,6 +726,7 @@ export type Database = {
           created_at?: string
           id?: string
           id_number?: string | null
+          leaves_available?: number | null
           name: string
           photo_url?: string | null
           status?: string | null
@@ -735,6 +740,7 @@ export type Database = {
           created_at?: string
           id?: string
           id_number?: string | null
+          leaves_available?: number | null
           name?: string
           photo_url?: string | null
           status?: string | null

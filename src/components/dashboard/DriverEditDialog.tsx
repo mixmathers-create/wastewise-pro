@@ -38,6 +38,7 @@ const DriverEditDialog = ({
   const [status, setStatus] = useState("available");
   const [suspensionStartDate, setSuspensionStartDate] = useState("");
   const [suspensionEndDate, setSuspensionEndDate] = useState("");
+  const [leavesAvailable, setLeavesAvailable] = useState(15);
 
   useEffect(() => {
     if (driver) {
@@ -50,6 +51,7 @@ const DriverEditDialog = ({
       setStatus(driver.status || "available");
       setSuspensionStartDate(driver.suspension_start_date || "");
       setSuspensionEndDate(driver.suspension_end_date || "");
+      setLeavesAvailable(driver.leaves_available ?? 15);
       
       const availability = driver.availability || { days: ["Mon", "Tue", "Wed", "Thu", "Fri"], shifts: ["AM", "PM"], doubleShift: false };
       setAvailableDays(availability.days || []);
@@ -124,6 +126,7 @@ const DriverEditDialog = ({
           status,
           suspension_start_date: status === 'suspended' ? suspensionStartDate : null,
           suspension_end_date: status === 'suspended' ? suspensionEndDate : null,
+          leaves_available: leavesAvailable,
           availability: {
             days: availableDays,
             shifts: availableShifts,
@@ -176,6 +179,18 @@ const DriverEditDialog = ({
           <div>
             <Label htmlFor="contactNumber">Contact Number</Label>
             <Input id="contactNumber" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="+63 XXX XXX XXXX" required />
+          </div>
+
+          <div>
+            <Label htmlFor="leavesAvailable">Leaves Available</Label>
+            <Input 
+              id="leavesAvailable" 
+              type="number" 
+              value={leavesAvailable} 
+              onChange={(e) => setLeavesAvailable(parseInt(e.target.value) || 0)} 
+              min="0"
+              required 
+            />
           </div>
 
           <div className="border-t pt-4">

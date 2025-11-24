@@ -12,6 +12,7 @@ import AddDriverDialog from "../AddDriverDialog";
 import AddHelperDialog from "../AddHelperDialog";
 import DriverEditDialog from "../DriverEditDialog";
 import HelperEditDialog from "../HelperEditDialog";
+import PersonnelEditDialog from "../PersonnelEditDialog";
 import LicensePreviewDialog from "../LicensePreviewDialog";
 
 export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
@@ -988,20 +989,24 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
       )}
 
       {editingRecycler && (
-        <HelperEditDialog
-          helper={editingRecycler}
+        <PersonnelEditDialog
+          personnel={editingRecycler}
           open={!!editingRecycler}
           onOpenChange={(open) => !open && setEditingRecycler(null)}
           onUpdated={fetchRecyclers}
+          table="recyclers"
+          title="Recycler"
         />
       )}
 
       {editingManagement && (
-        <HelperEditDialog
-          helper={editingManagement}
+        <PersonnelEditDialog
+          personnel={editingManagement}
           open={!!editingManagement}
           onOpenChange={(open) => !open && setEditingManagement(null)}
           onUpdated={fetchManagement}
+          table="management"
+          title="Management"
         />
       )}
 
