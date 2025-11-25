@@ -390,7 +390,10 @@ export default function DriversHelpersTimeTracking() {
     try {
       const { data, error } = await supabase
         .from("personnel_time_logs")
-        .select("*")
+        .select(`
+          *,
+          trucks:truck_id(code,plate_number)
+        `)
         .in("personnel_type", ["driver", "helper", "recycler"])
         .gte("time_in", exportStartDate)
         .lte("time_in", exportEndDate)
@@ -431,21 +434,31 @@ export default function DriversHelpersTimeTracking() {
       // Create detailed CSV with individual logs
       const detailedCsv = [
         ["Personnel Name", "Type", "Time In", "Time Out", "Duration", "Vehicle", "Group Session ID"].join(","),
-        ...(data || []).map(log => [
-          log.personnel_name,
-          log.personnel_type,
-          format(new Date(log.time_in), "yyyy-MM-dd HH:mm:ss"),
-          log.time_out ? format(new Date(log.time_out), "yyyy-MM-dd HH:mm:ss") : "Active",
-          calculateTotalTime(log.time_in, log.time_out),
-          log.truck_id || "N/A",
-          log.group_session_id || "N/A"
-        ].join(","))
+        ...(data || []).map(log => {
+          const truckInfo = Array.isArray(log.trucks) ? log.trucks[0] : log.trucks;
+          const vehicleDisplay = truckInfo 
+            ? `${truckInfo.code}${truckInfo.plate_number ? ' - ' + truckInfo.plate_number : ''}`
+            : 'N/A';
+          
+          return [
+            log.personnel_name,
+            log.personnel_type,
+            format(new Date(log.time_in), "yyyy-MM-dd HH:mm:ss"),
+            log.time_out ? format(new Date(log.time_out), "yyyy-MM-dd HH:mm:ss") : "Active",
+            calculateTotalTime(log.time_in, log.time_out),
+            vehicleDisplay,
+            log.group_session_id || "N/A"
+          ].join(",");
+        })
       ].join("\n");
+
+      // Sort personnel by total minutes worked (descending)
+      const sortedPersonnel = Object.values(personnelTotals).sort((a, b) => b.totalMinutes - a.totalMinutes);
 
       // Create summary CSV with totals per person
       const summaryCsv = [
         ["Personnel Name", "Type", "Total Hours", "Total Minutes", "Number of Sessions"].join(","),
-        ...Object.values(personnelTotals).map((person) => {
+        ...sortedPersonnel.map((person) => {
           const hours = Math.floor(person.totalMinutes / 60);
           const minutes = person.totalMinutes % 60;
           return [
