@@ -1,14 +1,11 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { DollarSign, Trash2 } from "lucide-react";
-import { format } from "date-fns";
+import { DollarSign, Trash2, Edit } from "lucide-react";
+import { EditServiceDialog } from "./EditServiceDialog";
 
 interface ServicesListProps {
   jobOrderId: string;
@@ -17,8 +14,7 @@ interface ServicesListProps {
 
 export function ServicesList({ jobOrderId, onServicesUpdate }: ServicesListProps) {
   const [services, setServices] = useState<any[]>([]);
-  const [editingCost, setEditingCost] = useState<string | null>(null);
-  const [costValue, setCostValue] = useState("");
+  const [editingService, setEditingService] = useState<any>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -28,38 +24,12 @@ export function ServicesList({ jobOrderId, onServicesUpdate }: ServicesListProps
   const fetchServices = async () => {
     const { data } = await supabase
       .from("job_order_services")
-      .select("*")
+      .select("id,service_type,category,provider_name,description,cost,cost_added_at,created_at")
       .eq("job_order_id", jobOrderId)
       .order("created_at", { ascending: false });
     
     setServices(data || []);
     if (onServicesUpdate) onServicesUpdate();
-  };
-
-  const handleAddCost = async (serviceId: string) => {
-    if (!costValue || parseFloat(costValue) <= 0) {
-      toast({ title: "Error", description: "Please enter a valid cost", variant: "destructive" });
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from("job_order_services")
-        .update({
-          cost: parseFloat(costValue),
-          cost_added_at: new Date().toISOString()
-        })
-        .eq("id", serviceId);
-
-      if (error) throw error;
-
-      toast({ title: "Success", description: "Cost added successfully" });
-      setEditingCost(null);
-      setCostValue("");
-      fetchServices();
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    }
   };
 
   const handleDelete = async (serviceId: string) => {
@@ -121,36 +91,31 @@ export function ServicesList({ jobOrderId, onServicesUpdate }: ServicesListProps
                     <TableCell>{service.category}</TableCell>
                     <TableCell>{service.provider_name || "N/A"}</TableCell>
                     <TableCell className="max-w-xs truncate">{service.description || "N/A"}</TableCell>
-                    <TableCell>
-                      {service.cost ? (
-                        <span className="font-mono">₱{service.cost.toFixed(2)}</span>
-                      ) : (
-                        <span className="text-destructive">Pending</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        {!service.cost && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setEditingCost(service.id);
-                              setCostValue("");
-                            }}
-                          >
-                            <DollarSign className="h-4 w-4 mr-1" /> Add Cost
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleDelete(service.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                     <TableCell>
+                       {service.cost ? (
+                         <span className="font-mono">₱{service.cost.toFixed(2)}</span>
+                       ) : (
+                         <span className="text-destructive">Pending</span>
+                       )}
+                     </TableCell>
+                     <TableCell>
+                       <div className="flex gap-2">
+                         <Button
+                           size="sm"
+                           variant="outline"
+                           onClick={() => setEditingService(service)}
+                         >
+                           <Edit className="h-4 w-4 mr-1" /> Edit
+                         </Button>
+                         <Button
+                           size="sm"
+                           variant="ghost"
+                           onClick={() => handleDelete(service.id)}
+                         >
+                           <Trash2 className="h-4 w-4 text-destructive" />
+                         </Button>
+                       </div>
+                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -158,39 +123,12 @@ export function ServicesList({ jobOrderId, onServicesUpdate }: ServicesListProps
           </>
         )}
 
-        <Dialog open={!!editingCost} onOpenChange={(open) => !open && setEditingCost(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Service Cost</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="cost">Cost Amount *</Label>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">₱</span>
-                  <Input
-                    id="cost"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={costValue}
-                    onChange={(e) => setCostValue(e.target.value)}
-                    placeholder="0.00"
-                    autoFocus
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setEditingCost(null)}>
-                  Cancel
-                </Button>
-                <Button onClick={() => editingCost && handleAddCost(editingCost)}>
-                  Add Cost
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <EditServiceDialog
+          service={editingService}
+          open={!!editingService}
+          onOpenChange={(open) => !open && setEditingService(null)}
+          onSuccess={fetchServices}
+        />
       </CardContent>
     </Card>
   );

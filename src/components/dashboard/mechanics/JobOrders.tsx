@@ -54,24 +54,31 @@ export function JobOrders() {
   const fetchJobOrders = async () => {
     const { data } = await supabase
       .from("job_orders")
-      .select("*, trucks(code)")
-      .order("created_at", { ascending: false });
+      .select("id,job_number,title,status,priority,scheduled_date,created_at,started_at,total_active_minutes,last_resume_at,mechanic_ids,trucks(code)")
+      .order("created_at", { ascending: false })
+      .limit(20); // Limit to 20 most recent for faster loading
     
-    // Fetch mechanics for each job order
-    if (data) {
-      const jobOrdersWithMechanics = await Promise.all(
-        data.map(async (job) => {
-          if (job.mechanic_ids && job.mechanic_ids.length > 0) {
-            const { data: mechanicsData } = await supabase
-              .from("mechanics")
-              .select("name")
-              .in("id", job.mechanic_ids);
-            return { ...job, mechanics: mechanicsData || [] };
-          }
-          return { ...job, mechanics: [] };
-        })
-      );
-      setJobOrders(jobOrdersWithMechanics);
+    // Fetch mechanics for each job order in a single query
+    if (data && data.length > 0) {
+      const allMechanicIds = [...new Set(data.flatMap(job => job.mechanic_ids || []))];
+      
+      if (allMechanicIds.length > 0) {
+        const { data: mechanicsData } = await supabase
+          .from("mechanics")
+          .select("id,name")
+          .in("id", allMechanicIds);
+        
+        const mechanicsMap = new Map(mechanicsData?.map(m => [m.id, m]) || []);
+        
+        const jobOrdersWithMechanics = data.map(job => ({
+          ...job,
+          mechanics: (job.mechanic_ids || []).map(id => mechanicsMap.get(id)).filter(Boolean)
+        }));
+        
+        setJobOrders(jobOrdersWithMechanics);
+      } else {
+        setJobOrders(data);
+      }
     } else {
       setJobOrders([]);
     }
