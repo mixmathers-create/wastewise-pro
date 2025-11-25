@@ -33,7 +33,7 @@ const TrucksTab = ({ profile }: { profile: any }) => {
     // Fetch trucks
     const { data, error } = await supabase
       .from("trucks")
-      .select("id,code,type,plate_number,capacity,status")
+      .select("id,code,type,plate_number,capacity,status,odometer_reading")
       .order("code")
       .limit(MAX_ITEMS);
     if (error) setError(error.message);
@@ -195,6 +195,7 @@ const TrucksTab = ({ profile }: { profile: any }) => {
                 <TableHead>Plate Number</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Capacity (MT)</TableHead>
+                <TableHead>Odometer (km)</TableHead>
                 <TableHead>Status</TableHead>
                 {isAdmin && <TableHead>Actions</TableHead>}
                 </TableRow>
@@ -214,6 +215,7 @@ const TrucksTab = ({ profile }: { profile: any }) => {
                     <TableCell>{t.plate_number || "N/A"}</TableCell>
                     <TableCell>{t.type}</TableCell>
                     <TableCell>{t.capacity || 0} MT</TableCell>
+                    <TableCell>{t.odometer_reading ? `${Number(t.odometer_reading).toLocaleString()} km` : '0 km'}</TableCell>
                     <TableCell>
                       {(() => {
                         const status = getTruckStatus(t);
