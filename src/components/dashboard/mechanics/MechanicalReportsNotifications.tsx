@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
-import { AlertCircle, MessageSquare, Wrench, CheckCircle } from "lucide-react";
+import { AlertCircle, MessageSquare, Wrench, CheckCircle, XCircle } from "lucide-react";
 
 export default function MechanicalReportsNotifications() {
   const [reports, setReports] = useState<any[]>([]);
@@ -17,6 +18,9 @@ export default function MechanicalReportsNotifications() {
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [closeReason, setCloseReason] = useState("");
+  const [reportToClose, setReportToClose] = useState<any>(null);
 
   useEffect(() => {
     fetchReports();
@@ -151,6 +155,56 @@ export default function MechanicalReportsNotifications() {
     }
   };
 
+  const closeReport = async () => {
+    if (!reportToClose || !closeReason.trim()) {
+      toast.error("Please provide a reason for closing the report");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("user_id", user.id)
+        .single();
+
+      const existingComments = reportToClose.mechanic_comments || [];
+      const closingComment = {
+        user_id: user.id,
+        user_name: profile?.full_name || "Unknown",
+        comment: `Report closed: ${closeReason.trim()}`,
+        created_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from("mechanical_reports")
+        .update({
+          status: "resolved",
+          mechanic_comments: [...existingComments, closingComment],
+          reviewed_by: user.id,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", reportToClose.id);
+
+      if (error) throw error;
+
+      toast.success("Report closed successfully");
+      setCloseDialogOpen(false);
+      setCloseReason("");
+      setReportToClose(null);
+      fetchReports();
+    } catch (error: any) {
+      console.error("Error closing report:", error);
+      toast.error(error.message || "Failed to close report");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const getSeverityBadge = (severity: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive"> = {
       low: "secondary",
@@ -272,28 +326,30 @@ export default function MechanicalReportsNotifications() {
                                   )}
                                 </div>
 
-                                <div>
-                                  <h4 className="font-semibold mb-2">Add Comment:</h4>
-                                  <Textarea
-                                    value={comment}
-                                    onChange={(e) => setComment(e.target.value)}
-                                    placeholder="Add your assessment or comments..."
-                                    className="min-h-[100px]"
-                                  />
-                                  <Button
-                                    onClick={addComment}
-                                    disabled={isSubmitting || !comment.trim()}
-                                    className="mt-2"
-                                  >
-                                    <MessageSquare className="h-4 w-4 mr-2" />
-                                    Add Comment
-                                  </Button>
-                                </div>
+                                {report.status !== "resolved" && (
+                                  <div>
+                                    <h4 className="font-semibold mb-2">Add Comment:</h4>
+                                    <Textarea
+                                      value={comment}
+                                      onChange={(e) => setComment(e.target.value)}
+                                      placeholder="Add your assessment or comments..."
+                                      className="min-h-[100px]"
+                                    />
+                                    <Button
+                                      onClick={addComment}
+                                      disabled={isSubmitting || !comment.trim()}
+                                      className="mt-2"
+                                    >
+                                      <MessageSquare className="h-4 w-4 mr-2" />
+                                      Add Comment
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
                             </DialogContent>
                           </Dialog>
 
-                          {report.status !== "job_order_created" && (
+                          {report.status !== "job_order_created" && report.status !== "resolved" && (
                             <Button
                               size="sm"
                               onClick={() => createJobOrder(report)}
@@ -301,6 +357,21 @@ export default function MechanicalReportsNotifications() {
                             >
                               <Wrench className="h-4 w-4 mr-1" />
                               Create Job Order
+                            </Button>
+                          )}
+
+                          {report.status !== "resolved" && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => {
+                                setReportToClose(report);
+                                setCloseDialogOpen(true);
+                              }}
+                              disabled={isSubmitting}
+                            >
+                              <XCircle className="h-4 w-4 mr-1" />
+                              Close
                             </Button>
                           )}
 
@@ -320,6 +391,48 @@ export default function MechanicalReportsNotifications() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Close Mechanical Report</DialogTitle>
+            <DialogDescription>
+              Provide a reason for closing this report. This action will mark the report as resolved.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Reason for Closing *</Label>
+              <Textarea
+                value={closeReason}
+                onChange={(e) => setCloseReason(e.target.value)}
+                placeholder="Explain why this report is being closed (e.g., issue resolved, false alarm, duplicate, etc.)"
+                className="min-h-[100px]"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCloseDialogOpen(false);
+                  setCloseReason("");
+                  setReportToClose(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={closeReport}
+                disabled={isSubmitting || !closeReason.trim()}
+              >
+                <XCircle className="h-4 w-4 mr-2" />
+                Close Report
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
