@@ -46,6 +46,9 @@ export default function DriversHelpersTimeTracking() {
   const [timedOutPage, setTimedOutPage] = useState(1);
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
+  const [showGroupTimeOutDialog, setShowGroupTimeOutDialog] = useState(false);
+  const [selectedGroupSession, setSelectedGroupSession] = useState<string | null>(null);
+  const [groupMembersToTimeOut, setGroupMembersToTimeOut] = useState<Set<string>>(new Set());
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -254,6 +257,39 @@ export default function DriversHelpersTimeTracking() {
     }
   };
 
+  const handleGroupTimeOutClick = (groupSessionId: string) => {
+    const groupMembers = activeLogs.filter(log => log.group_session_id === groupSessionId);
+    setSelectedGroupSession(groupSessionId);
+    setGroupMembersToTimeOut(new Set(groupMembers.map(log => log.id)));
+    setShowGroupTimeOutDialog(true);
+  };
+
+  const handleGroupTimeOut = async () => {
+    if (groupMembersToTimeOut.size === 0) {
+      toast.error("Please select at least one person to time out");
+      return;
+    }
+
+    try {
+      const timestamp = new Date().toISOString();
+      const { error } = await supabase
+        .from("personnel_time_logs")
+        .update({ time_out: timestamp })
+        .in("id", Array.from(groupMembersToTimeOut));
+
+      if (error) throw error;
+      
+      toast.success(`Time out recorded for ${groupMembersToTimeOut.size} personnel`);
+      setShowGroupTimeOutDialog(false);
+      setSelectedGroupSession(null);
+      setGroupMembersToTimeOut(new Set());
+      fetchTimeLogs();
+    } catch (error) {
+      console.error("Error recording group time out:", error);
+      toast.error("Failed to record time out");
+    }
+  };
+
   const calculateTotalTime = (timeIn: string, timeOut: string | null) => {
     if (!timeOut) return "Active";
     const start = new Date(timeIn);
@@ -308,8 +344,22 @@ export default function DriversHelpersTimeTracking() {
   const activeLogs = timeLogs.filter(log => !log.time_out);
   const timedOutLogs = timeLogs.filter(log => log.time_out);
   
+  // Group active logs by group_session_id
+  const groupedActiveLogs = activeLogs.reduce((acc, log) => {
+    const key = log.group_session_id || `individual-${log.id}`;
+    if (!acc[key]) {
+      acc[key] = [];
+    }
+    acc[key].push(log);
+    return acc;
+  }, {} as Record<string, TimeLog[]>);
+
   const paginatedActiveLogs = activeLogs.slice((activePage - 1) * ITEMS_PER_PAGE, activePage * ITEMS_PER_PAGE);
   const paginatedTimedOutLogs = timedOutLogs.slice((timedOutPage - 1) * ITEMS_PER_PAGE, timedOutPage * ITEMS_PER_PAGE);
+
+  const getGroupMembersForSession = (groupSessionId: string) => {
+    return activeLogs.filter(log => log.group_session_id === groupSessionId);
+  };
 
   return (
     <Card>
@@ -426,23 +476,49 @@ export default function DriversHelpersTimeTracking() {
                       <TableHead>Type</TableHead>
                       <TableHead>Time In</TableHead>
                       <TableHead>Duration</TableHead>
+                      <TableHead>Group</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedActiveLogs.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell>{log.personnel_name}</TableCell>
-                        <TableCell className="capitalize">{log.personnel_type}</TableCell>
-                        <TableCell>{format(new Date(log.time_in), "MMM dd, yyyy HH:mm")}</TableCell>
-                        <TableCell>{calculateTotalTime(log.time_in, log.time_out)}</TableCell>
-                        <TableCell>
-                          <Button onClick={() => handleTimeOut(log.id)} size="sm">
-                            Time Out
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {paginatedActiveLogs.map((log) => {
+                      const isGroupMember = log.group_session_id !== null;
+                      const groupMembers = isGroupMember ? getGroupMembersForSession(log.group_session_id!) : [];
+                      const isFirstInGroup = isGroupMember && groupMembers[0]?.id === log.id;
+                      
+                      return (
+                        <TableRow key={log.id}>
+                          <TableCell>{log.personnel_name}</TableCell>
+                          <TableCell className="capitalize">{log.personnel_type}</TableCell>
+                          <TableCell>{format(new Date(log.time_in), "MMM dd, yyyy HH:mm")}</TableCell>
+                          <TableCell>{calculateTotalTime(log.time_in, log.time_out)}</TableCell>
+                          <TableCell>
+                            {isGroupMember ? (
+                              <span className="text-xs bg-muted px-2 py-1 rounded">
+                                Group ({groupMembers.length})
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Individual</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button onClick={() => handleTimeOut(log.id)} size="sm" variant="outline">
+                                Time Out
+                              </Button>
+                              {isGroupMember && isFirstInGroup && (
+                                <Button 
+                                  onClick={() => handleGroupTimeOutClick(log.group_session_id!)} 
+                                  size="sm"
+                                >
+                                  Group Time Out
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
                 {activeLogs.length > ITEMS_PER_PAGE && (
@@ -547,6 +623,61 @@ export default function DriversHelpersTimeTracking() {
                   }}
                 >
                   Cancel
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showGroupTimeOutDialog} onOpenChange={setShowGroupTimeOutDialog}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Group Time Out</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Select which personnel to time out. You can deselect individuals if they need to continue working.
+              </p>
+              <div className="border rounded p-3 space-y-2 max-h-64 overflow-y-auto">
+                {selectedGroupSession && getGroupMembersForSession(selectedGroupSession).map((log) => (
+                  <div key={log.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      checked={groupMembersToTimeOut.has(log.id)}
+                      onCheckedChange={(checked) => {
+                        const newSet = new Set(groupMembersToTimeOut);
+                        if (checked) {
+                          newSet.add(log.id);
+                        } else {
+                          newSet.delete(log.id);
+                        }
+                        setGroupMembersToTimeOut(newSet);
+                      }}
+                    />
+                    <label className="text-sm flex-1">
+                      {log.personnel_name} ({log.personnel_type})
+                    </label>
+                    <span className="text-xs text-muted-foreground">
+                      {calculateTotalTime(log.time_in, null)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowGroupTimeOutDialog(false);
+                    setSelectedGroupSession(null);
+                    setGroupMembersToTimeOut(new Set());
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleGroupTimeOut}
+                  disabled={groupMembersToTimeOut.size === 0}
+                >
+                  Time Out ({groupMembersToTimeOut.size} selected)
                 </Button>
               </div>
             </div>
