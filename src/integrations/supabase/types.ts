@@ -359,6 +359,63 @@ export type Database = {
         }
         Relationships: []
       }
+      incident_reports: {
+        Row: {
+          attachments: Json | null
+          created_at: string
+          description: string
+          id: string
+          incident_date: string
+          incident_time: string | null
+          incident_type: string
+          location: string | null
+          personnel_involved: Json | null
+          reported_by: string
+          reporter_name: string
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          severity: string | null
+          status: string | null
+        }
+        Insert: {
+          attachments?: Json | null
+          created_at?: string
+          description: string
+          id?: string
+          incident_date: string
+          incident_time?: string | null
+          incident_type: string
+          location?: string | null
+          personnel_involved?: Json | null
+          reported_by: string
+          reporter_name: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          severity?: string | null
+          status?: string | null
+        }
+        Update: {
+          attachments?: Json | null
+          created_at?: string
+          description?: string
+          id?: string
+          incident_date?: string
+          incident_time?: string | null
+          incident_type?: string
+          location?: string | null
+          personnel_involved?: Json | null
+          reported_by?: string
+          reporter_name?: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          severity?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
       job_order_services: {
         Row: {
           category: string
@@ -721,6 +778,75 @@ export type Database = {
             columns: ["mechanic_id"]
             isOneToOne: false
             referencedRelation: "mechanics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mechanical_reports: {
+        Row: {
+          created_at: string
+          id: string
+          issue_description: string
+          job_order_id: string | null
+          mechanic_comments: Json | null
+          report_date: string
+          reported_by: string
+          reporter_name: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          severity: string | null
+          status: string | null
+          symptoms: Json | null
+          truck_id: string
+          truck_operational: boolean | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          issue_description: string
+          job_order_id?: string | null
+          mechanic_comments?: Json | null
+          report_date: string
+          reported_by: string
+          reporter_name: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          severity?: string | null
+          status?: string | null
+          symptoms?: Json | null
+          truck_id: string
+          truck_operational?: boolean | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          issue_description?: string
+          job_order_id?: string | null
+          mechanic_comments?: Json | null
+          report_date?: string
+          reported_by?: string
+          reporter_name?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          severity?: string | null
+          status?: string | null
+          symptoms?: Json | null
+          truck_id?: string
+          truck_operational?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mechanical_reports_job_order_id_fkey"
+            columns: ["job_order_id"]
+            isOneToOne: false
+            referencedRelation: "job_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mechanical_reports_truck_id_fkey"
+            columns: ["truck_id"]
+            isOneToOne: false
+            referencedRelation: "trucks"
             referencedColumns: ["id"]
           },
         ]
