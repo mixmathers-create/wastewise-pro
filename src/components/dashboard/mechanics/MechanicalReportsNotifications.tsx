@@ -8,8 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
-import { AlertCircle, MessageSquare, Wrench, CheckCircle, XCircle } from "lucide-react";
+import { AlertCircle, MessageSquare, Wrench, CheckCircle, XCircle, Trash2 } from "lucide-react";
 
 export default function MechanicalReportsNotifications() {
   const [reports, setReports] = useState<any[]>([]);
@@ -21,6 +22,8 @@ export default function MechanicalReportsNotifications() {
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [closeReason, setCloseReason] = useState("");
   const [reportToClose, setReportToClose] = useState<any>(null);
+  const [selectedReports, setSelectedReports] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchReports();
@@ -215,6 +218,53 @@ export default function MechanicalReportsNotifications() {
     return <Badge variant={variants[severity] || "default"}>{severity.toUpperCase()}</Badge>;
   };
 
+  const toggleReportSelection = (reportId: string) => {
+    setSelectedReports(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(reportId)) {
+        newSet.delete(reportId);
+      } else {
+        newSet.add(reportId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedReports.size === reports.length) {
+      setSelectedReports(new Set());
+    } else {
+      setSelectedReports(new Set(reports.map(r => r.id)));
+    }
+  };
+
+  const deleteSelectedReports = async () => {
+    if (selectedReports.size === 0) {
+      toast.error("No reports selected");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("mechanical_reports")
+        .delete()
+        .in("id", Array.from(selectedReports));
+
+      if (error) throw error;
+
+      toast.success(`${selectedReports.size} report(s) deleted successfully`);
+      setSelectedReports(new Set());
+      setDeleteDialogOpen(false);
+      fetchReports();
+    } catch (error: any) {
+      console.error("Error deleting reports:", error);
+      toast.error(error.message || "Failed to delete reports");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const pendingReports = reports.filter(r => r.status === "submitted");
 
   if (loading) {
@@ -239,8 +289,21 @@ export default function MechanicalReportsNotifications() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Mechanical Reports</CardTitle>
-          <CardDescription>Review and take action on mechanical issues</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Mechanical Reports</CardTitle>
+              <CardDescription>Review and take action on mechanical issues</CardDescription>
+            </div>
+            {selectedReports.size > 0 && (
+              <Button
+                variant="destructive"
+                onClick={() => setDeleteDialogOpen(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Selected ({selectedReports.size})
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {reports.length === 0 ? (
@@ -250,6 +313,12 @@ export default function MechanicalReportsNotifications() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedReports.size === reports.length && reports.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Vehicle</TableHead>
                     <TableHead>Reporter</TableHead>
@@ -262,6 +331,12 @@ export default function MechanicalReportsNotifications() {
                 <TableBody>
                   {reports.map((report) => (
                     <TableRow key={report.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedReports.has(report.id)}
+                          onCheckedChange={() => toggleReportSelection(report.id)}
+                        />
+                      </TableCell>
                       <TableCell>
                         {format(new Date(report.created_at), "MMM dd, yyyy")}
                       </TableCell>
@@ -430,6 +505,33 @@ export default function MechanicalReportsNotifications() {
                 Close Report
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Mechanical Reports</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {selectedReports.size} report(s)? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={deleteSelectedReports}
+              disabled={isSubmitting}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Reports
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
