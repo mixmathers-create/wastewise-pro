@@ -126,7 +126,7 @@ const Dashboard = () => {
               <Calendar className="h-4 w-4" />
               <span className="hidden sm:inline">Schedule</span>
             </TabsTrigger>
-            <TabsTrigger value="hr" className="gap-2 data-[state=active]:bg-background hidden md:flex">
+            <TabsTrigger value="hr" className="gap-2 data-[state=active]:bg-background">
               <Briefcase className="h-4 w-4" />
               <span className="hidden sm:inline">HR</span>
             </TabsTrigger>
@@ -169,7 +169,7 @@ const Dashboard = () => {
               <MechanicsTab />
             </TabsContent>
 
-            <TabsContent value="hr" className="hidden md:block">
+            <TabsContent value="hr">
               <HRTab />
             </TabsContent>
 
