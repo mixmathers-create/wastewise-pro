@@ -64,6 +64,7 @@ export default function DriversHelpersTimeTracking() {
   const [showGroupTimeOutDialog, setShowGroupTimeOutDialog] = useState(false);
   const [selectedGroupTruck, setSelectedGroupTruck] = useState<string | null>(null);
   const [groupMembersToTimeOut, setGroupMembersToTimeOut] = useState<Set<string>>(new Set());
+  const [selectedTimedOutLogs, setSelectedTimedOutLogs] = useState<Set<string>>(new Set());
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -369,6 +370,33 @@ export default function DriversHelpersTimeTracking() {
     } catch (error) {
       console.error("Error recording group time out:", error);
       toast.error("Failed to record time out");
+    }
+  };
+
+  const handleMassDelete = async () => {
+    if (selectedTimedOutLogs.size === 0) {
+      toast.error("Please select at least one log to delete");
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete ${selectedTimedOutLogs.size} time log(s)? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("personnel_time_logs")
+        .delete()
+        .in("id", Array.from(selectedTimedOutLogs));
+
+      if (error) throw error;
+      
+      toast.success(`Deleted ${selectedTimedOutLogs.size} time log(s)`);
+      setSelectedTimedOutLogs(new Set());
+      fetchTimeLogs();
+    } catch (error) {
+      console.error("Error deleting time logs:", error);
+      toast.error("Failed to delete time logs");
     }
   };
 
@@ -741,66 +769,108 @@ export default function DriversHelpersTimeTracking() {
           </TabsContent>
 
           <TabsContent value="timed-out">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Vehicle</TableHead>
-                  <TableHead>Time In</TableHead>
-                  <TableHead>Time Out</TableHead>
-                  <TableHead>Total Time</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedTimedOutLogs.map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell>{log.personnel_name}</TableCell>
-                    <TableCell className="capitalize">{log.personnel_type}</TableCell>
-                    <TableCell>
-                      {log.trucks ? (
-                        <div className="text-sm">
-                          <div className="font-medium">{log.trucks.code}</div>
-                          {log.trucks.plate_number && (
-                            <div className="text-xs text-muted-foreground">{log.trucks.plate_number}</div>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">N/A</span>
-                      )}
-                    </TableCell>
-                    <TableCell>{format(new Date(log.time_in), "MMM dd, yyyy HH:mm")}</TableCell>
-                    <TableCell>
-                      {log.time_out ? format(new Date(log.time_out), "MMM dd, yyyy HH:mm") : "N/A"}
-                    </TableCell>
-                    <TableCell>{calculateTotalTime(log.time_in, log.time_out)}</TableCell>
+            <div className="space-y-4">
+              {selectedTimedOutLogs.size > 0 && (
+                <div className="flex items-center justify-between bg-muted p-3 rounded">
+                  <span className="text-sm font-medium">
+                    {selectedTimedOutLogs.size} log(s) selected
+                  </span>
+                  <Button 
+                    variant="destructive" 
+                    size="sm"
+                    onClick={handleMassDelete}
+                  >
+                    Delete Selected
+                  </Button>
+                </div>
+              )}
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedTimedOutLogs.size === paginatedTimedOutLogs.length && paginatedTimedOutLogs.length > 0}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedTimedOutLogs(new Set(paginatedTimedOutLogs.map(log => log.id)));
+                          } else {
+                            setSelectedTimedOutLogs(new Set());
+                          }
+                        }}
+                      />
+                    </TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Vehicle</TableHead>
+                    <TableHead>Time In</TableHead>
+                    <TableHead>Time Out</TableHead>
+                    <TableHead>Total Time</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {timedOutLogs.length > ITEMS_PER_PAGE && (
-              <div className="flex items-center justify-center gap-2 mt-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setTimedOutPage(p => Math.max(1, p - 1))}
-                  disabled={timedOutPage === 1}
-                >
-                  Previous
-                </Button>
-                <span className="text-sm">
-                  Page {timedOutPage} of {Math.ceil(timedOutLogs.length / ITEMS_PER_PAGE)}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setTimedOutPage(p => Math.min(Math.ceil(timedOutLogs.length / ITEMS_PER_PAGE), p + 1))}
-                  disabled={timedOutPage >= Math.ceil(timedOutLogs.length / ITEMS_PER_PAGE)}
-                >
-                  Next
-                </Button>
-              </div>
-            )}
+                </TableHeader>
+                <TableBody>
+                  {paginatedTimedOutLogs.map((log) => (
+                    <TableRow key={log.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedTimedOutLogs.has(log.id)}
+                          onCheckedChange={(checked) => {
+                            const newSet = new Set(selectedTimedOutLogs);
+                            if (checked) {
+                              newSet.add(log.id);
+                            } else {
+                              newSet.delete(log.id);
+                            }
+                            setSelectedTimedOutLogs(newSet);
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>{log.personnel_name}</TableCell>
+                      <TableCell className="capitalize">{log.personnel_type}</TableCell>
+                      <TableCell>
+                        {log.trucks ? (
+                          <div className="text-sm">
+                            <div className="font-medium">{log.trucks.code}</div>
+                            {log.trucks.plate_number && (
+                              <div className="text-xs text-muted-foreground">{log.trucks.plate_number}</div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">N/A</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{format(new Date(log.time_in), "MMM dd, yyyy HH:mm")}</TableCell>
+                      <TableCell>
+                        {log.time_out ? format(new Date(log.time_out), "MMM dd, yyyy HH:mm") : "N/A"}
+                      </TableCell>
+                      <TableCell>{calculateTotalTime(log.time_in, log.time_out)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {timedOutLogs.length > ITEMS_PER_PAGE && (
+                <div className="flex items-center justify-center gap-2 mt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setTimedOutPage(p => Math.max(1, p - 1))}
+                    disabled={timedOutPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm">
+                    Page {timedOutPage} of {Math.ceil(timedOutLogs.length / ITEMS_PER_PAGE)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setTimedOutPage(p => Math.min(Math.ceil(timedOutLogs.length / ITEMS_PER_PAGE), p + 1))}
+                    disabled={timedOutPage >= Math.ceil(timedOutLogs.length / ITEMS_PER_PAGE)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
 
