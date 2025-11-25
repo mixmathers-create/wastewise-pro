@@ -294,6 +294,7 @@ export const SpecialDispatchDialog = ({
           truck_id: allocation.truckId,
           driver_id: personnelAssignments[index]?.driverId || null,
           helper_ids: personnelAssignments[index]?.helperIds || [],
+          recycler_ids: [],
           client_ids: allocation.clientIds,
           mt_requirement: allocation.allocatedMt,
           status: "draft",
