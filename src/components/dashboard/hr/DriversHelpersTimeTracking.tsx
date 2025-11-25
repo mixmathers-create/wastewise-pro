@@ -56,7 +56,6 @@ export default function DriversHelpersTimeTracking() {
   const [showCamera, setShowCamera] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
-  const [activePage, setActivePage] = useState(1);
   const [timedOutPage, setTimedOutPage] = useState(1);
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
@@ -413,7 +412,6 @@ export default function DriversHelpersTimeTracking() {
     return acc;
   }, {} as Record<string, TimeLog[]>);
 
-  const paginatedActiveLogs = activeLogs.slice((activePage - 1) * ITEMS_PER_PAGE, activePage * ITEMS_PER_PAGE);
   const paginatedTimedOutLogs = timedOutLogs.slice((timedOutPage - 1) * ITEMS_PER_PAGE, timedOutPage * ITEMS_PER_PAGE);
 
   const getGroupMembersForTruck = (truckId: string) => {
@@ -546,86 +544,74 @@ export default function DriversHelpersTimeTracking() {
                 <Loader2 className="h-8 w-8 animate-spin" />
               </div>
             ) : (
-              <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Vehicle</TableHead>
-                      <TableHead>Time In</TableHead>
-                      <TableHead>Duration</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedActiveLogs.map((log) => {
-                      const isGroupMember = log.truck_id !== null;
-                      const groupMembers = isGroupMember ? getGroupMembersForTruck(log.truck_id!) : [];
-                      const isFirstInGroup = isGroupMember && groupMembers[0]?.id === log.id;
-                      
-                      return (
-                        <TableRow key={log.id}>
-                          <TableCell>{log.personnel_name}</TableCell>
-                          <TableCell className="capitalize">{log.personnel_type}</TableCell>
-                          <TableCell>
-                            {log.trucks ? (
-                              <div className="text-sm">
-                                <div className="font-medium">{log.trucks.code}</div>
-                                {log.trucks.plate_number && (
-                                  <div className="text-xs text-muted-foreground">{log.trucks.plate_number}</div>
+              <div className="space-y-4">
+                {Object.entries(groupedActiveLogs).map(([key, logs]) => {
+                  const isTeam = !key.startsWith('individual-');
+                  const truckInfo = logs[0]?.trucks;
+                  
+                  return (
+                    <Card key={key} className="border-2">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            {isTeam && truckInfo ? (
+                              <div>
+                                <CardTitle className="text-lg">Team: {truckInfo.code}</CardTitle>
+                                {truckInfo.plate_number && (
+                                  <p className="text-sm text-muted-foreground">{truckInfo.plate_number}</p>
                                 )}
                               </div>
                             ) : (
-                              <span className="text-xs text-muted-foreground">N/A</span>
+                              <CardTitle className="text-lg">Individual</CardTitle>
                             )}
-                          </TableCell>
-                          <TableCell>{format(new Date(log.time_in), "MMM dd, yyyy HH:mm")}</TableCell>
-                          <TableCell>{calculateTotalTime(log.time_in, log.time_out)}</TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
-                              <Button onClick={() => handleTimeOut(log.id)} size="sm" variant="outline">
-                                Time Out
-                              </Button>
-                              {isGroupMember && isFirstInGroup && (
-                                <Button 
-                                  onClick={() => handleGroupTimeOutClick(log.truck_id!)} 
-                                  size="sm"
-                                >
-                                  Group Time Out ({groupMembers.length})
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-                {activeLogs.length > ITEMS_PER_PAGE && (
-                  <div className="flex items-center justify-center gap-2 mt-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setActivePage(p => Math.max(1, p - 1))}
-                      disabled={activePage === 1}
-                    >
-                      Previous
-                    </Button>
-                    <span className="text-sm">
-                      Page {activePage} of {Math.ceil(activeLogs.length / ITEMS_PER_PAGE)}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setActivePage(p => Math.min(Math.ceil(activeLogs.length / ITEMS_PER_PAGE), p + 1))}
-                      disabled={activePage >= Math.ceil(activeLogs.length / ITEMS_PER_PAGE)}
-                    >
-                      Next
-                    </Button>
+                          </div>
+                          {isTeam && (
+                            <Button 
+                              onClick={() => handleGroupTimeOutClick(logs[0].truck_id!)} 
+                              size="sm"
+                            >
+                              Group Time Out ({logs.length})
+                            </Button>
+                          )}
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Name</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead>Time In</TableHead>
+                              <TableHead>Duration</TableHead>
+                              <TableHead>Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {logs.map((log) => (
+                              <TableRow key={log.id}>
+                                <TableCell>{log.personnel_name}</TableCell>
+                                <TableCell className="capitalize">{log.personnel_type}</TableCell>
+                                <TableCell>{format(new Date(log.time_in), "MMM dd, yyyy HH:mm")}</TableCell>
+                                <TableCell>{calculateTotalTime(log.time_in, log.time_out)}</TableCell>
+                                <TableCell>
+                                  <Button onClick={() => handleTimeOut(log.id)} size="sm" variant="outline">
+                                    Individual Time Out
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+                {Object.keys(groupedActiveLogs).length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No active time logs
                   </div>
                 )}
-              </>
+              </div>
             )}
           </TabsContent>
 
