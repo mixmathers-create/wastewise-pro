@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, FileText, Shield, Clock } from "lucide-react";
+import { Users, FileText, Shield, Clock, AlertTriangle } from "lucide-react";
 import PersonnelList from "./hr/PersonnelList";
 import LeaveFilingForm from "./hr/LeaveFilingForm";
 import LeaveAdminPanel from "./hr/LeaveAdminPanel";
 import DriversHelpersTimeTracking from "./hr/DriversHelpersTimeTracking";
+import ReportsTab from "./hr/ReportsTab";
 
 export const HRTab = () => {
   return (
@@ -32,6 +33,10 @@ export const HRTab = () => {
             <Shield className="h-4 w-4" />
             Admin Panel
           </TabsTrigger>
+          <TabsTrigger value="reports" className="gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            Reports
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="personnel">
@@ -48,6 +53,10 @@ export const HRTab = () => {
 
         <TabsContent value="admin">
           <LeaveAdminPanel />
+        </TabsContent>
+
+        <TabsContent value="reports">
+          <ReportsTab />
         </TabsContent>
       </Tabs>
     </div>
