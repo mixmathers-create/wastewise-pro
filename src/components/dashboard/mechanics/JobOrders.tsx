@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, CheckCircle2, PauseCircle, Trash2, Play, Download, FileSpreadsheet, Wrench } from "lucide-react";
+import { Plus, CheckCircle2, PauseCircle, Trash2, Play, Download, FileSpreadsheet, Wrench, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { generateCSV, downloadCSV } from "@/lib/csvUtils";
 import { CreateJobOrderDialog } from "./CreateJobOrderDialog";
@@ -22,7 +22,7 @@ export function JobOrders() {
   const [suspendingJob, setSuspendingJob] = useState<any>(null);
   const [exportingJob, setExportingJob] = useState<any>(null);
   const [addingServiceToJob, setAddingServiceToJob] = useState<string | null>(null);
-  const [viewingServicesJob, setViewingServicesJob] = useState<any>(null);
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [selectedJobOrders, setSelectedJobOrders] = useState<Set<string>>(new Set());
   const [activeTimers, setActiveTimers] = useState<{[key: string]: number}>({});
   const [currentPage, setCurrentPage] = useState(1);
@@ -302,122 +302,141 @@ export function JobOrders() {
           </TableHeader>
           <TableBody>
             {jobOrders.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((job) => (
-              <TableRow key={job.id}>
-                <TableCell>
-                  <Checkbox 
-                    checked={selectedJobOrders.has(job.id)}
-                    onCheckedChange={() => toggleJobOrderSelection(job.id)}
-                  />
-                </TableCell>
-                <TableCell className="font-mono">{job.job_number}</TableCell>
-                <TableCell className="font-medium">{job.title}</TableCell>
-                <TableCell>{job.trucks?.code || "N/A"}</TableCell>
-                <TableCell>
-                  {job.mechanics && job.mechanics.length > 0 
-                    ? job.mechanics.map((m: any) => m.name).join(", ")
-                    : "Unassigned"}
-                </TableCell>
-                <TableCell>
-                  <span className={`px-2 py-1 rounded text-xs ${
-                    job.priority === "high" ? "bg-red-100 text-red-800" :
-                    job.priority === "medium" ? "bg-yellow-100 text-yellow-800" :
-                    "bg-green-100 text-green-800"
-                  }`}>
-                    {job.priority}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <span className={`px-2 py-1 rounded text-xs ${
-                    job.status === "completed" ? "bg-green-100 text-green-800" :
-                    job.status === "suspended" ? "bg-orange-100 text-orange-800" :
-                    job.status === "in_progress" ? "bg-blue-100 text-blue-800" :
-                    "bg-gray-100 text-gray-800"
-                  }`}>
-                    {job.status.replace('_', ' ')}
-                  </span>
-                </TableCell>
-                <TableCell className="font-mono">
-                  {job.status === 'in_progress' && activeTimers[job.id] 
-                    ? formatTime(activeTimers[job.id])
-                    : job.total_active_minutes 
-                    ? formatTime(job.total_active_minutes * 60)
-                    : '00:00:00'}
-                </TableCell>
-                <TableCell>
-                  <div className="flex gap-2">
-                    {job.status === "pending" && (
-                      <Button
-                        size="sm"
-                        variant="default"
-                        onClick={() => handleStart(job)}
-                      >
-                        <Play className="h-4 w-4 mr-1" /> Start
-                      </Button>
-                    )}
-                    {(job.status === "in_progress" || job.status === "suspended") && (
+              <>
+                <TableRow key={job.id}>
+                  <TableCell>
+                    <Checkbox 
+                      checked={selectedJobOrders.has(job.id)}
+                      onCheckedChange={() => toggleJobOrderSelection(job.id)}
+                    />
+                  </TableCell>
+                  <TableCell className="font-mono">{job.job_number}</TableCell>
+                  <TableCell className="font-medium">{job.title}</TableCell>
+                  <TableCell>{job.trucks?.code || "N/A"}</TableCell>
+                  <TableCell>
+                    {job.mechanics && job.mechanics.length > 0 
+                      ? job.mechanics.map((m: any) => m.name).join(", ")
+                      : "Unassigned"}
+                  </TableCell>
+                  <TableCell>
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      job.priority === "high" ? "bg-red-100 text-red-800" :
+                      job.priority === "medium" ? "bg-yellow-100 text-yellow-800" :
+                      "bg-green-100 text-green-800"
+                    }`}>
+                      {job.priority}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      job.status === "completed" ? "bg-green-100 text-green-800" :
+                      job.status === "suspended" ? "bg-orange-100 text-orange-800" :
+                      job.status === "in_progress" ? "bg-blue-100 text-blue-800" :
+                      "bg-gray-100 text-gray-800"
+                    }`}>
+                      {job.status.replace('_', ' ')}
+                    </span>
+                  </TableCell>
+                  <TableCell className="font-mono">
+                    {job.status === 'in_progress' && activeTimers[job.id] 
+                      ? formatTime(activeTimers[job.id])
+                      : job.total_active_minutes 
+                      ? formatTime(job.total_active_minutes * 60)
+                      : '00:00:00'}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2 flex-wrap">
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setAddingServiceToJob(job.id)}
+                        onClick={() => setExpandedJobId(expandedJobId === job.id ? null : job.id)}
                       >
-                        <Wrench className="h-4 w-4 mr-1" /> Add Service
+                        <Eye className="h-4 w-4 mr-1" /> Services
                       </Button>
-                    )}
-                    {job.status === "in_progress" && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setCompletingJob(job)}
-                        >
-                          <CheckCircle2 className="h-4 w-4 mr-1" /> Complete
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setSuspendingJob(job)}
-                        >
-                          <PauseCircle className="h-4 w-4 mr-1" /> Suspend
-                        </Button>
-                      </>
-                    )}
-                    {job.status === "suspended" && (
-                      <>
+                      {job.status === "pending" && (
                         <Button
                           size="sm"
                           variant="default"
                           onClick={() => handleStart(job)}
                         >
-                          <Play className="h-4 w-4 mr-1" /> Resume
+                          <Play className="h-4 w-4 mr-1" /> Start
                         </Button>
+                      )}
+                      {(job.status === "in_progress" || job.status === "suspended") && (
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setCompletingJob(job)}
+                          onClick={() => setAddingServiceToJob(job.id)}
                         >
-                          <CheckCircle2 className="h-4 w-4 mr-1" /> Complete
+                          <Wrench className="h-4 w-4 mr-1" /> Add Service
                         </Button>
-                      </>
-                    )}
-                    {job.status === "completed" && (
+                      )}
+                      {job.status === "in_progress" && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCompletingJob(job)}
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-1" /> Complete
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSuspendingJob(job)}
+                          >
+                            <PauseCircle className="h-4 w-4 mr-1" /> Suspend
+                          </Button>
+                        </>
+                      )}
+                      {job.status === "suspended" && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => handleStart(job)}
+                          >
+                            <Play className="h-4 w-4 mr-1" /> Resume
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCompletingJob(job)}
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-1" /> Complete
+                          </Button>
+                        </>
+                      )}
+                      {job.status === "completed" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setExportingJob(job)}
+                        >
+                          <Download className="h-4 w-4 mr-1" /> Export
+                        </Button>
+                      )}
                       <Button
                         size="sm"
-                        variant="outline"
-                        onClick={() => setExportingJob(job)}
+                        variant="ghost"
+                        onClick={() => handleDelete(job.id)}
                       >
-                        <Download className="h-4 w-4 mr-1" /> Export
+                        <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleDelete(job.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
+                    </div>
+                  </TableCell>
+                </TableRow>
+                {expandedJobId === job.id && (
+                  <TableRow>
+                    <TableCell colSpan={9} className="bg-muted/50">
+                      <ServicesList 
+                        jobOrderId={job.id} 
+                        onServicesUpdate={fetchJobOrders}
+                      />
+                    </TableCell>
+                  </TableRow>
+                )}
+              </>
             ))}
           </TableBody>
         </Table>
