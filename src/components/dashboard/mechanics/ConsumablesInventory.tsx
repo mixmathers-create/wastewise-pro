@@ -22,7 +22,12 @@ export function ConsumablesInventory() {
   const [showCheckoutDialog, setShowCheckoutDialog] = useState(false);
   const [refillingConsumable, setRefillingConsumable] = useState<any>(null);
   const [lowStockItems, setLowStockItems] = useState<any[]>([]);
+  const [inventoryPage, setInventoryPage] = useState(1);
+  const [usagePage, setUsagePage] = useState(1);
   const { toast } = useToast();
+  
+  const ITEMS_PER_PAGE = 5;
+  const MAX_ITEMS = 100;
 
   useEffect(() => {
     fetchConsumables();
@@ -33,7 +38,8 @@ export function ConsumablesInventory() {
     const { data, error } = await supabase
       .from("mechanic_consumables")
       .select("*")
-      .order("name");
+      .order("name")
+      .limit(MAX_ITEMS);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -55,7 +61,8 @@ export function ConsumablesInventory() {
         trucks(code, plate_number),
         job_orders(job_number)
       `)
-      .order("checked_out_at", { ascending: false });
+      .order("checked_out_at", { ascending: false })
+      .limit(MAX_ITEMS);
     setCheckouts(data || []);
   };
 
@@ -174,7 +181,7 @@ export function ConsumablesInventory() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {consumables.map((item) => (
+                {consumables.slice((inventoryPage - 1) * ITEMS_PER_PAGE, inventoryPage * ITEMS_PER_PAGE).map((item) => (
                   <TableRow key={item.id} className={item.quantity <= item.min_stock_level ? 'bg-orange-50' : ''}>
                     <TableCell className="font-mono">{item.code}</TableCell>
                     <TableCell className="font-medium">{item.name}</TableCell>
@@ -213,6 +220,29 @@ export function ConsumablesInventory() {
                 ))}
               </TableBody>
             </Table>
+            {consumables.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInventoryPage(p => Math.max(1, p - 1))}
+                  disabled={inventoryPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {inventoryPage} of {Math.ceil(consumables.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInventoryPage(p => Math.min(Math.ceil(consumables.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={inventoryPage >= Math.ceil(consumables.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </TabsContent>
@@ -241,7 +271,7 @@ export function ConsumablesInventory() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {checkouts.map((checkout) => (
+                {checkouts.slice((usagePage - 1) * ITEMS_PER_PAGE, usagePage * ITEMS_PER_PAGE).map((checkout) => (
                   <TableRow key={checkout.id}>
                     <TableCell>
                       <div>
@@ -271,6 +301,29 @@ export function ConsumablesInventory() {
                 ))}
               </TableBody>
             </Table>
+            {checkouts.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setUsagePage(p => Math.max(1, p - 1))}
+                  disabled={usagePage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {usagePage} of {Math.ceil(checkouts.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setUsagePage(p => Math.min(Math.ceil(checkouts.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={usagePage >= Math.ceil(checkouts.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </TabsContent>
