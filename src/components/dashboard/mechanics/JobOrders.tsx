@@ -25,7 +25,11 @@ export function JobOrders() {
   const [viewingServicesJob, setViewingServicesJob] = useState<any>(null);
   const [selectedJobOrders, setSelectedJobOrders] = useState<Set<string>>(new Set());
   const [activeTimers, setActiveTimers] = useState<{[key: string]: number}>({});
+  const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
+  
+  const ITEMS_PER_PAGE = 5;
+  const MAX_ITEMS = 100;
 
   useEffect(() => {
     fetchJobOrders();
@@ -56,7 +60,7 @@ export function JobOrders() {
       .from("job_orders")
       .select("id,job_number,title,status,priority,scheduled_date,created_at,started_at,total_active_minutes,last_resume_at,mechanic_ids,trucks(code)")
       .order("created_at", { ascending: false })
-      .limit(20); // Limit to 20 most recent for faster loading
+      .limit(MAX_ITEMS);
     
     // Fetch mechanics for each job order in a single query
     if (data && data.length > 0) {
@@ -297,7 +301,7 @@ export function JobOrders() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {jobOrders.map((job) => (
+            {jobOrders.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((job) => (
               <TableRow key={job.id}>
                 <TableCell>
                   <Checkbox 
@@ -417,6 +421,29 @@ export function JobOrders() {
             ))}
           </TableBody>
         </Table>
+        {jobOrders.length > ITEMS_PER_PAGE && (
+          <div className="flex justify-center items-center gap-2 mt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {currentPage} of {Math.ceil(jobOrders.length / ITEMS_PER_PAGE)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.min(Math.ceil(jobOrders.length / ITEMS_PER_PAGE), p + 1))}
+              disabled={currentPage >= Math.ceil(jobOrders.length / ITEMS_PER_PAGE)}
+            >
+              Next
+            </Button>
+          </div>
+        )}
       </CardContent>
 
       <CreateJobOrderDialog

@@ -20,16 +20,21 @@ const ClientsTab = ({ profile }: { profile: any }) => {
   const [error, setError] = useState<string | null>(null);
   const [editingClient, setEditingClient] = useState<any | null>(null);
   const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = profile?.role === "admin";
   const isMobile = Capacitor.isNativePlatform();
+  
+  const ITEMS_PER_PAGE = 5;
+  const MAX_ITEMS = 100;
 
   const fetchClients = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("clients")
       .select("id,name,industry,address,qr_code,contact_person,contact_number,mt_requirement,collection_days,collection_shift,status,contract_file_url,contract_expiry_date")
-      .order("name");
+      .order("name")
+      .limit(MAX_ITEMS);
     if (error) setError(error.message);
     setClients(data || []);
     setLoading(false);
@@ -204,6 +209,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
         ) : clients.length === 0 ? (
           <p className="text-muted-foreground">No clients yet.</p>
         ) : (
+          <>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -226,7 +232,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {clients.map((client) => (
+                {clients.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((client) => (
                   <TableRow key={client.id}>
                     {isAdmin && (
                       <TableCell>
@@ -286,6 +292,30 @@ const ClientsTab = ({ profile }: { profile: any }) => {
                 ))}
               </TableBody>
             </Table>
+            {clients.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentPage} of {Math.ceil(clients.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(clients.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={currentPage >= Math.ceil(clients.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </CardContent>
       {editingClient && (
