@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ServicesList } from "./ServicesList";
@@ -16,15 +17,34 @@ interface CompleteJobOrderDialogProps {
 
 export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: CompleteJobOrderDialogProps) {
   const [remarks, setRemarks] = useState("");
+  const [odometerReading, setOdometerReading] = useState("");
   const [unpaidServices, setUnpaidServices] = useState(0);
   const [servicesChecked, setServicesChecked] = useState(false);
+  const [currentOdometer, setCurrentOdometer] = useState<number | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     if (open && job) {
       checkUnpaidServices();
+      fetchCurrentOdometer();
+      setRemarks("");
+      setOdometerReading("");
     }
   }, [open, job]);
+
+  const fetchCurrentOdometer = async () => {
+    if (!job.truck_id) return;
+    
+    const { data } = await supabase
+      .from("trucks")
+      .select("odometer_reading")
+      .eq("id", job.truck_id)
+      .single();
+    
+    if (data) {
+      setCurrentOdometer(data.odometer_reading || 0);
+    }
+  };
 
   const checkUnpaidServices = async () => {
     const { data } = await supabase
@@ -40,6 +60,26 @@ export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: C
   const handleComplete = async () => {
     if (!remarks.trim()) {
       toast({ title: "Error", description: "Remarks are required to complete the job order", variant: "destructive" });
+      return;
+    }
+
+    if (!odometerReading.trim()) {
+      toast({ title: "Error", description: "Odometer reading is required to complete the job order", variant: "destructive" });
+      return;
+    }
+
+    const odometerValue = parseFloat(odometerReading);
+    if (isNaN(odometerValue) || odometerValue < 0) {
+      toast({ title: "Error", description: "Please enter a valid odometer reading", variant: "destructive" });
+      return;
+    }
+
+    if (currentOdometer !== null && odometerValue < currentOdometer) {
+      toast({ 
+        title: "Error", 
+        description: `Odometer reading cannot be less than current reading (${currentOdometer} km)`, 
+        variant: "destructive" 
+      });
       return;
     }
 
@@ -76,18 +116,29 @@ export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: C
         totalMinutes += elapsed;
       }
 
-      const { error } = await supabase
+      // Update job order
+      const { error: jobError } = await supabase
         .from("job_orders")
         .update({
           status: "completed",
           completed_at: new Date().toISOString(),
           total_active_minutes: totalMinutes,
           last_resume_at: null,
-          description: job.description ? `${job.description}\n\nCompletion Remarks: ${remarks}` : `Completion Remarks: ${remarks}`
+          description: job.description ? `${job.description}\n\nCompletion Remarks: ${remarks}\nOdometer Reading: ${odometerValue} km` : `Completion Remarks: ${remarks}\nOdometer Reading: ${odometerValue} km`
         })
         .eq("id", job.id);
 
-      if (error) throw error;
+      if (jobError) throw jobError;
+
+      // Update truck odometer reading
+      if (job.truck_id) {
+        const { error: truckError } = await supabase
+          .from("trucks")
+          .update({ odometer_reading: odometerValue })
+          .eq("id", job.truck_id);
+
+        if (truckError) throw truckError;
+      }
 
       // Check for related mechanical reports and close them
       const { data: relatedReports } = await supabase
@@ -130,6 +181,7 @@ export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: C
       onSuccess();
       onOpenChange(false);
       setRemarks("");
+      setOdometerReading("");
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     }
@@ -137,7 +189,7 @@ export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: C
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Complete Job Order</DialogTitle>
         </DialogHeader>
@@ -145,6 +197,7 @@ export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: C
           <div className="p-4 bg-muted rounded-lg">
             <p className="text-sm font-medium">Job #: {job.job_number}</p>
             <p className="text-sm">{job.title}</p>
+            {job.trucks && <p className="text-sm text-muted-foreground">Vehicle: {job.trucks.code}</p>}
           </div>
 
           <ServicesList jobOrderId={job.id} onServicesUpdate={checkUnpaidServices} />
@@ -161,6 +214,25 @@ export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: C
           )}
 
           <div>
+            <Label htmlFor="odometer">Odometer Reading (km) *</Label>
+            {currentOdometer !== null && (
+              <p className="text-xs text-muted-foreground mb-1">
+                Current reading: {currentOdometer} km
+              </p>
+            )}
+            <Input
+              id="odometer"
+              type="number"
+              step="0.1"
+              min="0"
+              value={odometerReading}
+              onChange={(e) => setOdometerReading(e.target.value)}
+              placeholder="Enter current odometer reading"
+              required
+            />
+          </div>
+
+          <div>
             <Label htmlFor="remarks">Completion Remarks *</Label>
             <Textarea
               id="remarks"
@@ -175,7 +247,7 @@ export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: C
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button 
               onClick={handleComplete}
-              disabled={unpaidServices > 0}
+              disabled={unpaidServices > 0 || !remarks.trim() || !odometerReading.trim()}
             >
               Complete Job Order
             </Button>

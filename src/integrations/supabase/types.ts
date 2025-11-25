@@ -464,6 +464,7 @@ export type Database = {
           id: string
           job_number: string
           last_resume_at: string | null
+          mechanic_comments: Json | null
           mechanic_ids: string[] | null
           priority: string | null
           scheduled_date: string | null
@@ -483,6 +484,7 @@ export type Database = {
           id?: string
           job_number: string
           last_resume_at?: string | null
+          mechanic_comments?: Json | null
           mechanic_ids?: string[] | null
           priority?: string | null
           scheduled_date?: string | null
@@ -502,6 +504,7 @@ export type Database = {
           id?: string
           job_number?: string
           last_resume_at?: string | null
+          mechanic_comments?: Json | null
           mechanic_ids?: string[] | null
           priority?: string | null
           scheduled_date?: string | null
@@ -1276,6 +1279,7 @@ export type Database = {
           code: string
           created_at: string
           id: string
+          odometer_reading: number | null
           plate_number: string | null
           status: string | null
           team_id: string | null
@@ -1286,6 +1290,7 @@ export type Database = {
           code: string
           created_at?: string
           id?: string
+          odometer_reading?: number | null
           plate_number?: string | null
           status?: string | null
           team_id?: string | null
@@ -1296,6 +1301,7 @@ export type Database = {
           code?: string
           created_at?: string
           id?: string
+          odometer_reading?: number | null
           plate_number?: string | null
           status?: string | null
           team_id?: string | null

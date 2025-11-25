@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, CheckCircle2, PauseCircle, Trash2, Play, Download, FileSpreadsheet, Wrench, Eye, FileText } from "lucide-react";
+import { Plus, CheckCircle2, PauseCircle, Trash2, Play, Download, FileSpreadsheet, Wrench, Eye, FileText, MessageSquare } from "lucide-react";
 import { format } from "date-fns";
 import { generateCSV, downloadCSV } from "@/lib/csvUtils";
 import { CreateJobOrderDialog } from "./CreateJobOrderDialog";
@@ -16,6 +16,7 @@ import { ExportJobOrderDialog } from "./ExportJobOrderDialog";
 import { AddServiceDialog } from "./AddServiceDialog";
 import { ServicesList } from "./ServicesList";
 import { ViewJobOrderDialog } from "./ViewJobOrderDialog";
+import { JobOrderCommentsDialog } from "./JobOrderCommentsDialog";
 
 export function JobOrders() {
   const [jobOrders, setJobOrders] = useState<any[]>([]);
@@ -27,6 +28,7 @@ export function JobOrders() {
   const [addingServiceToJob, setAddingServiceToJob] = useState<string | null>(null);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [viewingJob, setViewingJob] = useState<any>(null);
+  const [commentingJob, setCommentingJob] = useState<any>(null);
   const [selectedJobOrders, setSelectedJobOrders] = useState<Set<string>>(new Set());
   const [activeTimers, setActiveTimers] = useState<{[key: string]: number}>({});
   const [currentPage, setCurrentPage] = useState(1);
@@ -64,7 +66,7 @@ export function JobOrders() {
     // Fetch active job orders
     const { data: activeData } = await supabase
       .from("job_orders")
-      .select("id,job_number,title,status,priority,scheduled_date,created_at,started_at,total_active_minutes,last_resume_at,mechanic_ids,trucks(code),description")
+      .select("id,job_number,title,status,priority,scheduled_date,created_at,started_at,total_active_minutes,last_resume_at,mechanic_ids,mechanic_comments,description,truck_id,trucks(code)")
       .in("status", ["pending", "in_progress", "suspended"])
       .order("created_at", { ascending: false })
       .limit(MAX_ITEMS);
@@ -72,7 +74,7 @@ export function JobOrders() {
     // Fetch completed job orders
     const { data: completedData } = await supabase
       .from("job_orders")
-      .select("id,job_number,title,status,priority,scheduled_date,created_at,completed_at,total_active_minutes,mechanic_ids,trucks(code)")
+      .select("id,job_number,title,status,priority,scheduled_date,created_at,completed_at,total_active_minutes,mechanic_ids,description,mechanic_comments,truck_id,trucks(code)")
       .eq("status", "completed")
       .order("completed_at", { ascending: false })
       .limit(MAX_ITEMS);
@@ -273,6 +275,13 @@ export function JobOrders() {
         const servicesList = (services || []).map(s => 
           `${s.service_type} - ${s.provider_name || 'N/A'} (₱${(s.cost || 0).toFixed(2)})`
         ).join("; ");
+        
+        // Extract comments from mechanic_comments and description
+        const mechanicComments = (job.mechanic_comments || []).map((c: any) => 
+          `[${format(new Date(c.created_at), 'MMM dd HH:mm')}] ${c.user_name}: ${c.comment}`
+        ).join(" | ");
+        
+        const descriptionText = job.description || 'N/A';
 
         allData.push({
           'Job Order #': job.job_number,
@@ -290,7 +299,9 @@ export function JobOrders() {
           'Consumables Cost': `₱${consumableCost.toFixed(2)}`,
           'Third-Party Services': servicesList || 'None',
           'Services Cost': `₱${serviceCost.toFixed(2)}`,
-          'Total Cost': `₱${totalCost.toFixed(2)}`
+          'Total Cost': `₱${totalCost.toFixed(2)}`,
+          'Description & Remarks': descriptionText,
+          'Mechanic Comments': mechanicComments || 'No comments'
         });
       }
 
@@ -405,6 +416,14 @@ export function JobOrders() {
                             onClick={() => setExpandedJobId(expandedJobId === job.id ? null : job.id)}
                           >
                             <Eye className="h-4 w-4 mr-1" /> Services
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCommentingJob(job)}
+                          >
+                            <MessageSquare className="h-4 w-4 mr-1" /> 
+                            Comments {job.mechanic_comments?.length > 0 && `(${job.mechanic_comments.length})`}
                           </Button>
                           {job.status === "pending" && (
                             <Button
@@ -651,6 +670,15 @@ export function JobOrders() {
           job={viewingJob}
           open={!!viewingJob}
           onOpenChange={(open) => !open && setViewingJob(null)}
+        />
+      )}
+
+      {commentingJob && (
+        <JobOrderCommentsDialog
+          job={commentingJob}
+          open={!!commentingJob}
+          onOpenChange={(open) => !open && setCommentingJob(null)}
+          onSuccess={fetchJobOrders}
         />
       )}
     </Tabs>
