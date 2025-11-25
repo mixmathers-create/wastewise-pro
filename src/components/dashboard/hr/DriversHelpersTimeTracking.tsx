@@ -374,25 +374,85 @@ export default function DriversHelpersTimeTracking() {
 
       if (error) throw error;
 
-      const csv = [
-        ["Personnel Name", "Type", "Time In", "Time Out", "Total Time", "Group Session ID"].join(","),
+      // Calculate total hours and minutes per person
+      interface PersonnelTotal {
+        name: string;
+        type: string;
+        totalMinutes: number;
+        logs: any[];
+      }
+      
+      const personnelTotals: Record<string, PersonnelTotal> = (data || []).reduce((acc, log) => {
+        if (!log.time_out) return acc; // Skip active logs
+        
+        const start = new Date(log.time_in);
+        const end = new Date(log.time_out);
+        const totalMinutes = Math.floor((end.getTime() - start.getTime()) / (1000 * 60));
+        
+        const key = `${log.personnel_id}-${log.personnel_name}`;
+        if (!acc[key]) {
+          acc[key] = {
+            name: log.personnel_name,
+            type: log.personnel_type,
+            totalMinutes: 0,
+            logs: []
+          };
+        }
+        acc[key].totalMinutes += totalMinutes;
+        acc[key].logs.push(log);
+        
+        return acc;
+      }, {} as Record<string, PersonnelTotal>);
+
+      // Create detailed CSV with individual logs
+      const detailedCsv = [
+        ["Personnel Name", "Type", "Time In", "Time Out", "Duration", "Vehicle", "Group Session ID"].join(","),
         ...(data || []).map(log => [
           log.personnel_name,
           log.personnel_type,
           format(new Date(log.time_in), "yyyy-MM-dd HH:mm:ss"),
           log.time_out ? format(new Date(log.time_out), "yyyy-MM-dd HH:mm:ss") : "Active",
           calculateTotalTime(log.time_in, log.time_out),
+          log.truck_id || "N/A",
           log.group_session_id || "N/A"
         ].join(","))
       ].join("\n");
 
-      const blob = new Blob([csv], { type: "text/csv" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `personnel-time-logs-${exportStartDate}-to-${exportEndDate}.csv`;
-      a.click();
-      toast.success("Time logs exported");
+      // Create summary CSV with totals per person
+      const summaryCsv = [
+        ["Personnel Name", "Type", "Total Hours", "Total Minutes", "Number of Sessions"].join(","),
+        ...Object.values(personnelTotals).map((person) => {
+          const hours = Math.floor(person.totalMinutes / 60);
+          const minutes = person.totalMinutes % 60;
+          return [
+            person.name,
+            person.type,
+            hours.toString(),
+            minutes.toString(),
+            person.logs.length.toString()
+          ].join(",");
+        })
+      ].join("\n");
+
+      // Export detailed logs
+      const detailedBlob = new Blob([detailedCsv], { type: "text/csv" });
+      const detailedUrl = window.URL.createObjectURL(detailedBlob);
+      const detailedLink = document.createElement("a");
+      detailedLink.href = detailedUrl;
+      detailedLink.download = `personnel-time-logs-detailed-${exportStartDate}-to-${exportEndDate}.csv`;
+      detailedLink.click();
+
+      // Export summary
+      setTimeout(() => {
+        const summaryBlob = new Blob([summaryCsv], { type: "text/csv" });
+        const summaryUrl = window.URL.createObjectURL(summaryBlob);
+        const summaryLink = document.createElement("a");
+        summaryLink.href = summaryUrl;
+        summaryLink.download = `personnel-time-logs-summary-${exportStartDate}-to-${exportEndDate}.csv`;
+        summaryLink.click();
+      }, 500);
+
+      toast.success("Time logs exported (detailed + summary)");
     } catch (error) {
       console.error("Error exporting:", error);
       toast.error("Failed to export time logs");
