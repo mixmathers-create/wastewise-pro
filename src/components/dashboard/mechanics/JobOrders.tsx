@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, CheckCircle2, PauseCircle, Trash2, Play, Download, FileSpreadsheet, Wrench, Eye } from "lucide-react";
+import { Plus, CheckCircle2, PauseCircle, Trash2, Play, Download, FileSpreadsheet, Wrench, Eye, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { generateCSV, downloadCSV } from "@/lib/csvUtils";
 import { CreateJobOrderDialog } from "./CreateJobOrderDialog";
@@ -14,18 +15,22 @@ import { SuspendJobOrderDialog } from "./SuspendJobOrderDialog";
 import { ExportJobOrderDialog } from "./ExportJobOrderDialog";
 import { AddServiceDialog } from "./AddServiceDialog";
 import { ServicesList } from "./ServicesList";
+import { ViewJobOrderDialog } from "./ViewJobOrderDialog";
 
 export function JobOrders() {
   const [jobOrders, setJobOrders] = useState<any[]>([]);
+  const [completedJobOrders, setCompletedJobOrders] = useState<any[]>([]);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [completingJob, setCompletingJob] = useState<any>(null);
   const [suspendingJob, setSuspendingJob] = useState<any>(null);
   const [exportingJob, setExportingJob] = useState<any>(null);
   const [addingServiceToJob, setAddingServiceToJob] = useState<string | null>(null);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [viewingJob, setViewingJob] = useState<any>(null);
   const [selectedJobOrders, setSelectedJobOrders] = useState<Set<string>>(new Set());
   const [activeTimers, setActiveTimers] = useState<{[key: string]: number}>({});
   const [currentPage, setCurrentPage] = useState(1);
+  const [completedCurrentPage, setCompletedCurrentPage] = useState(1);
   const { toast } = useToast();
   
   const ITEMS_PER_PAGE = 5;
@@ -56,15 +61,25 @@ export function JobOrders() {
   };
 
   const fetchJobOrders = async () => {
-    const { data } = await supabase
+    // Fetch active job orders
+    const { data: activeData } = await supabase
       .from("job_orders")
-      .select("id,job_number,title,status,priority,scheduled_date,created_at,started_at,total_active_minutes,last_resume_at,mechanic_ids,trucks(code)")
+      .select("id,job_number,title,status,priority,scheduled_date,created_at,started_at,total_active_minutes,last_resume_at,mechanic_ids,trucks(code),description")
+      .in("status", ["pending", "in_progress", "suspended"])
       .order("created_at", { ascending: false })
       .limit(MAX_ITEMS);
     
-    // Fetch mechanics for each job order in a single query
-    if (data && data.length > 0) {
-      const allMechanicIds = [...new Set(data.flatMap(job => job.mechanic_ids || []))];
+    // Fetch completed job orders
+    const { data: completedData } = await supabase
+      .from("job_orders")
+      .select("id,job_number,title,status,priority,scheduled_date,created_at,completed_at,total_active_minutes,mechanic_ids,trucks(code)")
+      .eq("status", "completed")
+      .order("completed_at", { ascending: false })
+      .limit(MAX_ITEMS);
+    
+    // Process active job orders
+    if (activeData && activeData.length > 0) {
+      const allMechanicIds = [...new Set(activeData.flatMap(job => job.mechanic_ids || []))];
       
       if (allMechanicIds.length > 0) {
         const { data: mechanicsData } = await supabase
@@ -74,17 +89,42 @@ export function JobOrders() {
         
         const mechanicsMap = new Map(mechanicsData?.map(m => [m.id, m]) || []);
         
-        const jobOrdersWithMechanics = data.map(job => ({
+        const jobOrdersWithMechanics = activeData.map(job => ({
           ...job,
           mechanics: (job.mechanic_ids || []).map(id => mechanicsMap.get(id)).filter(Boolean)
         }));
         
         setJobOrders(jobOrdersWithMechanics);
       } else {
-        setJobOrders(data);
+        setJobOrders(activeData);
       }
     } else {
       setJobOrders([]);
+    }
+
+    // Process completed job orders
+    if (completedData && completedData.length > 0) {
+      const allCompletedMechanicIds = [...new Set(completedData.flatMap(job => job.mechanic_ids || []))];
+      
+      if (allCompletedMechanicIds.length > 0) {
+        const { data: mechanicsData } = await supabase
+          .from("mechanics")
+          .select("id,name")
+          .in("id", allCompletedMechanicIds);
+        
+        const mechanicsMap = new Map(mechanicsData?.map(m => [m.id, m]) || []);
+        
+        const completedWithMechanics = completedData.map(job => ({
+          ...job,
+          mechanics: (job.mechanic_ids || []).map(id => mechanicsMap.get(id)).filter(Boolean)
+        }));
+        
+        setCompletedJobOrders(completedWithMechanics);
+      } else {
+        setCompletedJobOrders(completedData);
+      }
+    } else {
+      setCompletedJobOrders([]);
     }
   };
 
@@ -264,150 +304,260 @@ export function JobOrders() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Job Orders</CardTitle>
-          <div className="flex gap-2">
-            {selectedJobOrders.size > 0 && (
-              <Button variant="outline" onClick={handleMassExport}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" /> Export Selected ({selectedJobOrders.size})
-              </Button>
-            )}
-            <Button onClick={() => setShowCreateDialog(true)}>
-              <Plus className="h-4 w-4 mr-2" /> Create Job Order
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-12">
-                <Checkbox 
-                  checked={selectedJobOrders.size === jobOrders.length && jobOrders.length > 0}
-                  onCheckedChange={toggleAllSelection}
-                />
-              </TableHead>
-              <TableHead>Job #</TableHead>
-              <TableHead>Title</TableHead>
-              <TableHead>Truck</TableHead>
-              <TableHead>Mechanic</TableHead>
-              <TableHead>Priority</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Time Elapsed</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {jobOrders.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((job) => (
-              <>
-                <TableRow key={job.id}>
-                  <TableCell>
+    <Tabs defaultValue="active" className="w-full">
+      <TabsList className="grid w-full grid-cols-2">
+        <TabsTrigger value="active">Active Job Orders ({jobOrders.length})</TabsTrigger>
+        <TabsTrigger value="completed">Completed Job Orders ({completedJobOrders.length})</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="active">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Active Job Orders</CardTitle>
+              <div className="flex gap-2">
+                {selectedJobOrders.size > 0 && (
+                  <Button variant="outline" onClick={handleMassExport}>
+                    <FileSpreadsheet className="h-4 w-4 mr-2" /> Export Selected ({selectedJobOrders.size})
+                  </Button>
+                )}
+                <Button onClick={() => setShowCreateDialog(true)}>
+                  <Plus className="h-4 w-4 mr-2" /> Create Job Order
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
                     <Checkbox 
-                      checked={selectedJobOrders.has(job.id)}
-                      onCheckedChange={() => toggleJobOrderSelection(job.id)}
+                      checked={selectedJobOrders.size === jobOrders.length && jobOrders.length > 0}
+                      onCheckedChange={toggleAllSelection}
                     />
-                  </TableCell>
-                  <TableCell className="font-mono">{job.job_number}</TableCell>
-                  <TableCell className="font-medium">{job.title}</TableCell>
-                  <TableCell>{job.trucks?.code || "N/A"}</TableCell>
-                  <TableCell>
-                    {job.mechanics && job.mechanics.length > 0 
-                      ? job.mechanics.map((m: any) => m.name).join(", ")
-                      : "Unassigned"}
-                  </TableCell>
-                  <TableCell>
-                    <span className={`px-2 py-1 rounded text-xs ${
-                      job.priority === "high" ? "bg-red-100 text-red-800" :
-                      job.priority === "medium" ? "bg-yellow-100 text-yellow-800" :
-                      "bg-green-100 text-green-800"
-                    }`}>
-                      {job.priority}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className={`px-2 py-1 rounded text-xs ${
-                      job.status === "completed" ? "bg-green-100 text-green-800" :
-                      job.status === "suspended" ? "bg-orange-100 text-orange-800" :
-                      job.status === "in_progress" ? "bg-blue-100 text-blue-800" :
-                      "bg-gray-100 text-gray-800"
-                    }`}>
-                      {job.status.replace('_', ' ')}
-                    </span>
-                  </TableCell>
-                  <TableCell className="font-mono">
-                    {job.status === 'in_progress' && activeTimers[job.id] 
-                      ? formatTime(activeTimers[job.id])
-                      : job.total_active_minutes 
-                      ? formatTime(job.total_active_minutes * 60)
-                      : '00:00:00'}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2 flex-wrap">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setExpandedJobId(expandedJobId === job.id ? null : job.id)}
-                      >
-                        <Eye className="h-4 w-4 mr-1" /> Services
-                      </Button>
-                      {job.status === "pending" && (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => handleStart(job)}
-                        >
-                          <Play className="h-4 w-4 mr-1" /> Start
-                        </Button>
-                      )}
-                      {(job.status === "in_progress" || job.status === "suspended") && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setAddingServiceToJob(job.id)}
-                        >
-                          <Wrench className="h-4 w-4 mr-1" /> Add Service
-                        </Button>
-                      )}
-                      {job.status === "in_progress" && (
-                        <>
+                  </TableHead>
+                  <TableHead>Job #</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Truck</TableHead>
+                  <TableHead>Mechanic</TableHead>
+                  <TableHead>Priority</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Time Elapsed</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {jobOrders.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((job) => (
+                  <>
+                    <TableRow key={job.id}>
+                      <TableCell>
+                        <Checkbox 
+                          checked={selectedJobOrders.has(job.id)}
+                          onCheckedChange={() => toggleJobOrderSelection(job.id)}
+                        />
+                      </TableCell>
+                      <TableCell className="font-mono">{job.job_number}</TableCell>
+                      <TableCell className="font-medium">{job.title}</TableCell>
+                      <TableCell>{job.trucks?.code || "N/A"}</TableCell>
+                      <TableCell>
+                        {job.mechanics && job.mechanics.length > 0 
+                          ? job.mechanics.map((m: any) => m.name).join(", ")
+                          : "Unassigned"}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          job.priority === "high" ? "bg-red-100 text-red-800" :
+                          job.priority === "medium" ? "bg-yellow-100 text-yellow-800" :
+                          "bg-green-100 text-green-800"
+                        }`}>
+                          {job.priority}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          job.status === "suspended" ? "bg-orange-100 text-orange-800" :
+                          job.status === "in_progress" ? "bg-blue-100 text-blue-800" :
+                          "bg-gray-100 text-gray-800"
+                        }`}>
+                          {job.status.replace('_', ' ')}
+                        </span>
+                      </TableCell>
+                      <TableCell className="font-mono">
+                        {job.status === 'in_progress' && activeTimers[job.id] 
+                          ? formatTime(activeTimers[job.id])
+                          : job.total_active_minutes 
+                          ? formatTime(job.total_active_minutes * 60)
+                          : '00:00:00'}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2 flex-wrap">
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setCompletingJob(job)}
+                            onClick={() => setViewingJob(job)}
                           >
-                            <CheckCircle2 className="h-4 w-4 mr-1" /> Complete
+                            <FileText className="h-4 w-4 mr-1" /> View
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setSuspendingJob(job)}
+                            onClick={() => setExpandedJobId(expandedJobId === job.id ? null : job.id)}
                           >
-                            <PauseCircle className="h-4 w-4 mr-1" /> Suspend
+                            <Eye className="h-4 w-4 mr-1" /> Services
                           </Button>
-                        </>
-                      )}
-                      {job.status === "suspended" && (
-                        <>
+                          {job.status === "pending" && (
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => handleStart(job)}
+                            >
+                              <Play className="h-4 w-4 mr-1" /> Start
+                            </Button>
+                          )}
+                          {(job.status === "in_progress" || job.status === "suspended") && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setAddingServiceToJob(job.id)}
+                            >
+                              <Wrench className="h-4 w-4 mr-1" /> Add Service
+                            </Button>
+                          )}
+                          {job.status === "in_progress" && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setCompletingJob(job)}
+                              >
+                                <CheckCircle2 className="h-4 w-4 mr-1" /> Complete
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSuspendingJob(job)}
+                              >
+                                <PauseCircle className="h-4 w-4 mr-1" /> Suspend
+                              </Button>
+                            </>
+                          )}
+                          {job.status === "suspended" && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => handleStart(job)}
+                              >
+                                <Play className="h-4 w-4 mr-1" /> Resume
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setCompletingJob(job)}
+                              >
+                                <CheckCircle2 className="h-4 w-4 mr-1" /> Complete
+                              </Button>
+                            </>
+                          )}
                           <Button
                             size="sm"
-                            variant="default"
-                            onClick={() => handleStart(job)}
+                            variant="ghost"
+                            onClick={() => handleDelete(job.id)}
                           >
-                            <Play className="h-4 w-4 mr-1" /> Resume
+                            <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCompletingJob(job)}
-                          >
-                            <CheckCircle2 className="h-4 w-4 mr-1" /> Complete
-                          </Button>
-                        </>
-                      )}
-                      {job.status === "completed" && (
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {expandedJobId === job.id && (
+                      <TableRow>
+                        <TableCell colSpan={9} className="bg-muted/50">
+                          <ServicesList 
+                            jobOrderId={job.id} 
+                            onServicesUpdate={fetchJobOrders}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </>
+                ))}
+              </TableBody>
+            </Table>
+            {jobOrders.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentPage} of {Math.ceil(jobOrders.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(jobOrders.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={currentPage >= Math.ceil(jobOrders.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="completed">
+        <Card>
+          <CardHeader>
+            <CardTitle>Completed Job Orders</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Job #</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Truck</TableHead>
+                  <TableHead>Mechanic</TableHead>
+                  <TableHead>Priority</TableHead>
+                  <TableHead>Completed</TableHead>
+                  <TableHead>Total Time</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {completedJobOrders.slice((completedCurrentPage - 1) * ITEMS_PER_PAGE, completedCurrentPage * ITEMS_PER_PAGE).map((job) => (
+                  <TableRow key={job.id}>
+                    <TableCell className="font-mono">{job.job_number}</TableCell>
+                    <TableCell className="font-medium">{job.title}</TableCell>
+                    <TableCell>{job.trucks?.code || "N/A"}</TableCell>
+                    <TableCell>
+                      {job.mechanics && job.mechanics.length > 0 
+                        ? job.mechanics.map((m: any) => m.name).join(", ")
+                        : "Unassigned"}
+                    </TableCell>
+                    <TableCell>
+                      <span className={`px-2 py-1 rounded text-xs ${
+                        job.priority === "high" ? "bg-red-100 text-red-800" :
+                        job.priority === "medium" ? "bg-yellow-100 text-yellow-800" :
+                        "bg-green-100 text-green-800"
+                      }`}>
+                        {job.priority}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {job.completed_at ? format(new Date(job.completed_at), "MMM dd, yyyy HH:mm") : "N/A"}
+                    </TableCell>
+                    <TableCell className="font-mono">
+                      {job.total_active_minutes ? formatTime(job.total_active_minutes * 60) : '00:00:00'}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
                         <Button
                           size="sm"
                           variant="outline"
@@ -415,55 +565,45 @@ export function JobOrders() {
                         >
                           <Download className="h-4 w-4 mr-1" /> Export
                         </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleDelete(job.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-                {expandedJobId === job.id && (
-                  <TableRow>
-                    <TableCell colSpan={9} className="bg-muted/50">
-                      <ServicesList 
-                        jobOrderId={job.id} 
-                        onServicesUpdate={fetchJobOrders}
-                      />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDelete(job.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
-                )}
-              </>
-            ))}
-          </TableBody>
-        </Table>
-        {jobOrders.length > ITEMS_PER_PAGE && (
-          <div className="flex justify-center items-center gap-2 mt-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-            >
-              Previous
-            </Button>
-            <span className="text-sm text-muted-foreground">
-              Page {currentPage} of {Math.ceil(jobOrders.length / ITEMS_PER_PAGE)}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(p => Math.min(Math.ceil(jobOrders.length / ITEMS_PER_PAGE), p + 1))}
-              disabled={currentPage >= Math.ceil(jobOrders.length / ITEMS_PER_PAGE)}
-            >
-              Next
-            </Button>
-          </div>
-        )}
-      </CardContent>
+                ))}
+              </TableBody>
+            </Table>
+            {completedJobOrders.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCompletedCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={completedCurrentPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {completedCurrentPage} of {Math.ceil(completedJobOrders.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCompletedCurrentPage(p => Math.min(Math.ceil(completedJobOrders.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={completedCurrentPage >= Math.ceil(completedJobOrders.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
 
       <CreateJobOrderDialog
         open={showCreateDialog}
@@ -505,6 +645,14 @@ export function JobOrders() {
           onSuccess={fetchJobOrders}
         />
       )}
-    </Card>
+
+      {viewingJob && (
+        <ViewJobOrderDialog
+          job={viewingJob}
+          open={!!viewingJob}
+          onOpenChange={(open) => !open && setViewingJob(null)}
+        />
+      )}
+    </Tabs>
   );
 }

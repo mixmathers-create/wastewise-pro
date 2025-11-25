@@ -52,6 +52,22 @@ export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: C
       return;
     }
 
+    // Check if any tools were used for this job order
+    const { data: toolCheckouts } = await supabase
+      .from("tool_checkouts")
+      .select("id")
+      .eq("job_order_id", job.id)
+      .limit(1);
+
+    if (!toolCheckouts || toolCheckouts.length === 0) {
+      toast({ 
+        title: "Cannot Complete", 
+        description: "At least one tool must be checked out for this job order before completion", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
     try {
       // Calculate final active time
       let totalMinutes = job.total_active_minutes || 0;
