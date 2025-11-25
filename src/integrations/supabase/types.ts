@@ -764,6 +764,48 @@ export type Database = {
         }
         Relationships: []
       }
+      personnel_time_logs: {
+        Row: {
+          created_at: string
+          group_session_id: string | null
+          id: string
+          latitude: number | null
+          longitude: number | null
+          personnel_id: string
+          personnel_name: string
+          personnel_type: string
+          photo_url: string | null
+          time_in: string
+          time_out: string | null
+        }
+        Insert: {
+          created_at?: string
+          group_session_id?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          personnel_id: string
+          personnel_name: string
+          personnel_type: string
+          photo_url?: string | null
+          time_in?: string
+          time_out?: string | null
+        }
+        Update: {
+          created_at?: string
+          group_session_id?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          personnel_id?: string
+          personnel_name?: string
+          personnel_type?: string
+          photo_url?: string | null
+          time_in?: string
+          time_out?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
