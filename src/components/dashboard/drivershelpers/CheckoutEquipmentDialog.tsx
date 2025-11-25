@@ -36,24 +36,24 @@ export function CheckoutEquipmentDialog({ open, onOpenChange, onSuccess }: Check
   const fetchEquipment = async () => {
     const { data } = await supabase
       .from("equipment_inventory")
-      .select("*")
+      .select("id,name,code,type,quantity,status")
       .eq("status", "available")
       .order("name");
     setEquipment(data || []);
   };
 
   const fetchDrivers = async () => {
-    const { data } = await supabase.from("drivers").select("*").order("name");
+    const { data } = await supabase.from("drivers").select("id,name").order("name");
     setDrivers(data || []);
   };
 
   const fetchHelpers = async () => {
-    const { data } = await supabase.from("helpers").select("*").order("name");
+    const { data } = await supabase.from("helpers").select("id,name").order("name");
     setHelpers(data || []);
   };
 
   const fetchMechanics = async () => {
-    const { data } = await supabase.from("mechanics").select("*").order("name");
+    const { data } = await supabase.from("mechanics").select("id,name").order("name");
     setMechanics(data || []);
   };
 

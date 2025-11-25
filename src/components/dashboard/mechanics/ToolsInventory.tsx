@@ -50,7 +50,7 @@ export function ToolsInventory() {
   const fetchTools = async () => {
     const { data, error } = await supabase
       .from("tools")
-      .select("*")
+      .select("id,name,code,category,condition,status")
       .eq("status", "available")
       .order("name")
       .limit(MAX_ITEMS);
@@ -65,7 +65,7 @@ export function ToolsInventory() {
     const { data } = await supabase
       .from("tool_checkouts")
       .select(`
-        *,
+        id,checked_out_at,checked_in_at,status,
         tools(name, code),
         job_orders(job_number, trucks(code, plate_number))
       `)
@@ -77,7 +77,7 @@ export function ToolsInventory() {
   const fetchJobOrders = async () => {
     const { data } = await supabase
       .from("job_orders")
-      .select("*")
+      .select("id,job_number,mechanic_ids")
       .in("status", ["pending", "in_progress"])
       .order("created_at", { ascending: false });
     setJobOrders(data || []);

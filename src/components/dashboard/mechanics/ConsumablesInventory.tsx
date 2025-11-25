@@ -37,7 +37,7 @@ export function ConsumablesInventory() {
   const fetchConsumables = async () => {
     const { data, error } = await supabase
       .from("mechanic_consumables")
-      .select("*")
+      .select("id,code,name,category,unit,quantity,min_stock_level,status,unit_cost")
       .order("name")
       .limit(MAX_ITEMS);
     if (error) {
@@ -55,7 +55,7 @@ export function ConsumablesInventory() {
     const { data } = await supabase
       .from("mechanic_consumable_checkouts")
       .select(`
-        *,
+        id,quantity_used,checked_out_at,notes,
         mechanic_consumables(name, code, unit),
         mechanics(name, id_number),
         trucks(code, plate_number),

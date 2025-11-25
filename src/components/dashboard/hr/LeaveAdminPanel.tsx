@@ -45,8 +45,9 @@ const LeaveAdminPanel = () => {
       setLoading(true);
       const { data, error } = await supabase
         .from("leaves")
-        .select("*")
-        .order("created_at", { ascending: false });
+        .select("id,personnel_id,personnel_id_number,personnel_name,personnel_type,leave_type,start_date,end_date,leave_days,status,reason,is_paid,created_at,reviewed_by,reviewed_at,review_notes,medical_certificate_url")
+        .order("created_at", { ascending: false })
+        .limit(100);
 
       if (error) throw error;
       setLeaves(data || []);

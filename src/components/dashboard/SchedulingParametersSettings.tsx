@@ -31,7 +31,7 @@ export const SchedulingParametersSettings = () => {
       console.log('[SchedulingParametersSettings] Fetching parameters from database...');
       const { data, error } = await supabase
         .from("scheduling_parameters")
-        .select("*")
+        .select("id,parameter_key,parameter_value,description")
         .order("parameter_key");
 
       if (error) {

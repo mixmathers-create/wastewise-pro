@@ -29,7 +29,7 @@ export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: C
   const checkUnpaidServices = async () => {
     const { data } = await supabase
       .from("job_order_services")
-      .select("*")
+      .select("id,service_type,cost")
       .eq("job_order_id", job.id)
       .or("cost.is.null,cost.eq.0");
     

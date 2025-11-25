@@ -20,7 +20,12 @@ export default function EquipmentInventory() {
   const [editingEquipment, setEditingEquipment] = useState<any>(null);
   const [showCheckoutDialog, setShowCheckoutDialog] = useState(false);
   const [checkinEquipment, setCheckinEquipment] = useState<any>(null);
+  const [inventoryPage, setInventoryPage] = useState(1);
+  const [checkoutsPage, setCheckoutsPage] = useState(1);
   const { toast } = useToast();
+  
+  const ITEMS_PER_PAGE = 5;
+  const MAX_ITEMS = 100;
 
   useEffect(() => {
     fetchEquipment();
@@ -30,8 +35,9 @@ export default function EquipmentInventory() {
   const fetchEquipment = async () => {
     const { data, error } = await supabase
       .from("equipment_inventory")
-      .select("*")
-      .order("name");
+      .select("id,code,name,type,quantity,status,is_consumable")
+      .order("name")
+      .limit(MAX_ITEMS);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -43,12 +49,13 @@ export default function EquipmentInventory() {
     const { data } = await supabase
       .from("equipment_checkouts")
       .select(`
-        *,
+        id,checked_out_at,checked_in_at,status,quantity,notes,
         equipment_inventory(name, code, type, is_consumable),
         drivers(name),
         helpers(name)
       `)
-      .order("checked_out_at", { ascending: false });
+      .order("checked_out_at", { ascending: false })
+      .limit(100);
     setCheckouts(data || []);
   };
 
@@ -133,7 +140,7 @@ export default function EquipmentInventory() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {equipment.map((item) => (
+                {equipment.slice((inventoryPage - 1) * ITEMS_PER_PAGE, inventoryPage * ITEMS_PER_PAGE).map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="font-mono">{item.code}</TableCell>
                     <TableCell className="font-medium">{item.name}</TableCell>
@@ -168,6 +175,29 @@ export default function EquipmentInventory() {
                 ))}
               </TableBody>
             </Table>
+            {equipment.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInventoryPage(p => Math.max(1, p - 1))}
+                  disabled={inventoryPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {inventoryPage} of {Math.ceil(equipment.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInventoryPage(p => Math.min(Math.ceil(equipment.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={inventoryPage >= Math.ceil(equipment.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </TabsContent>
@@ -202,7 +232,7 @@ export default function EquipmentInventory() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {checkouts.map((checkout) => (
+                {checkouts.slice((checkoutsPage - 1) * ITEMS_PER_PAGE, checkoutsPage * ITEMS_PER_PAGE).map((checkout) => (
                   <TableRow key={checkout.id}>
                     <TableCell className="font-mono">
                       {checkout.equipment_inventory?.code} - {checkout.equipment_inventory?.name}
@@ -244,6 +274,29 @@ export default function EquipmentInventory() {
                 ))}
               </TableBody>
             </Table>
+            {checkouts.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCheckoutsPage(p => Math.max(1, p - 1))}
+                  disabled={checkoutsPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {checkoutsPage} of {Math.ceil(checkouts.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCheckoutsPage(p => Math.min(Math.ceil(checkouts.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={checkoutsPage >= Math.ceil(checkouts.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </TabsContent>
