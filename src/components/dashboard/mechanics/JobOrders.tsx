@@ -580,6 +580,13 @@ export function JobOrders() {
                         <Button
                           size="sm"
                           variant="outline"
+                          onClick={() => setViewingJob(job)}
+                        >
+                          <Eye className="h-4 w-4 mr-1" /> View
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
                           onClick={() => setExportingJob(job)}
                         >
                           <Download className="h-4 w-4 mr-1" /> Export
