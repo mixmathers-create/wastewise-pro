@@ -163,6 +163,7 @@ export type Database = {
           status: string | null
           suspension_end_date: string | null
           suspension_start_date: string | null
+          team_id: string | null
         }
         Insert: {
           availability?: Json | null
@@ -179,6 +180,7 @@ export type Database = {
           status?: string | null
           suspension_end_date?: string | null
           suspension_start_date?: string | null
+          team_id?: string | null
         }
         Update: {
           availability?: Json | null
@@ -195,6 +197,7 @@ export type Database = {
           status?: string | null
           suspension_end_date?: string | null
           suspension_start_date?: string | null
+          team_id?: string | null
         }
         Relationships: []
       }
@@ -320,6 +323,7 @@ export type Database = {
           status: string | null
           suspension_end_date: string | null
           suspension_start_date: string | null
+          team_id: string | null
         }
         Insert: {
           address?: string | null
@@ -335,6 +339,7 @@ export type Database = {
           status?: string | null
           suspension_end_date?: string | null
           suspension_start_date?: string | null
+          team_id?: string | null
         }
         Update: {
           address?: string | null
@@ -350,6 +355,7 @@ export type Database = {
           status?: string | null
           suspension_end_date?: string | null
           suspension_start_date?: string | null
+          team_id?: string | null
         }
         Relationships: []
       }
@@ -775,6 +781,7 @@ export type Database = {
           personnel_name: string
           personnel_type: string
           photo_url: string | null
+          team_id: string | null
           time_in: string
           time_out: string | null
           truck_id: string | null
@@ -789,6 +796,7 @@ export type Database = {
           personnel_name: string
           personnel_type: string
           photo_url?: string | null
+          team_id?: string | null
           time_in?: string
           time_out?: string | null
           truck_id?: string | null
@@ -803,6 +811,7 @@ export type Database = {
           personnel_name?: string
           personnel_type?: string
           photo_url?: string | null
+          team_id?: string | null
           time_in?: string
           time_out?: string | null
           truck_id?: string | null
@@ -1140,6 +1149,7 @@ export type Database = {
           id: string
           plate_number: string | null
           status: string | null
+          team_id: string | null
           type: string
         }
         Insert: {
@@ -1149,6 +1159,7 @@ export type Database = {
           id?: string
           plate_number?: string | null
           status?: string | null
+          team_id?: string | null
           type: string
         }
         Update: {
@@ -1158,6 +1169,7 @@ export type Database = {
           id?: string
           plate_number?: string | null
           status?: string | null
+          team_id?: string | null
           type?: string
         }
         Relationships: []
