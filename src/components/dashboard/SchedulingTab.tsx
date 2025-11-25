@@ -171,13 +171,13 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
     setLoading(true);
     try {
       const [driversRes, helpersRes, trucksRes, clientsRes, schedulesRes, maintenanceRes, pendingRes] = await Promise.all([
-        supabase.from("drivers").select("*"),
-        supabase.from("helpers").select("*"),
-        supabase.from("trucks").select("*"),
-        supabase.from("clients").select("*"),
-        supabase.from("schedules").select("*").in("status", ["approved", "scheduled"]),
-        supabase.from("truck_maintenance_blocks").select("*"),
-        supabase.from("schedules").select("*").eq("status", "draft")
+        supabase.from("drivers").select("id,name,status,availability,license_expiry_date"),
+        supabase.from("helpers").select("id,name,status,availability"),
+        supabase.from("trucks").select("id,code,plate_number,status,capacity"),
+        supabase.from("clients").select("id,name,collection_days,collection_shift,mt_requirement,status"),
+        supabase.from("schedules").select("id,date,shift,driver_id,helper_ids,truck_id,client_ids,status,mt_requirement,is_backup").in("status", ["approved", "scheduled"]),
+        supabase.from("truck_maintenance_blocks").select("truck_id,start_date,end_date,reason"),
+        supabase.from("schedules").select("id,date,shift,driver_id,helper_ids,truck_id,client_ids,status,mt_requirement").eq("status", "draft")
       ]);
 
       if (driversRes.data) setDrivers(driversRes.data as any);

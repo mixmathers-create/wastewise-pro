@@ -50,7 +50,7 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
   const fetchDrivers = async () => {
     const { data, error } = await supabase
       .from("drivers")
-      .select("*")
+      .select("id,name,id_number,contact_number,status,birthdate,license_number,license_expiry_date,leaves_available,suspension_start_date,suspension_end_date,availability")
       .order("name");
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -62,7 +62,7 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
   const fetchHelpers = async () => {
     const { data, error } = await supabase
       .from("helpers")
-      .select("*")
+      .select("id,name,id_number,contact_number,status,birthdate,leaves_available,suspension_start_date,suspension_end_date,availability,photo_url")
       .order("name");
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -74,7 +74,7 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
   const fetchRecyclers = async () => {
     const { data, error } = await supabase
       .from("recyclers")
-      .select("*")
+      .select("id,name,id_number,contact_number,status,birthdate,leaves_available,suspension_start_date,suspension_end_date,availability,photo_url")
       .order("name");
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -86,7 +86,7 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
   const fetchManagement = async () => {
     const { data, error } = await supabase
       .from("management")
-      .select("*")
+      .select("id,name,id_number,contact_number,status,birthdate,leaves_available,suspension_start_date,suspension_end_date,availability,photo_url")
       .order("name");
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -98,7 +98,7 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
   const fetchMechanics = async () => {
     const { data, error } = await supabase
       .from("mechanics")
-      .select("*")
+      .select("id,name,id_number,contact_number,status,birthdate,leaves_available,suspension_start_date,suspension_end_date,availability,photo_url")
       .order("name");
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
