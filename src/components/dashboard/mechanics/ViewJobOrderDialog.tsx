@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ServicesList } from "./ServicesList";
+import { MessageSquare } from "lucide-react";
 
 interface ViewJobOrderDialogProps {
   job: any;
@@ -116,6 +117,28 @@ export function ViewJobOrderDialog({ job, open, onOpenChange }: ViewJobOrderDial
             <Label className="text-muted-foreground mb-2 block">Services</Label>
             <ServicesList jobOrderId={job.id} onServicesUpdate={() => {}} />
           </div>
+
+          {job.mechanic_comments && job.mechanic_comments.length > 0 && (
+            <div>
+              <Label className="text-muted-foreground mb-3 flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                Comments History
+              </Label>
+              <div className="space-y-3 max-h-64 overflow-y-auto">
+                {job.mechanic_comments.map((comment: any, idx: number) => (
+                  <div key={idx} className="border-l-2 border-primary pl-3 py-2 bg-muted/30 rounded-r">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-sm font-medium">{comment.user_name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(comment.created_at), "MMM dd, yyyy HH:mm")}
+                      </p>
+                    </div>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{comment.comment}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

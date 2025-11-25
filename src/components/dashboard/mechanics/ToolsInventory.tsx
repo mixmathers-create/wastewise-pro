@@ -65,7 +65,7 @@ export function ToolsInventory() {
     const { data } = await supabase
       .from("tool_checkouts")
       .select(`
-        id,checked_out_at,checked_in_at,status,
+        id,checked_out_at,checked_in_at,status,tool_id,
         tools(name, code),
         job_orders(job_number, trucks(code, plate_number))
       `)
