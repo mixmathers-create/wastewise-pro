@@ -73,6 +73,43 @@ export function CompleteJobOrderDialog({ job, open, onOpenChange, onSuccess }: C
 
       if (error) throw error;
 
+      // Check for related mechanical reports and close them
+      const { data: relatedReports } = await supabase
+        .from("mechanical_reports")
+        .select("*")
+        .eq("job_order_id", job.id)
+        .neq("status", "resolved");
+
+      if (relatedReports && relatedReports.length > 0) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("user_id", user?.id || "")
+          .single();
+
+        // Update each related report
+        for (const report of relatedReports) {
+          const existingComments = report.mechanic_comments || [];
+          const completionComment = {
+            user_id: user?.id || "system",
+            user_name: profile?.full_name || "System",
+            comment: `Report automatically closed: Related job order ${job.job_number} completed. ${remarks}`,
+            created_at: new Date().toISOString(),
+          };
+
+          await supabase
+            .from("mechanical_reports")
+            .update({
+              status: "resolved",
+              mechanic_comments: [...existingComments, completionComment],
+              reviewed_by: user?.id,
+              reviewed_at: new Date().toISOString(),
+            })
+            .eq("id", report.id);
+        }
+      }
+
       toast({ title: "Success", description: "Job order completed successfully" });
       onSuccess();
       onOpenChange(false);
