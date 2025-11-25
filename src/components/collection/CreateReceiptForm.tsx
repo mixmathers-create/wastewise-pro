@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, X } from "lucide-react";
+import { Camera, X, Pencil, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { App } from '@capacitor/app'; 
 import { BarcodeScanner } from '@capacitor-community/barcode-scanner';
@@ -46,6 +46,8 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const [newItem, setNewItem] = useState({ quantity: 0, unit: "kg" });
   const [signedBy, setSignedBy] = useState("");
   const [isScanning, setIsScanning] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingEntry, setEditingEntry] = useState<{ waste_type: string; quantity: number; unit: string } | null>(null);
 
   useEffect(() => {
     loadClients();
@@ -288,10 +290,54 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     toast({ title: "Item Added", description: `${newItem.quantity} ${newItem.unit} added` });
   };
 
-  const updateItem = (idx: number, field: string, value: any) => {
-    const updated = [...items];
-    updated[idx] = { ...updated[idx], [field]: value };
-    setItems(updated);
+  const handleEditEntry = (idx: number) => {
+    setEditingIndex(idx);
+    setEditingEntry({ ...tallyEntries[idx] });
+  };
+
+  const handleSaveEdit = () => {
+    if (editingIndex === null || !editingEntry) return;
+
+    if (!editingEntry.quantity || editingEntry.quantity <= 0) {
+      toast({ title: "Invalid Quantity", description: "Please enter a valid quantity", variant: "destructive" });
+      return;
+    }
+
+    const updatedTallyEntries = [...tallyEntries];
+    updatedTallyEntries[editingIndex] = editingEntry;
+    setTallyEntries(updatedTallyEntries);
+
+    // Recalculate aggregated items
+    recalculateItems(updatedTallyEntries);
+
+    setEditingIndex(null);
+    setEditingEntry(null);
+    toast({ title: "Entry Updated", description: "Waste entry has been updated" });
+  };
+
+  const handleDeleteEntry = (idx: number) => {
+    const updatedTallyEntries = tallyEntries.filter((_, i) => i !== idx);
+    setTallyEntries(updatedTallyEntries);
+
+    // Recalculate aggregated items
+    recalculateItems(updatedTallyEntries);
+
+    toast({ title: "Entry Deleted", description: "Waste entry has been removed" });
+  };
+
+  const recalculateItems = (entries: typeof tallyEntries) => {
+    const aggregated: { [key: string]: { waste_type: string; quantity: number; unit: string } } = {};
+
+    entries.forEach(entry => {
+      const key = `${entry.waste_type}-${entry.unit}`;
+      if (aggregated[key]) {
+        aggregated[key].quantity += entry.quantity;
+      } else {
+        aggregated[key] = { ...entry };
+      }
+    });
+
+    setItems(Object.values(aggregated));
   };
 
   const handleSubmit = async () => {
@@ -671,18 +717,59 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
               <Input value={signedBy} onChange={(e) => setSignedBy(e.target.value)} placeholder="Client representative name" />
             </div>
 
-            {items.length > 0 && (
+            {tallyEntries.length > 0 && (
               <div className="space-y-2 mb-3">
                 <p className="text-sm font-semibold">Added Items:</p>
-                {items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-2 bg-muted rounded-md">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{item.waste_type || "Not specified"}</p>
-                      <p className="text-xs text-muted-foreground">{item.quantity} {item.unit}</p>
-                    </div>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setItems(items.filter((_, i) => i !== idx))}>
-                      <X className="h-4 w-4" />
-                    </Button>
+                {tallyEntries.map((entry, idx) => (
+                  <div key={idx} className="p-2 bg-muted rounded-md">
+                    {editingIndex === idx ? (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs">Quantity</Label>
+                            <MobileInput
+                              type="number"
+                              value={editingEntry?.quantity.toString() || "0"}
+                              onChange={(v) => setEditingEntry(prev => prev ? { ...prev, quantity: parseFloat(v) || 0 } : null)}
+                              placeholder="0"
+                              allowDecimal={true}
+                              maxLength={8}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Unit</Label>
+                            <Select value={editingEntry?.unit} onValueChange={(v) => setEditingEntry(prev => prev ? { ...prev, unit: v } : null)}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>{units.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button type="button" variant="default" size="sm" onClick={handleSaveEdit} className="flex-1">
+                            <Check className="h-4 w-4 mr-1" />
+                            Save
+                          </Button>
+                          <Button type="button" variant="outline" size="sm" onClick={() => { setEditingIndex(null); setEditingEntry(null); }}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between items-center">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{entry.waste_type || "Not specified"}</p>
+                          <p className="text-xs text-muted-foreground">{entry.quantity} {entry.unit}</p>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button type="button" variant="ghost" size="sm" onClick={() => handleEditEntry(idx)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => handleDeleteEntry(idx)}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
