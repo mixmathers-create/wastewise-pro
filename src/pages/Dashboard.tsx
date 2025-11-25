@@ -1,21 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Recycle, LogOut, QrCode, Users, Truck, UserCog, BarChart3, Settings, Calendar, Wrench, Briefcase } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import CollectionsTab from "@/components/dashboard/CollectionsTab";
-import ClientsTab from "@/components/dashboard/ClientsTab";
-import TrucksTab from "@/components/dashboard/TrucksTab";
-import DriversHelpersTab from "@/components/dashboard/DriversHelpersTab";
-import AnalyticsTab from "@/components/dashboard/AnalyticsTab";
-import SettingsTab from "@/components/dashboard/SettingsTab";
-import SchedulingTab from "@/components/dashboard/SchedulingTab";
-import EnhancedAnalyticsTab from "@/components/dashboard/EnhancedAnalyticsTab";
-import EnhancedSettingsTab from "@/components/dashboard/EnhancedSettingsTab";
-import { MechanicsTab } from "@/components/dashboard/MechanicsTab";
-import { HRTab } from "@/components/dashboard/HRTab";
+
+// Lazy load tab components for better performance
+const CollectionsTab = lazy(() => import("@/components/dashboard/CollectionsTab"));
+const ClientsTab = lazy(() => import("@/components/dashboard/ClientsTab"));
+const TrucksTab = lazy(() => import("@/components/dashboard/TrucksTab"));
+const DriversHelpersTab = lazy(() => import("@/components/dashboard/DriversHelpersTab"));
+const SchedulingTab = lazy(() => import("@/components/dashboard/SchedulingTab"));
+const EnhancedAnalyticsTab = lazy(() => import("@/components/dashboard/EnhancedAnalyticsTab"));
+const EnhancedSettingsTab = lazy(() => import("@/components/dashboard/EnhancedSettingsTab"));
+const MechanicsTab = lazy(() => import("@/components/dashboard/MechanicsTab").then(m => ({ default: m.MechanicsTab })));
+const HRTab = lazy(() => import("@/components/dashboard/HRTab").then(m => ({ default: m.HRTab })));
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -140,41 +140,43 @@ const Dashboard = () => {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="collections">
-            <CollectionsTab profile={profile} />
-          </TabsContent>
+          <Suspense fallback={<div className="flex items-center justify-center p-8"><Recycle className="h-8 w-8 animate-spin text-primary" /></div>}>
+            <TabsContent value="collections">
+              <CollectionsTab profile={profile} />
+            </TabsContent>
 
-          <TabsContent value="clients">
-            <ClientsTab profile={profile} />
-          </TabsContent>
+            <TabsContent value="clients">
+              <ClientsTab profile={profile} />
+            </TabsContent>
 
-          <TabsContent value="trucks">
-            <TrucksTab profile={profile} />
-          </TabsContent>
+            <TabsContent value="trucks">
+              <TrucksTab profile={profile} />
+            </TabsContent>
 
-          <TabsContent value="drivers">
-            <DriversHelpersTab profile={profile} />
-          </TabsContent>
+            <TabsContent value="drivers">
+              <DriversHelpersTab profile={profile} />
+            </TabsContent>
 
-          <TabsContent value="scheduling">
-            <SchedulingTab profile={profile} />
-          </TabsContent>
+            <TabsContent value="scheduling">
+              <SchedulingTab profile={profile} />
+            </TabsContent>
 
-          <TabsContent value="analytics">
-            <EnhancedAnalyticsTab profile={profile} />
-          </TabsContent>
+            <TabsContent value="analytics">
+              <EnhancedAnalyticsTab profile={profile} />
+            </TabsContent>
 
-          <TabsContent value="mechanics">
-            <MechanicsTab />
-          </TabsContent>
+            <TabsContent value="mechanics">
+              <MechanicsTab />
+            </TabsContent>
 
-          <TabsContent value="hr" className="hidden md:block">
-            <HRTab />
-          </TabsContent>
+            <TabsContent value="hr" className="hidden md:block">
+              <HRTab />
+            </TabsContent>
 
-          <TabsContent value="settings">
-            <EnhancedSettingsTab profile={profile} />
-          </TabsContent>
+            <TabsContent value="settings">
+              <EnhancedSettingsTab profile={profile} />
+            </TabsContent>
+          </Suspense>
         </Tabs>
       </main>
     </div>
