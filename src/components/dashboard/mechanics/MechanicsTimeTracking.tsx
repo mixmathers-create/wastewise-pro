@@ -69,7 +69,7 @@ export function MechanicsTimeTracking() {
   }, [showCamera, capturedPhoto]);
 
   const fetchMechanics = async () => {
-    const { data } = await supabase.from("mechanics").select("*").order("name");
+    const { data } = await supabase.from("mechanics").select("id,name").order("name");
     setMechanics(data || []);
   };
 
@@ -78,7 +78,7 @@ export function MechanicsTimeTracking() {
       .from("mechanic_time_logs")
       .select("*, mechanics(name)")
       .order("time_in", { ascending: false })
-      .limit(50);
+      .limit(10); // Reduced from 50 to 10 for faster loading
     setTimeLogs(data || []);
   };
 

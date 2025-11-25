@@ -33,12 +33,12 @@ export function CreateJobOrderDialog({ open, onOpenChange, onSuccess }: CreateJo
   }, [open]);
 
   const fetchMechanics = async () => {
-    const { data } = await supabase.from("mechanics").select("*").order("name");
+    const { data } = await supabase.from("mechanics").select("id,name").order("name");
     setMechanics(data || []);
   };
 
   const fetchTrucks = async () => {
-    const { data } = await supabase.from("trucks").select("*").order("code");
+    const { data } = await supabase.from("trucks").select("id,code,plate_number").order("code");
     setTrucks(data || []);
   };
 
