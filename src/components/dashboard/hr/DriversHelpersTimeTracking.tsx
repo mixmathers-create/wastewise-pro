@@ -19,6 +19,13 @@ interface Personnel {
   type: 'driver' | 'helper';
 }
 
+interface Truck {
+  id: string;
+  code: string;
+  plate_number: string | null;
+  type: string;
+}
+
 interface TimeLog {
   id: string;
   personnel_id: string;
@@ -28,13 +35,20 @@ interface TimeLog {
   time_out: string | null;
   photo_url: string | null;
   group_session_id: string | null;
+  truck_id: string | null;
   latitude: number | null;
   longitude: number | null;
+  trucks?: {
+    code: string;
+    plate_number: string | null;
+  } | null;
 }
 
 export default function DriversHelpersTimeTracking() {
   const [drivers, setDrivers] = useState<Personnel[]>([]);
   const [helpers, setHelpers] = useState<Personnel[]>([]);
+  const [trucks, setTrucks] = useState<Truck[]>([]);
+  const [selectedTruck, setSelectedTruck] = useState<string>("");
   const [selectedDrivers, setSelectedDrivers] = useState<Set<string>>(new Set());
   const [selectedHelpers, setSelectedHelpers] = useState<Set<string>>(new Set());
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
@@ -47,13 +61,14 @@ export default function DriversHelpersTimeTracking() {
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
   const [showGroupTimeOutDialog, setShowGroupTimeOutDialog] = useState(false);
-  const [selectedGroupSession, setSelectedGroupSession] = useState<string | null>(null);
+  const [selectedGroupTruck, setSelectedGroupTruck] = useState<string | null>(null);
   const [groupMembersToTimeOut, setGroupMembersToTimeOut] = useState<Set<string>>(new Set());
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     fetchPersonnel();
+    fetchTrucks();
     fetchTimeLogs();
 
     return () => {
@@ -82,18 +97,54 @@ export default function DriversHelpersTimeTracking() {
     }
   };
 
+  const fetchTrucks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("trucks")
+        .select("id,code,plate_number,type")
+        .eq("status", "available")
+        .limit(MAX_ITEMS);
+
+      if (error) throw error;
+      setTrucks(data || []);
+    } catch (error) {
+      console.error("Error fetching trucks:", error);
+      toast.error("Failed to load trucks");
+    }
+  };
+
   const fetchTimeLogs = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from("personnel_time_logs")
-        .select("id,personnel_id,personnel_name,personnel_type,time_in,time_out,photo_url,group_session_id,latitude,longitude")
+        .select(`
+          id,
+          personnel_id,
+          personnel_name,
+          personnel_type,
+          time_in,
+          time_out,
+          photo_url,
+          group_session_id,
+          truck_id,
+          latitude,
+          longitude,
+          trucks:truck_id(code,plate_number)
+        `)
         .in("personnel_type", ["driver", "helper"])
         .order("time_in", { ascending: false })
         .limit(MAX_ITEMS);
 
       if (error) throw error;
-      setTimeLogs(data || []);
+      
+      // Transform the data to handle trucks as single object instead of array
+      const transformedData = (data || []).map(log => ({
+        ...log,
+        trucks: Array.isArray(log.trucks) ? log.trucks[0] : log.trucks
+      })) as TimeLog[];
+      
+      setTimeLogs(transformedData);
     } catch (error) {
       console.error("Error fetching time logs:", error);
       toast.error("Failed to load time logs");
@@ -156,6 +207,11 @@ export default function DriversHelpersTimeTracking() {
   };
 
   const handleTimeIn = async () => {
+    if (!selectedTruck) {
+      toast.error("Please select a vehicle");
+      return;
+    }
+
     if (selectedDrivers.size === 0 && selectedHelpers.size === 0) {
       toast.error("Please select at least one driver or helper");
       return;
@@ -198,7 +254,8 @@ export default function DriversHelpersTimeTracking() {
             photo_url: publicUrl,
             latitude: location.latitude,
             longitude: location.longitude,
-            group_session_id: groupSessionId
+            group_session_id: groupSessionId,
+            truck_id: selectedTruck
           });
         }
       }
@@ -214,7 +271,8 @@ export default function DriversHelpersTimeTracking() {
             photo_url: publicUrl,
             latitude: location.latitude,
             longitude: location.longitude,
-            group_session_id: groupSessionId
+            group_session_id: groupSessionId,
+            truck_id: selectedTruck
           });
         }
       }
@@ -226,6 +284,7 @@ export default function DriversHelpersTimeTracking() {
       if (error) throw error;
 
       toast.success(`Time in recorded for ${logs.length} personnel`);
+      setSelectedTruck("");
       setSelectedDrivers(new Set());
       setSelectedHelpers(new Set());
       setCapturedPhoto(null);
@@ -257,9 +316,9 @@ export default function DriversHelpersTimeTracking() {
     }
   };
 
-  const handleGroupTimeOutClick = (groupSessionId: string) => {
-    const groupMembers = activeLogs.filter(log => log.group_session_id === groupSessionId);
-    setSelectedGroupSession(groupSessionId);
+  const handleGroupTimeOutClick = (truckId: string) => {
+    const groupMembers = activeLogs.filter(log => log.truck_id === truckId);
+    setSelectedGroupTruck(truckId);
     setGroupMembersToTimeOut(new Set(groupMembers.map(log => log.id)));
     setShowGroupTimeOutDialog(true);
   };
@@ -281,7 +340,7 @@ export default function DriversHelpersTimeTracking() {
       
       toast.success(`Time out recorded for ${groupMembersToTimeOut.size} personnel`);
       setShowGroupTimeOutDialog(false);
-      setSelectedGroupSession(null);
+      setSelectedGroupTruck(null);
       setGroupMembersToTimeOut(new Set());
       fetchTimeLogs();
     } catch (error) {
@@ -344,9 +403,9 @@ export default function DriversHelpersTimeTracking() {
   const activeLogs = timeLogs.filter(log => !log.time_out);
   const timedOutLogs = timeLogs.filter(log => log.time_out);
   
-  // Group active logs by group_session_id
+  // Group active logs by truck_id
   const groupedActiveLogs = activeLogs.reduce((acc, log) => {
-    const key = log.group_session_id || `individual-${log.id}`;
+    const key = log.truck_id || `individual-${log.id}`;
     if (!acc[key]) {
       acc[key] = [];
     }
@@ -357,8 +416,8 @@ export default function DriversHelpersTimeTracking() {
   const paginatedActiveLogs = activeLogs.slice((activePage - 1) * ITEMS_PER_PAGE, activePage * ITEMS_PER_PAGE);
   const paginatedTimedOutLogs = timedOutLogs.slice((timedOutPage - 1) * ITEMS_PER_PAGE, timedOutPage * ITEMS_PER_PAGE);
 
-  const getGroupMembersForSession = (groupSessionId: string) => {
-    return activeLogs.filter(log => log.group_session_id === groupSessionId);
+  const getGroupMembersForTruck = (truckId: string) => {
+    return activeLogs.filter(log => log.truck_id === truckId);
   };
 
   return (
@@ -388,6 +447,22 @@ export default function DriversHelpersTimeTracking() {
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-4">
+          <div className="space-y-2">
+            <h3 className="font-semibold">Select Vehicle</h3>
+            <select
+              value={selectedTruck}
+              onChange={(e) => setSelectedTruck(e.target.value)}
+              className="w-full px-3 py-2 border rounded"
+            >
+              <option value="">-- Select a vehicle --</option>
+              {trucks.map((truck) => (
+                <option key={truck.id} value={truck.id}>
+                  {truck.code} {truck.plate_number ? `- ${truck.plate_number}` : ''} ({truck.type})
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <h3 className="font-semibold">Select Drivers</h3>
@@ -442,7 +517,10 @@ export default function DriversHelpersTimeTracking() {
               Capture Group Photo
             </Button>
             {capturedPhoto && (
-              <Button onClick={handleTimeIn} disabled={selectedDrivers.size === 0 && selectedHelpers.size === 0}>
+              <Button 
+                onClick={handleTimeIn} 
+                disabled={!selectedTruck || (selectedDrivers.size === 0 && selectedHelpers.size === 0)}
+              >
                 <Clock className="h-4 w-4 mr-2" />
                 Time In ({selectedDrivers.size + selectedHelpers.size} selected)
               </Button>
@@ -474,33 +552,36 @@ export default function DriversHelpersTimeTracking() {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Type</TableHead>
+                      <TableHead>Vehicle</TableHead>
                       <TableHead>Time In</TableHead>
                       <TableHead>Duration</TableHead>
-                      <TableHead>Group</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paginatedActiveLogs.map((log) => {
-                      const isGroupMember = log.group_session_id !== null;
-                      const groupMembers = isGroupMember ? getGroupMembersForSession(log.group_session_id!) : [];
+                      const isGroupMember = log.truck_id !== null;
+                      const groupMembers = isGroupMember ? getGroupMembersForTruck(log.truck_id!) : [];
                       const isFirstInGroup = isGroupMember && groupMembers[0]?.id === log.id;
                       
                       return (
                         <TableRow key={log.id}>
                           <TableCell>{log.personnel_name}</TableCell>
                           <TableCell className="capitalize">{log.personnel_type}</TableCell>
-                          <TableCell>{format(new Date(log.time_in), "MMM dd, yyyy HH:mm")}</TableCell>
-                          <TableCell>{calculateTotalTime(log.time_in, log.time_out)}</TableCell>
                           <TableCell>
-                            {isGroupMember ? (
-                              <span className="text-xs bg-muted px-2 py-1 rounded">
-                                Group ({groupMembers.length})
-                              </span>
+                            {log.trucks ? (
+                              <div className="text-sm">
+                                <div className="font-medium">{log.trucks.code}</div>
+                                {log.trucks.plate_number && (
+                                  <div className="text-xs text-muted-foreground">{log.trucks.plate_number}</div>
+                                )}
+                              </div>
                             ) : (
-                              <span className="text-xs text-muted-foreground">Individual</span>
+                              <span className="text-xs text-muted-foreground">N/A</span>
                             )}
                           </TableCell>
+                          <TableCell>{format(new Date(log.time_in), "MMM dd, yyyy HH:mm")}</TableCell>
+                          <TableCell>{calculateTotalTime(log.time_in, log.time_out)}</TableCell>
                           <TableCell>
                             <div className="flex gap-2">
                               <Button onClick={() => handleTimeOut(log.id)} size="sm" variant="outline">
@@ -508,10 +589,10 @@ export default function DriversHelpersTimeTracking() {
                               </Button>
                               {isGroupMember && isFirstInGroup && (
                                 <Button 
-                                  onClick={() => handleGroupTimeOutClick(log.group_session_id!)} 
+                                  onClick={() => handleGroupTimeOutClick(log.truck_id!)} 
                                   size="sm"
                                 >
-                                  Group Time Out
+                                  Group Time Out ({groupMembers.length})
                                 </Button>
                               )}
                             </div>
@@ -554,6 +635,7 @@ export default function DriversHelpersTimeTracking() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
+                  <TableHead>Vehicle</TableHead>
                   <TableHead>Time In</TableHead>
                   <TableHead>Time Out</TableHead>
                   <TableHead>Total Time</TableHead>
@@ -564,6 +646,18 @@ export default function DriversHelpersTimeTracking() {
                   <TableRow key={log.id}>
                     <TableCell>{log.personnel_name}</TableCell>
                     <TableCell className="capitalize">{log.personnel_type}</TableCell>
+                    <TableCell>
+                      {log.trucks ? (
+                        <div className="text-sm">
+                          <div className="font-medium">{log.trucks.code}</div>
+                          {log.trucks.plate_number && (
+                            <div className="text-xs text-muted-foreground">{log.trucks.plate_number}</div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">N/A</span>
+                      )}
+                    </TableCell>
                     <TableCell>{format(new Date(log.time_in), "MMM dd, yyyy HH:mm")}</TableCell>
                     <TableCell>
                       {log.time_out ? format(new Date(log.time_out), "MMM dd, yyyy HH:mm") : "N/A"}
@@ -635,11 +729,23 @@ export default function DriversHelpersTimeTracking() {
               <DialogTitle>Group Time Out</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
+              {selectedGroupTruck && (
+                <div className="bg-muted p-3 rounded">
+                  <div className="text-sm font-medium">
+                    Vehicle: {getGroupMembersForTruck(selectedGroupTruck)[0]?.trucks?.code}
+                  </div>
+                  {getGroupMembersForTruck(selectedGroupTruck)[0]?.trucks?.plate_number && (
+                    <div className="text-xs text-muted-foreground">
+                      {getGroupMembersForTruck(selectedGroupTruck)[0]?.trucks?.plate_number}
+                    </div>
+                  )}
+                </div>
+              )}
               <p className="text-sm text-muted-foreground">
                 Select which personnel to time out. You can deselect individuals if they need to continue working.
               </p>
               <div className="border rounded p-3 space-y-2 max-h-64 overflow-y-auto">
-                {selectedGroupSession && getGroupMembersForSession(selectedGroupSession).map((log) => (
+                {selectedGroupTruck && getGroupMembersForTruck(selectedGroupTruck).map((log) => (
                   <div key={log.id} className="flex items-center space-x-2">
                     <Checkbox
                       checked={groupMembersToTimeOut.has(log.id)}
@@ -667,7 +773,7 @@ export default function DriversHelpersTimeTracking() {
                   variant="outline" 
                   onClick={() => {
                     setShowGroupTimeOutDialog(false);
-                    setSelectedGroupSession(null);
+                    setSelectedGroupTruck(null);
                     setGroupMembersToTimeOut(new Set());
                   }}
                 >

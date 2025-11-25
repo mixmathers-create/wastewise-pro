@@ -777,6 +777,7 @@ export type Database = {
           photo_url: string | null
           time_in: string
           time_out: string | null
+          truck_id: string | null
         }
         Insert: {
           created_at?: string
@@ -790,6 +791,7 @@ export type Database = {
           photo_url?: string | null
           time_in?: string
           time_out?: string | null
+          truck_id?: string | null
         }
         Update: {
           created_at?: string
@@ -803,8 +805,17 @@ export type Database = {
           photo_url?: string | null
           time_in?: string
           time_out?: string | null
+          truck_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "personnel_time_logs_truck_id_fkey"
+            columns: ["truck_id"]
+            isOneToOne: false
+            referencedRelation: "trucks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
