@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Camera, Clock, Download, X, Upload } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format, differenceInMinutes } from "date-fns";
 import { generateCSV, downloadCSV } from "@/lib/csvUtils";
 
@@ -21,10 +22,15 @@ export function MechanicsTimeTracking() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activePage, setActivePage] = useState(1);
+  const [timedOutPage, setTimedOutPage] = useState(1);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const { toast } = useToast();
+  
+  const ITEMS_PER_PAGE = 5;
+  const MAX_ITEMS = 100;
 
   useEffect(() => {
     fetchMechanics();
@@ -78,9 +84,12 @@ export function MechanicsTimeTracking() {
       .from("mechanic_time_logs")
       .select("*, mechanics(name)")
       .order("time_in", { ascending: false })
-      .limit(10); // Reduced from 50 to 10 for faster loading
+      .limit(MAX_ITEMS);
     setTimeLogs(data || []);
   };
+  
+  const activeLogs = timeLogs.filter(log => !log.time_out);
+  const timedOutLogs = timeLogs.filter(log => log.time_out);
 
   const getCurrentLocation = (): Promise<{ latitude: number; longitude: number }> => {
     return new Promise((resolve, reject) => {
@@ -362,54 +371,152 @@ export function MechanicsTimeTracking() {
           </DialogContent>
         </Dialog>
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Mechanic</TableHead>
-              <TableHead>Time In</TableHead>
-              <TableHead>Time Out</TableHead>
-              <TableHead>Total Time</TableHead>
-              <TableHead>Photo</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {timeLogs.map((log) => (
-              <TableRow key={log.id}>
-                <TableCell className="font-medium">{log.mechanics?.name}</TableCell>
-                <TableCell>{format(new Date(log.time_in), 'MMM dd, yyyy HH:mm')}</TableCell>
-                <TableCell>
-                  {log.time_out ? format(new Date(log.time_out), 'MMM dd, yyyy HH:mm') : '-'}
-                </TableCell>
-                <TableCell className="font-mono">
-                  {calculateTotalTime(log.time_in, log.time_out)}
-                </TableCell>
-                <TableCell>
-                  {log.photo_url && (
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => setShowPhotoPreview(log.photo_url)}
-                    >
-                      <Camera className="h-4 w-4" />
-                    </Button>
-                  )}
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {log.latitude && log.longitude ? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}` : '-'}
-                </TableCell>
-                <TableCell>
-                  {!log.time_out && (
-                    <Button variant="outline" size="sm" onClick={() => handleTimeOut(log.id)}>
-                      <Clock className="h-4 w-4 mr-2" /> Time Out
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <Tabs defaultValue="active" className="mt-6">
+          <TabsList>
+            <TabsTrigger value="active">Active ({activeLogs.length})</TabsTrigger>
+            <TabsTrigger value="timedout">Timed Out ({timedOutLogs.length})</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="active">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Mechanic</TableHead>
+                  <TableHead>Time In</TableHead>
+                  <TableHead>Time Out</TableHead>
+                  <TableHead>Total Time</TableHead>
+                  <TableHead>Photo</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {activeLogs.slice((activePage - 1) * ITEMS_PER_PAGE, activePage * ITEMS_PER_PAGE).map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="font-medium">{log.mechanics?.name}</TableCell>
+                    <TableCell>{format(new Date(log.time_in), 'MMM dd, yyyy HH:mm')}</TableCell>
+                    <TableCell>
+                      {log.time_out ? format(new Date(log.time_out), 'MMM dd, yyyy HH:mm') : '-'}
+                    </TableCell>
+                    <TableCell className="font-mono">
+                      {calculateTotalTime(log.time_in, log.time_out)}
+                    </TableCell>
+                    <TableCell>
+                      {log.photo_url && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => setShowPhotoPreview(log.photo_url)}
+                        >
+                          <Camera className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {log.latitude && log.longitude ? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}` : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {!log.time_out && (
+                        <Button variant="outline" size="sm" onClick={() => handleTimeOut(log.id)}>
+                          <Clock className="h-4 w-4 mr-2" /> Time Out
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {activeLogs.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActivePage(p => Math.max(1, p - 1))}
+                  disabled={activePage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {activePage} of {Math.ceil(activeLogs.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActivePage(p => Math.min(Math.ceil(activeLogs.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={activePage >= Math.ceil(activeLogs.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="timedout">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Mechanic</TableHead>
+                  <TableHead>Time In</TableHead>
+                  <TableHead>Time Out</TableHead>
+                  <TableHead>Total Time</TableHead>
+                  <TableHead>Photo</TableHead>
+                  <TableHead>Location</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {timedOutLogs.slice((timedOutPage - 1) * ITEMS_PER_PAGE, timedOutPage * ITEMS_PER_PAGE).map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="font-medium">{log.mechanics?.name}</TableCell>
+                    <TableCell>{format(new Date(log.time_in), 'MMM dd, yyyy HH:mm')}</TableCell>
+                    <TableCell>
+                      {log.time_out ? format(new Date(log.time_out), 'MMM dd, yyyy HH:mm') : '-'}
+                    </TableCell>
+                    <TableCell className="font-mono">
+                      {calculateTotalTime(log.time_in, log.time_out)}
+                    </TableCell>
+                    <TableCell>
+                      {log.photo_url && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => setShowPhotoPreview(log.photo_url)}
+                        >
+                          <Camera className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {log.latitude && log.longitude ? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}` : '-'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {timedOutLogs.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTimedOutPage(p => Math.max(1, p - 1))}
+                  disabled={timedOutPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {timedOutPage} of {Math.ceil(timedOutLogs.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTimedOutPage(p => Math.min(Math.ceil(timedOutLogs.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={timedOutPage >= Math.ceil(timedOutLogs.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </CardContent>
 
       <Dialog open={!!showPhotoPreview} onOpenChange={() => setShowPhotoPreview(null)}>
