@@ -56,7 +56,7 @@ export default defineConfig(({ mode }) => ({
     },
     cssMinify: true,
     reportCompressedSize: false, // Faster builds
-    target: 'es2015', // Better browser compatibility
+    target: 'es2020', // Support BigInt and modern features
     sourcemap: false, // Disable sourcemaps in production
   },
   optimizeDeps: {
