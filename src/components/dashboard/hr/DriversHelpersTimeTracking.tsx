@@ -16,7 +16,7 @@ const MAX_ITEMS = 100;
 interface Personnel {
   id: string;
   name: string;
-  type: 'driver' | 'helper';
+  type: 'driver' | 'helper' | 'recycler';
 }
 
 interface Truck {
@@ -47,10 +47,12 @@ interface TimeLog {
 export default function DriversHelpersTimeTracking() {
   const [drivers, setDrivers] = useState<Personnel[]>([]);
   const [helpers, setHelpers] = useState<Personnel[]>([]);
+  const [recyclers, setRecyclers] = useState<Personnel[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [selectedTruck, setSelectedTruck] = useState<string>("");
   const [selectedDrivers, setSelectedDrivers] = useState<Set<string>>(new Set());
   const [selectedHelpers, setSelectedHelpers] = useState<Set<string>>(new Set());
+  const [selectedRecyclers, setSelectedRecyclers] = useState<Set<string>>(new Set());
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCamera, setShowCamera] = useState(false);
@@ -79,9 +81,10 @@ export default function DriversHelpersTimeTracking() {
 
   const fetchPersonnel = async () => {
     try {
-      const [driversData, helpersData] = await Promise.all([
+      const [driversData, helpersData, recyclersData] = await Promise.all([
         supabase.from("drivers").select("id,name").eq("status", "available").limit(MAX_ITEMS),
-        supabase.from("helpers").select("id,name").eq("status", "available").limit(MAX_ITEMS)
+        supabase.from("helpers").select("id,name").eq("status", "available").limit(MAX_ITEMS),
+        supabase.from("recyclers").select("id,name").eq("status", "available").limit(MAX_ITEMS)
       ]);
 
       if (driversData.data) {
@@ -89,6 +92,9 @@ export default function DriversHelpersTimeTracking() {
       }
       if (helpersData.data) {
         setHelpers(helpersData.data.map(h => ({ ...h, type: 'helper' as const })));
+      }
+      if (recyclersData.data) {
+        setRecyclers(recyclersData.data.map(r => ({ ...r, type: 'recycler' as const })));
       }
     } catch (error) {
       console.error("Error fetching personnel:", error);
@@ -131,7 +137,7 @@ export default function DriversHelpersTimeTracking() {
           longitude,
           trucks:truck_id(code,plate_number)
         `)
-        .in("personnel_type", ["driver", "helper"])
+        .in("personnel_type", ["driver", "helper", "recycler"])
         .order("time_in", { ascending: false })
         .limit(MAX_ITEMS);
 
@@ -211,8 +217,8 @@ export default function DriversHelpersTimeTracking() {
       return;
     }
 
-    if (selectedDrivers.size === 0 && selectedHelpers.size === 0) {
-      toast.error("Please select at least one driver or helper");
+    if (selectedDrivers.size === 0 && selectedHelpers.size === 0 && selectedRecyclers.size === 0) {
+      toast.error("Please select at least one driver, helper, or recycler");
       return;
     }
 
@@ -276,6 +282,23 @@ export default function DriversHelpersTimeTracking() {
         }
       }
 
+      for (const recyclerId of selectedRecyclers) {
+        const recycler = recyclers.find(r => r.id === recyclerId);
+        if (recycler) {
+          logs.push({
+            personnel_id: recyclerId,
+            personnel_type: 'recycler',
+            personnel_name: recycler.name,
+            time_in: timestamp,
+            photo_url: publicUrl,
+            latitude: location.latitude,
+            longitude: location.longitude,
+            group_session_id: groupSessionId,
+            truck_id: selectedTruck
+          });
+        }
+      }
+
       const { error } = await supabase
         .from("personnel_time_logs")
         .insert(logs);
@@ -286,6 +309,7 @@ export default function DriversHelpersTimeTracking() {
       setSelectedTruck("");
       setSelectedDrivers(new Set());
       setSelectedHelpers(new Set());
+      setSelectedRecyclers(new Set());
       setCapturedPhoto(null);
       setShowCamera(false);
       if (cameraStream) {
@@ -367,7 +391,7 @@ export default function DriversHelpersTimeTracking() {
       const { data, error } = await supabase
         .from("personnel_time_logs")
         .select("*")
-        .in("personnel_type", ["driver", "helper"])
+        .in("personnel_type", ["driver", "helper", "recycler"])
         .gte("time_in", exportStartDate)
         .lte("time_in", exportEndDate)
         .order("time_in", { ascending: false });
@@ -536,7 +560,7 @@ export default function DriversHelpersTimeTracking() {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <h3 className="font-semibold">Select Drivers</h3>
               <div className="border rounded p-3 space-y-2 max-h-48 overflow-y-auto">
@@ -582,6 +606,29 @@ export default function DriversHelpersTimeTracking() {
                 ))}
               </div>
             </div>
+
+            <div className="space-y-2">
+              <h3 className="font-semibold">Select Recyclers</h3>
+              <div className="border rounded p-3 space-y-2 max-h-48 overflow-y-auto">
+                {recyclers.map((recycler) => (
+                  <div key={recycler.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      checked={selectedRecyclers.has(recycler.id)}
+                      onCheckedChange={(checked) => {
+                        const newSet = new Set(selectedRecyclers);
+                        if (checked) {
+                          newSet.add(recycler.id);
+                        } else {
+                          newSet.delete(recycler.id);
+                        }
+                        setSelectedRecyclers(newSet);
+                      }}
+                    />
+                    <label className="text-sm">{recycler.name}</label>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="flex gap-2">
@@ -592,10 +639,10 @@ export default function DriversHelpersTimeTracking() {
             {capturedPhoto && (
               <Button 
                 onClick={handleTimeIn} 
-                disabled={!selectedTruck || (selectedDrivers.size === 0 && selectedHelpers.size === 0)}
+                disabled={!selectedTruck || (selectedDrivers.size === 0 && selectedHelpers.size === 0 && selectedRecyclers.size === 0)}
               >
                 <Clock className="h-4 w-4 mr-2" />
-                Time In ({selectedDrivers.size + selectedHelpers.size} selected)
+                Time In ({selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size} selected)
               </Button>
             )}
           </div>
