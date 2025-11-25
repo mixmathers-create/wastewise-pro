@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Check, X, Loader2, ExternalLink } from "lucide-react";
+import { Check, X, Loader2, ExternalLink, FileText, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import IncidentReportsAdmin from "./IncidentReportsAdmin";
 
 interface Leave {
   id: string;
@@ -134,179 +136,198 @@ const LeaveAdminPanel = () => {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Leave Requests Management</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Personnel</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Leave Type</TableHead>
-              <TableHead>Period</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {leaves.map((leave) => (
-              <TableRow key={leave.id}>
-                <TableCell>
-                  <div>
-                    <div className="font-medium">{leave.personnel_name}</div>
-                    <div className="text-sm text-muted-foreground capitalize">{leave.personnel_type}</div>
-                  </div>
-                </TableCell>
-                <TableCell className="capitalize">{leave.leave_type.replace("_", " ")}</TableCell>
-                <TableCell className="capitalize">{leave.leave_type}</TableCell>
-                <TableCell>
-                  <div className="text-sm">
-                    {format(new Date(leave.start_date), "MMM d, yyyy")} - {format(new Date(leave.end_date), "MMM d, yyyy")}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      leave.status === "approved"
-                        ? "default"
-                        : leave.status === "rejected"
-                        ? "destructive"
-                        : "secondary"
-                    }
-                  >
-                    {leave.status}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedLeave(leave)}
-                      >
-                        Review
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-2xl">
-                      <DialogHeader>
-                        <DialogTitle>Leave Request Details</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <p className="text-sm font-medium text-muted-foreground">Personnel</p>
-                            <p className="text-sm">{leave.personnel_name}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-muted-foreground">Type</p>
-                            <p className="text-sm capitalize">{leave.personnel_type}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-muted-foreground">Leave Type</p>
-                            <p className="text-sm capitalize">{leave.leave_type}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-muted-foreground">Status</p>
-                            <Badge variant={leave.status === "approved" ? "default" : leave.status === "rejected" ? "destructive" : "secondary"}>
-                              {leave.status}
-                            </Badge>
-                          </div>
-                        </div>
+    <Tabs defaultValue="leaves" className="space-y-6">
+      <TabsList>
+        <TabsTrigger value="leaves" className="gap-2">
+          <FileText className="h-4 w-4" />
+          Leave Requests
+        </TabsTrigger>
+        <TabsTrigger value="incidents" className="gap-2">
+          <AlertTriangle className="h-4 w-4" />
+          Incident Reports
+        </TabsTrigger>
+      </TabsList>
 
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">Period</p>
-                          <p className="text-sm">
-                            {format(new Date(leave.start_date), "MMMM d, yyyy")} - {format(new Date(leave.end_date), "MMMM d, yyyy")}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {leave.leave_days} day(s) • {leave.is_paid ? "Paid" : "Unpaid"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">Reason</p>
-                          <p className="text-sm">{leave.reason}</p>
-                        </div>
-
-                        {leave.medical_certificate_url && (
-                          <div>
-                            <p className="text-sm font-medium text-muted-foreground">Medical Documentation</p>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => window.open(leave.medical_certificate_url!, "_blank")}
-                            >
-                              <ExternalLink className="h-4 w-4 mr-2" />
-                              View Document/Photo
-                            </Button>
-                          </div>
-                        )}
-
-                        {leave.status === "pending" && (
-                          <>
-                            <div>
-                              <p className="text-sm font-medium text-muted-foreground mb-2">Review Notes (Optional)</p>
-                              <Textarea
-                                placeholder="Add notes about this decision..."
-                                value={reviewNotes}
-                                onChange={(e) => setReviewNotes(e.target.value)}
-                                rows={3}
-                              />
-                            </div>
-
-                            <div className="flex gap-2">
-                              <Button
-                                onClick={() => handleReview(leave.id, "approved")}
-                                disabled={processing}
-                                className="flex-1"
-                              >
-                                {processing ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <>
-                                    <Check className="h-4 w-4 mr-2" />
-                                    Approve
-                                  </>
-                                )}
-                              </Button>
-                              <Button
-                                onClick={() => handleReview(leave.id, "rejected")}
-                                disabled={processing}
-                                variant="destructive"
-                                className="flex-1"
-                              >
-                                {processing ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <>
-                                    <X className="h-4 w-4 mr-2" />
-                                    Reject
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                          </>
-                        )}
-
-                        {leave.status !== "pending" && leave.review_notes && (
-                          <div>
-                            <p className="text-sm font-medium text-muted-foreground">Review Notes</p>
-                            <p className="text-sm">{leave.review_notes}</p>
-                          </div>
-                        )}
+      <TabsContent value="leaves">
+        <Card>
+          <CardHeader>
+            <CardTitle>Leave Requests Management</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Personnel</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Leave Type</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {leaves.map((leave) => (
+                  <TableRow key={leave.id}>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{leave.personnel_name}</div>
+                        <div className="text-sm text-muted-foreground capitalize">{leave.personnel_type}</div>
                       </div>
-                    </DialogContent>
-                  </Dialog>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+                    </TableCell>
+                    <TableCell className="capitalize">{leave.leave_type.replace("_", " ")}</TableCell>
+                    <TableCell className="capitalize">{leave.leave_type}</TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        {format(new Date(leave.start_date), "MMM d, yyyy")} - {format(new Date(leave.end_date), "MMM d, yyyy")}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          leave.status === "approved"
+                            ? "default"
+                            : leave.status === "rejected"
+                            ? "destructive"
+                            : "secondary"
+                        }
+                      >
+                        {leave.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedLeave(leave)}
+                          >
+                            Review
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>Leave Request Details</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-sm font-medium text-muted-foreground">Personnel</p>
+                                <p className="text-sm">{leave.personnel_name}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-muted-foreground">Type</p>
+                                <p className="text-sm capitalize">{leave.personnel_type}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-muted-foreground">Leave Type</p>
+                                <p className="text-sm capitalize">{leave.leave_type}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-muted-foreground">Status</p>
+                                <Badge variant={leave.status === "approved" ? "default" : leave.status === "rejected" ? "destructive" : "secondary"}>
+                                  {leave.status}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            <div>
+                              <p className="text-sm font-medium text-muted-foreground">Period</p>
+                              <p className="text-sm">
+                                {format(new Date(leave.start_date), "MMMM d, yyyy")} - {format(new Date(leave.end_date), "MMMM d, yyyy")}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {leave.leave_days} day(s) • {leave.is_paid ? "Paid" : "Unpaid"}
+                              </p>
+                            </div>
+
+                            <div>
+                              <p className="text-sm font-medium text-muted-foreground">Reason</p>
+                              <p className="text-sm">{leave.reason}</p>
+                            </div>
+
+                            {leave.medical_certificate_url && (
+                              <div>
+                                <p className="text-sm font-medium text-muted-foreground">Medical Documentation</p>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => window.open(leave.medical_certificate_url!, "_blank")}
+                                >
+                                  <ExternalLink className="h-4 w-4 mr-2" />
+                                  View Document/Photo
+                                </Button>
+                              </div>
+                            )}
+
+                            {leave.status === "pending" && (
+                              <>
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground mb-2">Review Notes (Optional)</p>
+                                  <Textarea
+                                    placeholder="Add notes about this decision..."
+                                    value={reviewNotes}
+                                    onChange={(e) => setReviewNotes(e.target.value)}
+                                    rows={3}
+                                  />
+                                </div>
+
+                                <div className="flex gap-2">
+                                  <Button
+                                    onClick={() => handleReview(leave.id, "approved")}
+                                    disabled={processing}
+                                    className="flex-1"
+                                  >
+                                    {processing ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <>
+                                        <Check className="h-4 w-4 mr-2" />
+                                        Approve
+                                      </>
+                                    )}
+                                  </Button>
+                                  <Button
+                                    onClick={() => handleReview(leave.id, "rejected")}
+                                    disabled={processing}
+                                    variant="destructive"
+                                    className="flex-1"
+                                  >
+                                    {processing ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <>
+                                        <X className="h-4 w-4 mr-2" />
+                                        Reject
+                                      </>
+                                    )}
+                                  </Button>
+                                </div>
+                              </>
+                            )}
+
+                            {leave.status !== "pending" && leave.review_notes && (
+                              <div>
+                                <p className="text-sm font-medium text-muted-foreground">Review Notes</p>
+                                <p className="text-sm">{leave.review_notes}</p>
+                              </div>
+                            )}
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="incidents">
+        <IncidentReportsAdmin />
+      </TabsContent>
+    </Tabs>
   );
 };
 
