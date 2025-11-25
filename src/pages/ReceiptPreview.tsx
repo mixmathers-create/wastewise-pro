@@ -127,8 +127,31 @@ const ReceiptPreview = () => {
     try {
       setPrinting(true);
       
-      const totalQuantity = (receipt.items as any[]).reduce((sum, item) => sum + item.quantity, 0);
-      const totalWeight = (receipt.items as any[]).filter(i => i.unit === 'kg').reduce((sum, item) => sum + item.quantity, 0);
+      // Group tally entries by waste type
+      const tallyEntries = (receipt.tally_entries || receipt.items) as any[];
+      const wasteTypeTotals: { [key: string]: { [unit: string]: number } } = {};
+      
+      tallyEntries.forEach((entry: any) => {
+        const wasteType = entry.waste_type;
+        const unit = entry.unit;
+        const quantity = entry.quantity;
+        
+        if (!wasteTypeTotals[wasteType]) {
+          wasteTypeTotals[wasteType] = {};
+        }
+        if (!wasteTypeTotals[wasteType][unit]) {
+          wasteTypeTotals[wasteType][unit] = 0;
+        }
+        wasteTypeTotals[wasteType][unit] += quantity;
+      });
+      
+      // Build waste items for printing
+      const wasteItems: { label: string; value: string }[] = [];
+      Object.entries(wasteTypeTotals).forEach(([wasteType, units]) => {
+        Object.entries(units).forEach(([unit, total]) => {
+          wasteItems.push({ label: wasteType, value: `${total} ${unit}` });
+        });
+      });
       
       await printerService.printReceipt({
         header: "WASTEWISE COLLECTION RECEIPT",
@@ -145,8 +168,8 @@ const ReceiptPreview = () => {
           { label: "Driver", value: driver?.name || "N/A" },
           { label: "Helpers", value: helpers.map(h => h.name).join(", ") },
           { label: "", value: "---" },
-          { label: "Total Items", value: `${totalQuantity}` },
-          { label: "Total Weight", value: `${totalWeight} kg` },
+          { label: "WASTE COLLECTED", value: "" },
+          ...wasteItems,
           { label: "", value: "---" },
           { label: "Signed By", value: receipt.signed_by }
         ],
@@ -244,7 +267,7 @@ const ReceiptPreview = () => {
 
             {/* Items */}
             <div className="space-y-2">
-              <h3 className="font-bold text-lg">Waste Items</h3>
+              <h3 className="font-bold text-lg">Waste Collected</h3>
               <div className="space-y-2">
                 {(receipt.items as any[]).map((item, idx) => (
                   <div key={idx} className="flex justify-between text-sm p-2 bg-gray-50 rounded">
@@ -252,10 +275,6 @@ const ReceiptPreview = () => {
                     <span className="font-medium">{item.quantity} {item.unit}</span>
                   </div>
                 ))}
-              </div>
-              <div className="flex justify-between font-bold text-base pt-2 border-t">
-                <span>Total Weight:</span>
-                <span>{(receipt.items as any[]).filter(i => i.unit === 'kg').reduce((sum, item) => sum + item.quantity, 0)} kg</span>
               </div>
             </div>
 
