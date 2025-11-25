@@ -78,7 +78,7 @@ export function ExportJobOrderDialog({ job, open, onOpenChange }: ExportJobOrder
     // Fetch third-party services
     const { data: servicesData } = await supabase
       .from("job_order_services")
-      .select("*")
+      .select("id,service_type,category,provider_name,description,cost")
       .eq("job_order_id", job.id);
 
     if (servicesData) {

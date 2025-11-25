@@ -24,8 +24,9 @@ export function MechanicsInventory() {
     try {
       const { data, error } = await supabase
         .from("mechanics")
-        .select("*")
-        .order("name");
+        .select("id,name,id_number,contact_number,status,birthdate,leaves_available")
+        .order("name")
+        .limit(100);
 
       if (error) throw error;
       setMechanics(data || []);

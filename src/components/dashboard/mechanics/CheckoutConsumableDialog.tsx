@@ -42,7 +42,7 @@ export function CheckoutConsumableDialog({ open, onOpenChange, onSuccess }: Chec
   const fetchConsumables = async () => {
     const { data } = await supabase
       .from("mechanic_consumables")
-      .select("*")
+      .select("id,code,name,unit,quantity,unit_cost")
       .gt("quantity", 0)
       .order("name");
     setConsumables(data || []);
@@ -68,7 +68,7 @@ export function CheckoutConsumableDialog({ open, onOpenChange, onSuccess }: Chec
     if (jobOrder.mechanic_ids && jobOrder.mechanic_ids.length > 0) {
       const { data: mechanicsData } = await supabase
         .from("mechanics")
-        .select("*")
+        .select("id,name")
         .in("id", jobOrder.mechanic_ids)
         .order("name");
       setMechanics(mechanicsData || []);

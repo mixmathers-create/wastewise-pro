@@ -20,11 +20,12 @@ const PastSchedules = lazy(() => import("./pages/PastSchedules"));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh longer
-      gcTime: 10 * 60 * 1000, // 10 minutes cache
+      staleTime: 10 * 60 * 1000, // 10 minutes - keep data fresh much longer for LTE
+      gcTime: 30 * 60 * 1000, // 30 minutes cache - aggressive caching for slow networks
       refetchOnWindowFocus: false, // Don't refetch on window focus
       refetchOnReconnect: true, // Refetch on reconnect
       retry: 1, // Reduce retries for faster failure
+      networkMode: 'offlineFirst', // Try cache first on network issues
     },
   },
 });

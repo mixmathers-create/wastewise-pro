@@ -131,7 +131,7 @@ export function JobOrders() {
       
       const { data: openJobs } = await supabase
         .from("job_orders")
-        .select("*")
+        .select("id,job_number,status,scheduled_date")
         .eq("status", "in_progress")
         .lte("scheduled_date", today);
 
@@ -219,7 +219,7 @@ export function JobOrders() {
         // Fetch third-party services
         const { data: services } = await supabase
           .from("job_order_services")
-          .select("*")
+          .select("id,service_type,category,cost,provider_name")
           .eq("job_order_id", job.id);
 
         const serviceCost = (services || []).reduce((sum, s) => sum + (s.cost || 0), 0);
