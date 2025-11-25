@@ -20,6 +20,7 @@ export function MechanicsTimeTracking() {
   const [showPhotoPreview, setShowPhotoPreview] = useState<string | null>(null);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -166,6 +167,9 @@ export function MechanicsTimeTracking() {
       return;
     }
 
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
     try {
       const location = await getCurrentLocation();
 
@@ -178,12 +182,23 @@ export function MechanicsTimeTracking() {
 
       if (error) throw error;
 
-      toast({ title: "Success", description: "Time in recorded" });
-      fetchTimeLogs();
-      setSelectedMechanic("");
-      setCapturedPhoto(null);
-      setShowCamera(false);
+      toast({ 
+        title: "Success", 
+        description: "Time in recorded successfully",
+        duration: 3000
+      });
+      
+      await fetchTimeLogs();
+      
+      // Delay closing the dialog to show the success message
+      setTimeout(() => {
+        setSelectedMechanic("");
+        setCapturedPhoto(null);
+        setShowCamera(false);
+        setIsSubmitting(false);
+      }, 1000);
     } catch (error: any) {
+      setIsSubmitting(false);
       toast({ title: "Error", description: error.message, variant: "destructive" });
     }
   };
@@ -334,8 +349,12 @@ export function MechanicsTimeTracking() {
                 <div>
                   <img src={capturedPhoto} alt="Captured" className="w-full rounded-lg" />
                   <div className="flex justify-center gap-2 mt-4">
-                    <Button onClick={handleTimeIn}>Confirm Time In</Button>
-                    <Button variant="outline" onClick={() => setCapturedPhoto(null)}>Retake</Button>
+                    <Button onClick={handleTimeIn} disabled={isSubmitting}>
+                      {isSubmitting ? "Recording..." : "Confirm Time In"}
+                    </Button>
+                    <Button variant="outline" onClick={() => setCapturedPhoto(null)} disabled={isSubmitting}>
+                      Retake
+                    </Button>
                   </div>
                 </div>
               )}
