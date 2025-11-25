@@ -20,8 +20,12 @@ const TrucksTab = ({ profile }: { profile: any }) => {
   const [editingTruck, setEditingTruck] = useState<any>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [maintenanceBlocks, setMaintenanceBlocks] = useState<any[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = profile?.role === "admin";
+  
+  const ITEMS_PER_PAGE = 5;
+  const MAX_ITEMS = 100;
 
   const fetchTrucks = async () => {
     setLoading(true);
@@ -30,7 +34,8 @@ const TrucksTab = ({ profile }: { profile: any }) => {
     const { data, error } = await supabase
       .from("trucks")
       .select("id,code,type,plate_number,capacity,status")
-      .order("code");
+      .order("code")
+      .limit(MAX_ITEMS);
     if (error) setError(error.message);
     
     // Fetch maintenance blocks for today
@@ -174,74 +179,99 @@ const TrucksTab = ({ profile }: { profile: any }) => {
         ) : trucks.length === 0 ? (
           <p className="text-muted-foreground">No trucks yet.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-              {isAdmin && (
-                <TableHead className="w-12">
-                  <Checkbox
-                    checked={selectedTrucks.size === trucks.length && trucks.length > 0}
-                    onCheckedChange={toggleSelectAll}
-                  />
-                </TableHead>
-              )}
-              <TableHead>Code</TableHead>
-              <TableHead>Plate Number</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Capacity (MT)</TableHead>
-              <TableHead>Status</TableHead>
-              {isAdmin && <TableHead>Actions</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {trucks.map((t) => (
-                <TableRow key={t.id}>
-                  {isAdmin && (
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedTrucks.has(t.id)}
-                        onCheckedChange={() => toggleSelectTruck(t.id)}
-                      />
-                    </TableCell>
-                  )}
-                  <TableCell className="font-medium">{t.code}</TableCell>
-                  <TableCell>{t.plate_number || "N/A"}</TableCell>
-                  <TableCell>{t.type}</TableCell>
-                  <TableCell>{t.capacity || 0} MT</TableCell>
-                  <TableCell>
-                    {(() => {
-                      const status = getTruckStatus(t);
-                      const isAvailable = status === 'available';
-                      const isInMaintenance = status === 'For Maintenance';
-                      return (
-                        <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
-                          isAvailable ? 'bg-green-100 text-green-800' : 
-                          isInMaintenance ? 'bg-yellow-100 text-yellow-800' : 
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {status}
-                        </span>
-                      );
-                    })()}
-                  </TableCell>
-                  {isAdmin && (
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setEditingTruck(t);
-                          setEditDialogOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  )}
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                {isAdmin && (
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedTrucks.size === trucks.length && trucks.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </TableHead>
+                )}
+                <TableHead>Code</TableHead>
+                <TableHead>Plate Number</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Capacity (MT)</TableHead>
+                <TableHead>Status</TableHead>
+                {isAdmin && <TableHead>Actions</TableHead>}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {trucks.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((t) => (
+                  <TableRow key={t.id}>
+                    {isAdmin && (
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedTrucks.has(t.id)}
+                          onCheckedChange={() => toggleSelectTruck(t.id)}
+                        />
+                      </TableCell>
+                    )}
+                    <TableCell className="font-medium">{t.code}</TableCell>
+                    <TableCell>{t.plate_number || "N/A"}</TableCell>
+                    <TableCell>{t.type}</TableCell>
+                    <TableCell>{t.capacity || 0} MT</TableCell>
+                    <TableCell>
+                      {(() => {
+                        const status = getTruckStatus(t);
+                        const isAvailable = status === 'available';
+                        const isInMaintenance = status === 'For Maintenance';
+                        return (
+                          <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
+                            isAvailable ? 'bg-green-100 text-green-800' : 
+                            isInMaintenance ? 'bg-yellow-100 text-yellow-800' : 
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {status}
+                          </span>
+                        );
+                      })()}
+                    </TableCell>
+                    {isAdmin && (
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setEditingTruck(t);
+                            setEditDialogOpen(true);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {trucks.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentPage} of {Math.ceil(trucks.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(trucks.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={currentPage >= Math.ceil(trucks.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </CardContent>
       <TruckEditDialog

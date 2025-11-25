@@ -33,11 +33,19 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
   const [selectedRecyclers, setSelectedRecyclers] = useState<string[]>([]);
   const [selectedManagement, setSelectedManagement] = useState<string[]>([]);
   const [selectedMechanics, setSelectedMechanics] = useState<string[]>([]);
+  const [driversPage, setDriversPage] = useState(1);
+  const [helpersPage, setHelpersPage] = useState(1);
+  const [recyclersPage, setRecyclersPage] = useState(1);
+  const [managementPage, setManagementPage] = useState(1);
+  const [mechanicsPage, setMechanicsPage] = useState(1);
   const driverFileInputRef = useRef<HTMLInputElement>(null);
   const helperFileInputRef = useRef<HTMLInputElement>(null);
   const recyclerFileInputRef = useRef<HTMLInputElement>(null);
   const managementFileInputRef = useRef<HTMLInputElement>(null);
   const mechanicFileInputRef = useRef<HTMLInputElement>(null);
+  
+  const ITEMS_PER_PAGE = 5;
+  const MAX_ITEMS = 100;
 
   useEffect(() => {
     fetchDrivers();
@@ -51,7 +59,8 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
     const { data, error } = await supabase
       .from("drivers")
       .select("id,name,id_number,contact_number,status,birthdate,license_number,license_expiry_date,leaves_available,suspension_start_date,suspension_end_date,availability")
-      .order("name");
+      .order("name")
+      .limit(MAX_ITEMS);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -63,7 +72,8 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
     const { data, error } = await supabase
       .from("helpers")
       .select("id,name,id_number,contact_number,status,birthdate,leaves_available,suspension_start_date,suspension_end_date,availability,photo_url")
-      .order("name");
+      .order("name")
+      .limit(MAX_ITEMS);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -75,7 +85,8 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
     const { data, error } = await supabase
       .from("recyclers")
       .select("id,name,id_number,contact_number,status,birthdate,leaves_available,suspension_start_date,suspension_end_date,availability,photo_url")
-      .order("name");
+      .order("name")
+      .limit(MAX_ITEMS);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -87,7 +98,8 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
     const { data, error } = await supabase
       .from("management")
       .select("id,name,id_number,contact_number,status,birthdate,leaves_available,suspension_start_date,suspension_end_date,availability,photo_url")
-      .order("name");
+      .order("name")
+      .limit(MAX_ITEMS);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -99,7 +111,8 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
     const { data, error } = await supabase
       .from("mechanics")
       .select("id,name,id_number,contact_number,status,birthdate,leaves_available,suspension_start_date,suspension_end_date,availability,photo_url")
-      .order("name");
+      .order("name")
+      .limit(MAX_ITEMS);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -663,7 +676,7 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {drivers.map((driver) => (
+                {drivers.slice((driversPage - 1) * ITEMS_PER_PAGE, driversPage * ITEMS_PER_PAGE).map((driver) => (
                   <TableRow key={driver.id}>
                     <TableCell className="font-medium">{driver.name}</TableCell>
                     <TableCell>{driver.license_number || "—"}</TableCell>
@@ -729,6 +742,29 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 ))}
               </TableBody>
             </Table>
+            {drivers.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDriversPage(p => Math.max(1, p - 1))}
+                  disabled={driversPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {driversPage} of {Math.ceil(drivers.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDriversPage(p => Math.min(Math.ceil(drivers.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={driversPage >= Math.ceil(drivers.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </TabsContent>
@@ -796,7 +832,7 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {helpers.map((helper) => (
+                {helpers.slice((helpersPage - 1) * ITEMS_PER_PAGE, helpersPage * ITEMS_PER_PAGE).map((helper) => (
                   <TableRow key={helper.id}>
                     <TableCell>
                       <Checkbox
@@ -851,6 +887,29 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 ))}
               </TableBody>
             </Table>
+            {helpers.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setHelpersPage(p => Math.max(1, p - 1))}
+                  disabled={helpersPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {helpersPage} of {Math.ceil(helpers.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setHelpersPage(p => Math.min(Math.ceil(helpers.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={helpersPage >= Math.ceil(helpers.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </TabsContent>
@@ -918,7 +977,7 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recyclers.map((recycler) => (
+                {recyclers.slice((recyclersPage - 1) * ITEMS_PER_PAGE, recyclersPage * ITEMS_PER_PAGE).map((recycler) => (
                   <TableRow key={recycler.id}>
                     <TableCell>
                       <Checkbox
@@ -973,6 +1032,29 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 ))}
               </TableBody>
             </Table>
+            {recyclers.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRecyclersPage(p => Math.max(1, p - 1))}
+                  disabled={recyclersPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {recyclersPage} of {Math.ceil(recyclers.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRecyclersPage(p => Math.min(Math.ceil(recyclers.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={recyclersPage >= Math.ceil(recyclers.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </TabsContent>
@@ -1040,7 +1122,7 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {management.map((mgmt) => (
+                {management.slice((managementPage - 1) * ITEMS_PER_PAGE, managementPage * ITEMS_PER_PAGE).map((mgmt) => (
                   <TableRow key={mgmt.id}>
                     <TableCell>
                       <Checkbox
@@ -1095,6 +1177,29 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 ))}
               </TableBody>
             </Table>
+            {management.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setManagementPage(p => Math.max(1, p - 1))}
+                  disabled={managementPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {managementPage} of {Math.ceil(management.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setManagementPage(p => Math.min(Math.ceil(management.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={managementPage >= Math.ceil(management.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </TabsContent>
@@ -1162,7 +1267,7 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mechanics.map((mechanic) => (
+                {mechanics.slice((mechanicsPage - 1) * ITEMS_PER_PAGE, mechanicsPage * ITEMS_PER_PAGE).map((mechanic) => (
                   <TableRow key={mechanic.id}>
                     <TableCell>
                       <Checkbox
@@ -1217,6 +1322,29 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 ))}
               </TableBody>
             </Table>
+            {mechanics.length > ITEMS_PER_PAGE && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMechanicsPage(p => Math.max(1, p - 1))}
+                  disabled={mechanicsPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {mechanicsPage} of {Math.ceil(mechanics.length / ITEMS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMechanicsPage(p => Math.min(Math.ceil(mechanics.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={mechanicsPage >= Math.ceil(mechanics.length / ITEMS_PER_PAGE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </TabsContent>
