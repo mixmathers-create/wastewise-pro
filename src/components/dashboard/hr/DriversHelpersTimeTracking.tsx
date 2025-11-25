@@ -433,21 +433,13 @@ export default function DriversHelpersTimeTracking() {
 
       // Create detailed CSV with individual logs
       const detailedCsv = [
-        ["Personnel Name", "Type", "Time In", "Time Out", "Duration", "Vehicle", "Group Session ID"].join(","),
+        ["Personnel Name", "Time In", "Time Out", "Duration"].join(","),
         ...(data || []).map(log => {
-          const truckInfo = Array.isArray(log.trucks) ? log.trucks[0] : log.trucks;
-          const vehicleDisplay = truckInfo 
-            ? `${truckInfo.code}${truckInfo.plate_number ? ' - ' + truckInfo.plate_number : ''}`
-            : 'N/A';
-          
           return [
             log.personnel_name,
-            log.personnel_type,
             format(new Date(log.time_in), "yyyy-MM-dd HH:mm:ss"),
             log.time_out ? format(new Date(log.time_out), "yyyy-MM-dd HH:mm:ss") : "Active",
-            calculateTotalTime(log.time_in, log.time_out),
-            vehicleDisplay,
-            log.group_session_id || "N/A"
+            calculateTotalTime(log.time_in, log.time_out)
           ].join(",");
         })
       ].join("\n");
@@ -457,16 +449,14 @@ export default function DriversHelpersTimeTracking() {
 
       // Create summary CSV with totals per person
       const summaryCsv = [
-        ["Personnel Name", "Type", "Total Hours", "Total Minutes", "Number of Sessions"].join(","),
+        ["Personnel Name", "Total Hours", "Total Minutes"].join(","),
         ...sortedPersonnel.map((person) => {
           const hours = Math.floor(person.totalMinutes / 60);
           const minutes = person.totalMinutes % 60;
           return [
             person.name,
-            person.type,
             hours.toString(),
-            minutes.toString(),
-            person.logs.length.toString()
+            minutes.toString()
           ].join(",");
         })
       ].join("\n");
