@@ -402,6 +402,16 @@ export default function DriversHelpersTimeTracking() {
   const activeLogs = timeLogs.filter(log => !log.time_out);
   const timedOutLogs = timeLogs.filter(log => log.time_out);
   
+  // Get set of truck IDs that are currently in use
+  const activeTruckIds = new Set(
+    activeLogs
+      .filter(log => log.truck_id !== null)
+      .map(log => log.truck_id)
+  );
+  
+  // Filter available trucks to exclude those currently in use
+  const availableTrucks = trucks.filter(truck => !activeTruckIds.has(truck.id));
+  
   // Group active logs by truck_id
   const groupedActiveLogs = activeLogs.reduce((acc, log) => {
     const key = log.truck_id || `individual-${log.id}`;
@@ -453,12 +463,17 @@ export default function DriversHelpersTimeTracking() {
               className="w-full px-3 py-2 border rounded"
             >
               <option value="">-- Select a vehicle --</option>
-              {trucks.map((truck) => (
+              {availableTrucks.map((truck) => (
                 <option key={truck.id} value={truck.id}>
                   {truck.code} {truck.plate_number ? `- ${truck.plate_number}` : ''} ({truck.type})
                 </option>
               ))}
             </select>
+            {activeTruckIds.size > 0 && availableTrucks.length < trucks.length && (
+              <p className="text-xs text-muted-foreground">
+                {trucks.length - availableTrucks.length} vehicle(s) currently in use and unavailable
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
