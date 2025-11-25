@@ -3,17 +3,38 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
-import Index from "./pages/Index";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import Dashboard from "./pages/Dashboard";
-import MobileDashboard from "./pages/MobileDashboard";
-import ReceiptPreview from "./pages/ReceiptPreview";
-import NotFound from "./pages/NotFound";
-import PastSchedules from "./pages/PastSchedules";
+import { lazy, Suspense } from "react";
 import { isNativePlatform } from "@/lib/capacitorUtils";
+import { Recycle } from "lucide-react";
 
-const queryClient = new QueryClient();
+// Lazy load pages for code splitting
+const Index = lazy(() => import("./pages/Index"));
+const Login = lazy(() => import("./pages/Login"));
+const Signup = lazy(() => import("./pages/Signup"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const MobileDashboard = lazy(() => import("./pages/MobileDashboard"));
+const ReceiptPreview = lazy(() => import("./pages/ReceiptPreview"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const PastSchedules = lazy(() => import("./pages/PastSchedules"));
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000, // 1 minute
+      gcTime: 5 * 60 * 1000, // 5 minutes (renamed from cacheTime)
+    },
+  },
+});
+
+// Loading fallback component
+const LoadingFallback = () => (
+  <div className="flex min-h-screen items-center justify-center">
+    <div className="text-center">
+      <Recycle className="mx-auto h-12 w-12 animate-spin text-primary" />
+      <p className="mt-4 text-muted-foreground">Loading...</p>
+    </div>
+  </div>
+);
 
 // Use HashRouter on native (Capacitor) to avoid blank screens on file:// routes
 const RouterComponent = isNativePlatform() ? HashRouter : BrowserRouter;
@@ -30,17 +51,19 @@ const App = () => {
         <Toaster />
         <Sonner />
         <RouterComponent>
-          <Routes>
-            <Route path="/" element={<Navigate to={defaultRoute} replace />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/dashboard" element={<DashboardComponent />} />
-            <Route path="/mobile" element={<MobileDashboard />} />
-            <Route path="/receipt-preview" element={<ReceiptPreview />} />
-            <Route path="/past-schedules" element={<PastSchedules />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <Suspense fallback={<LoadingFallback />}>
+            <Routes>
+              <Route path="/" element={<Navigate to={defaultRoute} replace />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/dashboard" element={<DashboardComponent />} />
+              <Route path="/mobile" element={<MobileDashboard />} />
+              <Route path="/receipt-preview" element={<ReceiptPreview />} />
+              <Route path="/past-schedules" element={<PastSchedules />} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
         </RouterComponent>
       </TooltipProvider>
     </QueryClientProvider>
