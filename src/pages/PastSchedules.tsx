@@ -23,6 +23,11 @@ interface Helper {
   name: string;
 }
 
+interface Recycler {
+  id: string;
+  name: string;
+}
+
 interface TruckType {
   id: string;
   code: string;
@@ -36,6 +41,7 @@ interface Schedule {
   shift: string;
   driver_id: string | null;
   helper_ids: string[];
+  recycler_ids?: string[];
   truck_id: string | null;
   status: string;
   mt_requirement?: number;
@@ -54,6 +60,7 @@ const PastSchedules = () => {
   const navigate = useNavigate();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [helpers, setHelpers] = useState<Helper[]>([]);
+  const [recyclers, setRecyclers] = useState<Recycler[]>([]);
   const [trucks, setTrucks] = useState<TruckType[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -68,9 +75,10 @@ const PastSchedules = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [driversRes, helpersRes, trucksRes, schedulesRes, clientsRes] = await Promise.all([
+      const [driversRes, helpersRes, recyclersRes, trucksRes, schedulesRes, clientsRes] = await Promise.all([
         supabase.from("drivers").select("*"),
         supabase.from("helpers").select("*"),
+        supabase.from("recyclers").select("*"),
         supabase.from("trucks").select("*"),
         supabase.from("schedules").select("*").eq("status", "approved"),
         supabase.from("clients").select("*"),
@@ -78,12 +86,14 @@ const PastSchedules = () => {
 
       if (driversRes.error) throw driversRes.error;
       if (helpersRes.error) throw helpersRes.error;
+      if (recyclersRes.error) throw recyclersRes.error;
       if (trucksRes.error) throw trucksRes.error;
       if (schedulesRes.error) throw schedulesRes.error;
       if (clientsRes.error) throw clientsRes.error;
 
       setDrivers(driversRes.data || []);
       setHelpers(helpersRes.data || []);
+      setRecyclers(recyclersRes.data || []);
       setTrucks(trucksRes.data || []);
       setSchedules(schedulesRes.data || []);
       setClients(clientsRes.data || []);
@@ -281,6 +291,7 @@ const PastSchedules = () => {
                                   const driver = drivers.find(d => d.id === schedule.driver_id);
                                   const truck = trucks.find(t => t.id === schedule.truck_id);
                                   const scheduleHelpers = helpers.filter(h => schedule.helper_ids.includes(h.id));
+                                  const scheduleRecyclers = recyclers.filter(r => schedule.recycler_ids?.includes(r.id));
                                   const scheduleClients = clients.filter(c => schedule.client_ids?.includes(c.id));
 
                                   return (
@@ -293,6 +304,9 @@ const PastSchedules = () => {
                                         <div>Driver: {driver?.name || 'Not assigned'}</div>
                                         {scheduleHelpers.length > 0 && (
                                           <div>Helpers: {scheduleHelpers.map(h => h.name).join(', ')}</div>
+                                        )}
+                                        {scheduleRecyclers.length > 0 && (
+                                          <div>Recyclers: {scheduleRecyclers.map(r => r.name).join(', ')}</div>
                                         )}
                                         {scheduleClients.length > 0 && (
                                           <div className="mt-1">

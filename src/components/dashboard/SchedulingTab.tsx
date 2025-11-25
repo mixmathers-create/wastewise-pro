@@ -44,6 +44,15 @@ interface Helper {
   suspension_end_date?: string | null;
 }
 
+interface Recycler {
+  id: string;
+  name: string;
+  availability?: any;
+  status?: string;
+  suspension_start_date?: string | null;
+  suspension_end_date?: string | null;
+}
+
 interface TruckType {
   id: string;
   code: string;
@@ -58,6 +67,7 @@ interface Schedule {
   shift: string;
   driver_id: string | null;
   helper_ids: string[];
+  recycler_ids?: string[];
   truck_id: string | null;
   status: string;
   is_backup?: boolean;
@@ -105,6 +115,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const navigate = useNavigate();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [helpers, setHelpers] = useState<Helper[]>([]);
+  const [recyclers, setRecyclers] = useState<Recycler[]>([]);
   const [trucks, setTrucks] = useState<TruckType[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -170,18 +181,20 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [driversRes, helpersRes, trucksRes, clientsRes, schedulesRes, maintenanceRes, pendingRes] = await Promise.all([
+      const [driversRes, helpersRes, recyclersRes, trucksRes, clientsRes, schedulesRes, maintenanceRes, pendingRes] = await Promise.all([
         supabase.from("drivers").select("id,name,status,availability,license_expiry_date"),
         supabase.from("helpers").select("id,name,status,availability"),
+        supabase.from("recyclers").select("id,name,status,availability"),
         supabase.from("trucks").select("id,code,plate_number,status,capacity"),
         supabase.from("clients").select("id,name,collection_days,collection_shift,mt_requirement,status"),
-        supabase.from("schedules").select("id,date,shift,driver_id,helper_ids,truck_id,client_ids,status,mt_requirement,is_backup").in("status", ["approved", "scheduled"]),
+        supabase.from("schedules").select("id,date,shift,driver_id,helper_ids,recycler_ids,truck_id,client_ids,status,mt_requirement,is_backup").in("status", ["approved", "scheduled"]),
         supabase.from("truck_maintenance_blocks").select("truck_id,start_date,end_date,reason"),
-        supabase.from("schedules").select("id,date,shift,driver_id,helper_ids,truck_id,client_ids,status,mt_requirement").eq("status", "draft")
+        supabase.from("schedules").select("id,date,shift,driver_id,helper_ids,recycler_ids,truck_id,client_ids,status,mt_requirement").eq("status", "draft")
       ]);
 
       if (driversRes.data) setDrivers(driversRes.data as any);
       if (helpersRes.data) setHelpers(helpersRes.data as any);
+      if (recyclersRes.data) setRecyclers(recyclersRes.data as any);
       if (trucksRes.data) setTrucks(trucksRes.data as any);
       if (clientsRes.data) setClients(clientsRes.data as any);
       if (schedulesRes.data) setSchedules(schedulesRes.data);
@@ -366,6 +379,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
             shift,
             driver_id: driver.id,
             helper_ids: assignedHelpers.map(h => h.id),
+            recycler_ids: [],
             truck_id: truckAssignment.id,
             status: "draft",
             is_backup: false,
@@ -1181,6 +1195,32 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                 })}
               </div>
             </div>
+            <div>
+              <Label className="text-xs">Recyclers</Label>
+              <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
+                {recyclers.map(r => {
+                  const recyclerCheck = canAssignHelper(r, editingSchedule?.date);
+                  return (
+                    <div key={r.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        checked={editingSchedule?.recycler_ids?.includes(r.id)}
+                        disabled={!recyclerCheck.canAssign}
+                        onCheckedChange={(checked) => {
+                          const currentRecyclers = editingSchedule?.recycler_ids || [];
+                          const newRecyclers = checked
+                            ? [...currentRecyclers, r.id]
+                            : currentRecyclers.filter(id => id !== r.id);
+                          setEditingSchedule({ ...editingSchedule!, recycler_ids: newRecyclers });
+                        }}
+                      />
+                      <Label className="text-xs">
+                        {r.name} {!recyclerCheck.canAssign && <span className="text-destructive text-[10px]">({recyclerCheck.reason})</span>}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
             <div className="flex gap-2">
               <Button onClick={() => updateSchedule(editingSchedule!)} disabled={loading} size="sm">Save</Button>
               <Button variant="outline" size="sm" onClick={() => setEditingSchedule(null)}>Cancel</Button>
@@ -1204,6 +1244,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                 const driver = drivers.find(d => d.id === schedule.driver_id);
                 const truck = trucks.find(t => t.id === schedule.truck_id);
                 const scheduleHelpers = helpers.filter(h => schedule.helper_ids.includes(h.id));
+                const scheduleRecyclers = recyclers.filter(r => schedule.recycler_ids?.includes(r.id));
                 const scheduleClients = clients.filter(c => schedule.client_ids?.includes(c.id));
                 
                 // Calculate service time (1MT = 40 mins)
@@ -1261,6 +1302,16 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                         )}
                       </div>
                     </div>
+                    {scheduleRecyclers.length > 0 && (
+                      <div className="text-xs">
+                        <div className="text-muted-foreground mb-1">Recyclers:</div>
+                        <div className="flex flex-wrap gap-1">
+                          {scheduleRecyclers.map(r => (
+                            <Badge key={r.id} variant="secondary" className="text-xs">{r.name}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {scheduleClients.length > 0 && (
                       <div className="text-xs border-t pt-2 mt-2">
                         <div className="flex items-center justify-between mb-1">
@@ -1368,6 +1419,7 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                 const driver = drivers.find(d => d.id === schedule.driver_id);
                 const truck = trucks.find(t => t.id === schedule.truck_id);
                 const scheduleHelpers = helpers.filter(h => schedule.helper_ids.includes(h.id));
+                const scheduleRecyclers = recyclers.filter(r => schedule.recycler_ids?.includes(r.id));
                 return (
                   <div key={schedule.id || idx} className="border rounded p-3">
                     <div className="flex items-center justify-between mb-2">
@@ -1382,8 +1434,11 @@ const SchedulingTab = ({ profile }: { profile: any }) => {
                         <Edit2 className="h-3 w-3 mr-1" /> Edit
                       </Button>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Helpers: {scheduleHelpers.map(h => h.name).join(', ') || 'None'}
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <div>Helpers: {scheduleHelpers.map(h => h.name).join(', ') || 'None'}</div>
+                      {scheduleRecyclers.length > 0 && (
+                        <div>Recyclers: {scheduleRecyclers.map(r => r.name).join(', ')}</div>
+                      )}
                     </div>
                   </div>
                 );

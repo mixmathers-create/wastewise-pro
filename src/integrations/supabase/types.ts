@@ -916,6 +916,7 @@ export type Database = {
           is_backup: boolean | null
           is_special_dispatch: boolean | null
           mt_requirement: number | null
+          recycler_ids: string[] | null
           shift: string
           signature_data: string | null
           status: string | null
@@ -936,6 +937,7 @@ export type Database = {
           is_backup?: boolean | null
           is_special_dispatch?: boolean | null
           mt_requirement?: number | null
+          recycler_ids?: string[] | null
           shift: string
           signature_data?: string | null
           status?: string | null
@@ -956,6 +958,7 @@ export type Database = {
           is_backup?: boolean | null
           is_special_dispatch?: boolean | null
           mt_requirement?: number | null
+          recycler_ids?: string[] | null
           shift?: string
           signature_data?: string | null
           status?: string | null
