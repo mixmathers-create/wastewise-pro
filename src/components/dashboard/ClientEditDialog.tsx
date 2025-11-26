@@ -149,6 +149,22 @@ const ClientEditDialog = ({
             </Select>
           </div>
           <div>
+            <Label>Contact Person</Label>
+            <Input 
+              value={formData.contact_person || ""} 
+              onChange={(e) => setFormData({...formData, contact_person: e.target.value})} 
+              placeholder="Enter contact person name"
+            />
+          </div>
+          <div>
+            <Label>Contact Number</Label>
+            <Input 
+              value={formData.contact_number || ""} 
+              onChange={(e) => setFormData({...formData, contact_number: e.target.value})} 
+              placeholder="Enter contact number"
+            />
+          </div>
+          <div>
             <Label>MT Requirement</Label>
             <Input 
               type="number" 
