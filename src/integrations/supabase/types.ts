@@ -211,9 +211,11 @@ export type Database = {
           equipment_id: string
           helper_id: string | null
           id: string
+          management_id: string | null
           mechanic_id: string | null
           notes: string | null
           quantity: number | null
+          recycler_id: string | null
           status: string | null
         }
         Insert: {
@@ -225,9 +227,11 @@ export type Database = {
           equipment_id: string
           helper_id?: string | null
           id?: string
+          management_id?: string | null
           mechanic_id?: string | null
           notes?: string | null
           quantity?: number | null
+          recycler_id?: string | null
           status?: string | null
         }
         Update: {
@@ -239,9 +243,11 @@ export type Database = {
           equipment_id?: string
           helper_id?: string | null
           id?: string
+          management_id?: string | null
           mechanic_id?: string | null
           notes?: string | null
           quantity?: number | null
+          recycler_id?: string | null
           status?: string | null
         }
         Relationships: [
@@ -267,10 +273,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "equipment_checkouts_management_id_fkey"
+            columns: ["management_id"]
+            isOneToOne: false
+            referencedRelation: "management"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "equipment_checkouts_mechanic_id_fkey"
             columns: ["mechanic_id"]
             isOneToOne: false
             referencedRelation: "mechanics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_checkouts_recycler_id_fkey"
+            columns: ["recycler_id"]
+            isOneToOne: false
+            referencedRelation: "recyclers"
             referencedColumns: ["id"]
           },
         ]
