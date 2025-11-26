@@ -49,10 +49,13 @@ export default function EquipmentInventory() {
     const { data } = await supabase
       .from("equipment_checkouts")
       .select(`
-        id,checked_out_at,checked_in_at,status,quantity,notes,
+        id,checked_out_at,checked_in_at,status,quantity,notes,assigned_to_type,
         equipment_inventory(name, code, type, is_consumable),
         drivers(name),
-        helpers(name)
+        helpers(name),
+        mechanics(name),
+        management(name),
+        recyclers(name)
       `)
       .order("checked_out_at", { ascending: false })
       .limit(100);
@@ -87,18 +90,36 @@ export default function EquipmentInventory() {
   };
 
   const handleExportCheckouts = () => {
-    const csvData = checkouts.map(checkout => ({
-      Equipment: checkout.equipment_inventory?.code || '',
-      Name: checkout.equipment_inventory?.name || '',
-      'Assigned To': checkout.assigned_to_type === 'driver' 
-        ? checkout.drivers?.name || '' 
-        : checkout.helpers?.name || '',
-      Type: checkout.assigned_to_type,
-      Quantity: checkout.quantity,
-      'Checked Out': format(new Date(checkout.checked_out_at), 'yyyy-MM-dd HH:mm'),
-      'Checked In': checkout.checked_in_at ? format(new Date(checkout.checked_in_at), 'yyyy-MM-dd HH:mm') : '',
-      Status: checkout.status
-    }));
+    const csvData = checkouts.map(checkout => {
+      let assignedTo = '';
+      switch(checkout.assigned_to_type) {
+        case 'driver':
+          assignedTo = checkout.drivers?.name || '';
+          break;
+        case 'helper':
+          assignedTo = checkout.helpers?.name || '';
+          break;
+        case 'mechanic':
+          assignedTo = checkout.mechanics?.name || '';
+          break;
+        case 'management':
+          assignedTo = checkout.management?.name || '';
+          break;
+        case 'recycler':
+          assignedTo = checkout.recyclers?.name || '';
+          break;
+      }
+      return {
+        Equipment: checkout.equipment_inventory?.code || '',
+        Name: checkout.equipment_inventory?.name || '',
+        'Assigned To': assignedTo,
+        Type: checkout.assigned_to_type,
+        Quantity: checkout.quantity,
+        'Checked Out': format(new Date(checkout.checked_out_at), 'yyyy-MM-dd HH:mm'),
+        'Checked In': checkout.checked_in_at ? format(new Date(checkout.checked_in_at), 'yyyy-MM-dd HH:mm') : '',
+        Status: checkout.status
+      };
+    });
     const csv = generateCSV(csvData, ['Equipment', 'Name', 'Assigned To', 'Type', 'Quantity', 'Checked Out', 'Checked In', 'Status']);
     downloadCSV(csv, `equipment-checkouts-${format(new Date(), 'yyyy-MM-dd')}.csv`);
     toast({ title: "Success", description: "Checkouts exported" });
@@ -239,9 +260,11 @@ export default function EquipmentInventory() {
                     </TableCell>
                     <TableCell>{checkout.assigned_to_type}</TableCell>
                     <TableCell>
-                      {checkout.assigned_to_type === "driver" 
-                        ? checkout.drivers?.name 
-                        : checkout.helpers?.name}
+                      {checkout.assigned_to_type === "driver" && checkout.drivers?.name}
+                      {checkout.assigned_to_type === "helper" && checkout.helpers?.name}
+                      {checkout.assigned_to_type === "mechanic" && checkout.mechanics?.name}
+                      {checkout.assigned_to_type === "management" && checkout.management?.name}
+                      {checkout.assigned_to_type === "recycler" && checkout.recyclers?.name}
                     </TableCell>
                     <TableCell>{checkout.quantity}</TableCell>
                     <TableCell>{new Date(checkout.checked_out_at).toLocaleString()}</TableCell>
