@@ -47,6 +47,7 @@ const Login = () => {
               full_name: data.user.email?.split("@")[0] || "User",
               email: data.user.email || "",
               role: "admin",
+              user_type: "admin",
             });
           }
         } catch (bootstrapError) {
