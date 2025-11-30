@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { generateCSV, downloadCSV } from "@/lib/csvUtils";
 import { printerService } from "@/lib/printerService";
+import TallyTemplate, { TallyTemplateProps } from "../collection/TallyTemplate";
 
 const CollectionsTab = ({ profile }: { profile: any }) => {
   const navigate = useNavigate();
@@ -22,6 +23,8 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedReceipts, setSelectedReceipts] = useState<Set<string>>(new Set());
+  const [tallyData, setTallyData] = useState<TallyTemplateProps | null>(null);
+  const tallyTemplateRef = useRef<HTMLDivElement>(null);
   const isMobile = Capacitor.isNativePlatform();
   const isAdmin = profile?.role === "admin";
 
@@ -125,39 +128,28 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
       });
       
       if (isMobile) {
-        // Print to internal printer on mobile
-        const printItems = [
-          { label: "Date:", value: new Date(data.created_at).toLocaleDateString() },
-          { label: "QR Code:", value: data.qr_code },
-          { label: "", value: "" },
-          { label: "TALLY ENTRIES:", value: "" }
-        ];
-
-        // Add each tally entry
-        tallyEntries.forEach((entry, idx) => {
-          printItems.push({
-            label: `${idx + 1}. ${entry.waste_type}`,
-            value: `${entry.quantity} ${entry.unit || 'pcs'}`
-          });
+        // Set tally data for template
+        setTallyData({
+          receiptQR: data.qr_code,
+          createdAt: new Date(data.created_at),
+          tallyEntries,
+          totals,
         });
-
-        // Add totals
-        printItems.push({ label: "", value: "" });
-        printItems.push({ label: "TOTALS:", value: "" });
-        Object.entries(totals).forEach(([key, total]) => {
-          const wasteType = key.split('-')[0];
-          printItems.push({
-            label: wasteType,
-            value: `${total.quantity} ${total.unit || 'pcs'}`
-          });
-        });
-
-        await printerService.printReceipt({
-          header: "COLLECTION TALLY",
-          items: printItems,
-          footer: `Printed: ${new Date().toLocaleString()}`
-        });
+        
+        // Wait for template to render
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        if (!tallyTemplateRef.current) {
+          toast({ title: "Error", description: "Tally template not ready", variant: "destructive" });
+          return;
+        }
+        
+        // Print the template as image
+        await printerService.printElement(tallyTemplateRef.current, 1);
         toast({ title: "Success", description: "Tally printed successfully" });
+        
+        // Clear tally data
+        setTallyData(null);
       } else {
         // Print using window.print on web
         const printWindow = window.open('', '_blank');
@@ -391,6 +383,14 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
           </Table>
         )}
       </CardContent>
+
+      {tallyData && (
+        <div style={{ position: "absolute", left: "-9999px", top: 0 }}>
+          <div ref={tallyTemplateRef} style={{ paddingRight: "15mm", backgroundColor: "#ffffff" }}>
+            <TallyTemplate {...tallyData} />
+          </div>
+        </div>
+      )}
     </Card>
   );
 };

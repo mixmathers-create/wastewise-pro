@@ -6,9 +6,23 @@ import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { printerService } from "@/lib/printerService";
 import { ArrowLeft, Printer } from "lucide-react";
-import QRCode from "qrcode";
 import SignatureCanvas from "react-signature-canvas";
 import { Label } from "@/components/ui/label";
+import ReceiptTemplate, { ReceiptTemplateProps } from "@/components/collection/ReceiptTemplate";
+import QRCode from "qrcode";
+
+const QRCodeDisplay = ({ value, size }: { value: string; size: number }) => {
+  const [qrUrl, setQrUrl] = useState<string>("");
+  
+  useEffect(() => {
+    QRCode.toDataURL(value, { width: size, margin: 1 })
+      .then(setQrUrl)
+      .catch(console.error);
+  }, [value, size]);
+  
+  if (!qrUrl) return null;
+  return <img src={qrUrl} alt="QR Code" style={{ width: size, height: size }} />;
+};
 
 const ReceiptPreview = () => {
   const [searchParams] = useSearchParams();
@@ -21,11 +35,11 @@ const ReceiptPreview = () => {
   const [truck, setTruck] = useState<any>(null);
   const [driver, setDriver] = useState<any>(null);
   const [helpers, setHelpers] = useState<any[]>([]);
-  const [qrCodeUrl, setQrCodeUrl] = useState("");
   const [printing, setPrinting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hasSignature, setHasSignature] = useState(false);
   const signatureRef = useRef<SignatureCanvas>(null);
+  const printReceiptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (receiptId) {
@@ -59,10 +73,6 @@ const ReceiptPreview = () => {
       setTruck(truckRes.data);
       setDriver(driverRes.data);
       setHelpers(helpersRes.data || []);
-
-      // Generate QR code
-      const qrUrl = await QRCode.toDataURL(receiptData.qr_code, { width: 300 });
-      setQrCodeUrl(qrUrl);
       
       // Check if signature exists
       setHasSignature(!!receiptData.signature_data);
@@ -115,6 +125,15 @@ const ReceiptPreview = () => {
       return;
     }
 
+    if (!printReceiptRef.current) {
+      toast({ 
+        title: "Print Error", 
+        description: "Receipt template not ready", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
     if (!printerService.isAvailable()) {
       toast({ 
         title: "Printer Not Available", 
@@ -127,62 +146,56 @@ const ReceiptPreview = () => {
     try {
       setPrinting(true);
       
-      // Group tally entries by waste type
-      const tallyEntries = (receipt.tally_entries || receipt.items) as any[];
-      const wasteTypeTotals: { [key: string]: { [unit: string]: number } } = {};
-      
-      tallyEntries.forEach((entry: any) => {
-        const wasteType = entry.waste_type;
-        const unit = entry.unit;
-        const quantity = entry.quantity;
-        
-        if (!wasteTypeTotals[wasteType]) {
-          wasteTypeTotals[wasteType] = {};
-        }
-        if (!wasteTypeTotals[wasteType][unit]) {
-          wasteTypeTotals[wasteType][unit] = 0;
-        }
-        wasteTypeTotals[wasteType][unit] += quantity;
-      });
-      
-      // Build waste items for printing
-      const wasteItems: { label: string; value: string }[] = [];
-      Object.entries(wasteTypeTotals).forEach(([wasteType, units]) => {
-        Object.entries(units).forEach(([unit, total]) => {
-          wasteItems.push({ label: wasteType, value: `${total} ${unit}` });
-        });
-      });
-      
-      await printerService.printReceipt({
-        header: "WASTEWISE COLLECTION RECEIPT",
-        items: [
-          { label: "Receipt ID", value: receipt.qr_code },
-          { label: "Date", value: new Date(receipt.created_at).toLocaleDateString() },
-          { label: "Time", value: new Date(receipt.created_at).toLocaleTimeString() },
-          { label: "", value: "---" },
-          { label: "Client", value: client.name },
-          { label: "Industry", value: client.industry },
-          { label: "Address", value: client.address || "N/A" },
-          { label: "", value: "---" },
-          { label: "Truck", value: truck?.code || "N/A" },
-          { label: "Driver", value: driver?.name || "N/A" },
-          { label: "Helpers", value: helpers.map(h => h.name).join(", ") },
-          { label: "", value: "---" },
-          { label: "WASTE COLLECTED", value: "" },
-          ...wasteItems,
-          { label: "", value: "---" },
-          { label: "Signed By", value: receipt.signed_by }
-        ],
-        qrCode: qrCodeUrl.split(',')[1],
-        footer: "Thank you for choosing WasteWise!\nwww.wastewise.com"
-      });
-
+      await printerService.printElement(printReceiptRef.current, 1);
       toast({ title: "Print Successful", description: "Receipt printed successfully" });
     } catch (error: any) {
       toast({ title: "Print Failed", description: error.message, variant: "destructive" });
     } finally {
       setPrinting(false);
     }
+  };
+  
+  // Prepare receipt template props
+  const getReceiptProps = (): ReceiptTemplateProps | null => {
+    if (!receipt || !client) return null;
+    
+    const logoUrl = localStorage.getItem("receipt_logo");
+    const companyName = localStorage.getItem("receipt_company_name") || "WASTEWISE";
+    const companyAddress = localStorage.getItem("receipt_company_address") || "";
+    const companyContact = localStorage.getItem("receipt_company_contact") || "";
+    const headerText = localStorage.getItem("receipt_header") || "COLLECTION RECEIPT";
+    const footerText = localStorage.getItem("receipt_footer") || "Thank you for your cooperation!";
+    
+    return {
+      logoUrl,
+      companyName,
+      companyAddress,
+      companyContact,
+      headerText,
+      footerText,
+      receiptQR: receipt.qr_code,
+      createdAt: new Date(receipt.created_at),
+      client: {
+        id: client.id,
+        name: client.name,
+        industry: client.industry,
+        address: client.address,
+        contact_person: client.contact_person,
+        contact_number: client.contact_number,
+        qr_code: client.qr_code,
+      },
+      truck: {
+        code: truck?.code || "N/A",
+        type: truck?.type,
+      },
+      driver: {
+        name: driver?.name || "N/A",
+      },
+      helpers: helpers.map((h) => ({ name: h.name })),
+      items: receipt.items as Array<{ waste_type: string; quantity: number; unit: string }>,
+      signedBy: receipt.signed_by,
+      signatureData: receipt.signature_data,
+    };
   };
 
   if (loading) {
@@ -281,9 +294,9 @@ const ReceiptPreview = () => {
             <div className="border-t-2 border-dashed" />
 
             {/* QR Code */}
-            {qrCodeUrl && (
+            {receipt?.qr_code && (
               <div className="flex flex-col items-center">
-                <img src={qrCodeUrl} alt="Receipt QR Code" className="w-48 h-48" />
+                <QRCodeDisplay value={receipt.qr_code} size={192} />
                 <p className="text-xs text-gray-500 mt-2">Scan for verification</p>
               </div>
             )}
@@ -347,6 +360,12 @@ const ReceiptPreview = () => {
             <Printer className="h-5 w-5 mr-2" />
             {printing ? "Printing..." : "Print Receipt"}
           </Button>
+        </div>
+      )}
+
+      {getReceiptProps() && (
+        <div style={{ position: "absolute", left: "-9999px", top: 0 }}>
+          <ReceiptTemplate ref={printReceiptRef} {...getReceiptProps()!} />
         </div>
       )}
     </div>
