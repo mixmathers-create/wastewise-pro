@@ -337,7 +337,7 @@ const ReceiptPreview = () => {
               <div className="space-y-2">
                 <h3 className="font-bold text-sm">Signature</h3>
                 <img src={receipt.signature_data} alt="Signature" className="border rounded h-24 w-full object-contain bg-gray-50" />
-                <p className="text-sm"><span className="font-medium">Signed by:</span> {receipt.signed_by}</p>
+                <p className="text-sm break-words"><span className="font-medium">Signed by:</span> {receipt.signed_by}</p>
               </div>
             )}
 

@@ -274,16 +274,14 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
           <div className="space-y-2">
             {receipts.map((r) => (
               <div key={r.id} className="bg-card border rounded-lg p-3 space-y-2">
-                <div className="flex justify-between items-start">
-                  <div className="space-y-1 flex-1">
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(r.created_at).toLocaleString()}
-                    </div>
-                    <div className="font-medium text-sm break-all">{r.qr_code}</div>
-                    <div className="text-sm">
-                      <span className="text-muted-foreground">Signed by: </span>
-                      {r.signed_by || '-'}
-                    </div>
+                <div className="space-y-1 overflow-hidden">
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(r.created_at).toLocaleString()}
+                  </div>
+                  <div className="font-medium text-sm break-all">{r.qr_code}</div>
+                  <div className="text-sm truncate">
+                    <span className="text-muted-foreground">Signed by: </span>
+                    {r.signed_by || '-'}
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -349,7 +347,9 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
                   )}
                   <TableCell>{new Date(r.created_at).toLocaleString()}</TableCell>
                   <TableCell className="font-medium">{r.qr_code}</TableCell>
-                  <TableCell>{r.signed_by || '-'}</TableCell>
+                  <TableCell className="max-w-[150px]">
+                    <span className="block truncate" title={r.signed_by || '-'}>{r.signed_by || '-'}</span>
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
                       <Button 

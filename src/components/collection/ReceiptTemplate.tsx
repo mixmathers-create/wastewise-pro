@@ -246,7 +246,7 @@ const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
               }}
             />
           )}
-          <div style={{ fontSize: "7pt" }}>Signed by: {signedBy}</div>
+          <div style={{ fontSize: "7pt", wordBreak: "break-word", overflowWrap: "break-word" }}>Signed by: {signedBy}</div>
         </div>
 
         <div style={{ borderTop: "1px dashed #000", margin: "2mm 0" }} />
