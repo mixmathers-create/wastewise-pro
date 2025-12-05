@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Recycle, LogOut, QrCode, Users, Truck, UserCog, BarChart3, Settings, Calendar, Wrench, Briefcase } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 
 // Lazy load tab components for better performance
 const CollectionsTab = lazy(() => import("@/components/dashboard/CollectionsTab"));
@@ -23,6 +24,7 @@ const Dashboard = () => {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const roleAccess = useRoleAccess(profile?.user_type || 'admin');
 
   useEffect(() => {
     checkUser();
@@ -100,82 +102,118 @@ const Dashboard = () => {
       </header>
 
       <main className="container mx-auto px-6 py-8 max-w-[1400px]">
-        <Tabs defaultValue="collections" className="space-y-6">
+        <Tabs defaultValue={roleAccess.canAccessCollections ? "collections" : roleAccess.canAccessMechanics ? "mechanics" : "hr"} className="space-y-6">
           <TabsList className="inline-flex h-auto w-auto bg-muted/50 p-1 rounded-lg gap-1">
-            <TabsTrigger value="collections" className="gap-2 data-[state=active]:bg-background">
-              <QrCode className="h-4 w-4" />
-              <span className="hidden sm:inline">Collections</span>
-            </TabsTrigger>
-            <TabsTrigger value="clients" className="gap-2 data-[state=active]:bg-background">
-              <Users className="h-4 w-4" />
-              <span className="hidden sm:inline">Clients</span>
-            </TabsTrigger>
-            <TabsTrigger value="trucks" className="gap-2 data-[state=active]:bg-background">
-              <Truck className="h-4 w-4" />
-              <span className="hidden sm:inline">Trucks</span>
-            </TabsTrigger>
-            <TabsTrigger value="drivers" className="gap-2 data-[state=active]:bg-background">
-              <UserCog className="h-4 w-4" />
-              <span className="hidden sm:inline">Personnel</span>
-            </TabsTrigger>
-            <TabsTrigger value="mechanics" className="gap-2 data-[state=active]:bg-background">
-              <Wrench className="h-4 w-4" />
-              <span className="hidden sm:inline">Mechanics</span>
-            </TabsTrigger>
-            <TabsTrigger value="scheduling" className="gap-2 data-[state=active]:bg-background">
-              <Calendar className="h-4 w-4" />
-              <span className="hidden sm:inline">Schedule</span>
-            </TabsTrigger>
-            <TabsTrigger value="hr" className="gap-2 data-[state=active]:bg-background">
-              <Briefcase className="h-4 w-4" />
-              <span className="hidden sm:inline">HR</span>
-            </TabsTrigger>
-            <TabsTrigger value="analytics" className="gap-2 data-[state=active]:bg-background">
-              <BarChart3 className="h-4 w-4" />
-              <span className="hidden sm:inline">Analytics</span>
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="gap-2 data-[state=active]:bg-background">
-              <Settings className="h-4 w-4" />
-              <span className="hidden sm:inline">Settings</span>
-            </TabsTrigger>
+            {roleAccess.canAccessCollections && (
+              <TabsTrigger value="collections" className="gap-2 data-[state=active]:bg-background">
+                <QrCode className="h-4 w-4" />
+                <span className="hidden sm:inline">Collections</span>
+              </TabsTrigger>
+            )}
+            {roleAccess.canAccessClients && (
+              <TabsTrigger value="clients" className="gap-2 data-[state=active]:bg-background">
+                <Users className="h-4 w-4" />
+                <span className="hidden sm:inline">Clients</span>
+              </TabsTrigger>
+            )}
+            {roleAccess.canAccessTrucks && (
+              <TabsTrigger value="trucks" className="gap-2 data-[state=active]:bg-background">
+                <Truck className="h-4 w-4" />
+                <span className="hidden sm:inline">Trucks</span>
+              </TabsTrigger>
+            )}
+            {roleAccess.canAccessPersonnel && (
+              <TabsTrigger value="drivers" className="gap-2 data-[state=active]:bg-background">
+                <UserCog className="h-4 w-4" />
+                <span className="hidden sm:inline">Personnel</span>
+              </TabsTrigger>
+            )}
+            {roleAccess.canAccessMechanics && (
+              <TabsTrigger value="mechanics" className="gap-2 data-[state=active]:bg-background">
+                <Wrench className="h-4 w-4" />
+                <span className="hidden sm:inline">Mechanics</span>
+              </TabsTrigger>
+            )}
+            {roleAccess.canAccessScheduling && (
+              <TabsTrigger value="scheduling" className="gap-2 data-[state=active]:bg-background">
+                <Calendar className="h-4 w-4" />
+                <span className="hidden sm:inline">Schedule</span>
+              </TabsTrigger>
+            )}
+            {roleAccess.canAccessHR && (
+              <TabsTrigger value="hr" className="gap-2 data-[state=active]:bg-background">
+                <Briefcase className="h-4 w-4" />
+                <span className="hidden sm:inline">HR</span>
+              </TabsTrigger>
+            )}
+            {roleAccess.canAccessAnalytics && (
+              <TabsTrigger value="analytics" className="gap-2 data-[state=active]:bg-background">
+                <BarChart3 className="h-4 w-4" />
+                <span className="hidden sm:inline">Analytics</span>
+              </TabsTrigger>
+            )}
+            {roleAccess.canAccessSettings && (
+              <TabsTrigger value="settings" className="gap-2 data-[state=active]:bg-background">
+                <Settings className="h-4 w-4" />
+                <span className="hidden sm:inline">Settings</span>
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <Suspense fallback={<div className="flex items-center justify-center p-8"><Recycle className="h-8 w-8 animate-spin text-primary" /></div>}>
-            <TabsContent value="collections">
-              <CollectionsTab profile={profile} />
-            </TabsContent>
+            {roleAccess.canAccessCollections && (
+              <TabsContent value="collections">
+                <CollectionsTab profile={profile} />
+              </TabsContent>
+            )}
 
-            <TabsContent value="clients">
-              <ClientsTab profile={profile} />
-            </TabsContent>
+            {roleAccess.canAccessClients && (
+              <TabsContent value="clients">
+                <ClientsTab profile={profile} />
+              </TabsContent>
+            )}
 
-            <TabsContent value="trucks">
-              <TrucksTab profile={profile} />
-            </TabsContent>
+            {roleAccess.canAccessTrucks && (
+              <TabsContent value="trucks">
+                <TrucksTab profile={profile} />
+              </TabsContent>
+            )}
 
-            <TabsContent value="drivers">
-              <DriversHelpersTab profile={profile} />
-            </TabsContent>
+            {roleAccess.canAccessPersonnel && (
+              <TabsContent value="drivers">
+                <DriversHelpersTab profile={profile} />
+              </TabsContent>
+            )}
 
-            <TabsContent value="scheduling">
-              <SchedulingTab profile={profile} />
-            </TabsContent>
+            {roleAccess.canAccessScheduling && (
+              <TabsContent value="scheduling">
+                <SchedulingTab profile={profile} />
+              </TabsContent>
+            )}
 
-            <TabsContent value="analytics">
-              <EnhancedAnalyticsTab profile={profile} />
-            </TabsContent>
+            {roleAccess.canAccessAnalytics && (
+              <TabsContent value="analytics">
+                <EnhancedAnalyticsTab profile={profile} />
+              </TabsContent>
+            )}
 
-            <TabsContent value="mechanics">
-              <MechanicsTab />
-            </TabsContent>
+            {roleAccess.canAccessMechanics && (
+              <TabsContent value="mechanics">
+                <MechanicsTab />
+              </TabsContent>
+            )}
 
-            <TabsContent value="hr">
-              <HRTab />
-            </TabsContent>
+            {roleAccess.canAccessHR && (
+              <TabsContent value="hr">
+                <HRTab />
+              </TabsContent>
+            )}
 
-            <TabsContent value="settings">
-              <EnhancedSettingsTab profile={profile} />
-            </TabsContent>
+            {roleAccess.canAccessSettings && (
+              <TabsContent value="settings">
+                <EnhancedSettingsTab profile={profile} />
+              </TabsContent>
+            )}
           </Suspense>
         </Tabs>
       </main>
