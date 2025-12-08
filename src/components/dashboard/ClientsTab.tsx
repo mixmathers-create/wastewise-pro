@@ -12,6 +12,7 @@ import { generateCSV, downloadCSV, parseCSV } from "@/lib/csvUtils";
 import { useToast } from "@/hooks/use-toast";
 import { Capacitor } from '@capacitor/core';
 import { Checkbox } from "@/components/ui/checkbox";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 
 const ClientsTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
@@ -22,7 +23,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
   const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isAdmin = profile?.role === "admin";
+  const roleAccess = useRoleAccess(profile?.user_type || 'admin');
   const isMobile = Capacitor.isNativePlatform();
   
   const ITEMS_PER_PAGE = 5;
@@ -164,7 +165,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
             <CardTitle>Clients</CardTitle>
             <CardDescription>Manage your client database</CardDescription>
           </div>
-          {isAdmin && (
+          {roleAccess.canEditClients && (
             <div className="flex gap-2 items-center">
               {selectedClients.size > 0 && (
                 <Button 
@@ -175,7 +176,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
                   Delete ({selectedClients.size})
                 </Button>
               )}
-              {!isMobile && (
+              {!isMobile && roleAccess.canImportExport && (
                 <>
                   <Button variant="outline" size="sm" onClick={downloadTemplate}>
                     <Download className="h-4 w-4 mr-2" />Template
@@ -213,7 +214,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {isAdmin && (
+                  {roleAccess.canEditClients && (
                     <TableHead className="w-12">
                       <Checkbox
                         checked={selectedClients.size === clients.length && clients.length > 0}
@@ -234,7 +235,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
               <TableBody>
                 {clients.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((client) => (
                   <TableRow key={client.id}>
-                    {isAdmin && (
+                    {roleAccess.canEditClients && (
                       <TableCell>
                         <Checkbox
                           checked={selectedClients.has(client.id)}
@@ -281,7 +282,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
                         <Download className="h-4 w-4" />
                       </Button>
                     </TableCell>
-                    {!isMobile && (
+                    {!isMobile && roleAccess.canEditClients && (
                       <TableCell>
                         <Button variant="ghost" size="sm" onClick={() => setEditingClient(client)}>
                           <Pencil className="h-4 w-4" />

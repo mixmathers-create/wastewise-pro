@@ -983,6 +983,7 @@ export type Database = {
           id: string
           role: string
           user_id: string
+          user_type: string
         }
         Insert: {
           created_at?: string

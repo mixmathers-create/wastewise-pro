@@ -10,9 +10,12 @@ import { Printer } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { printerService } from "@/lib/printerService";
 import { SchedulingParametersSettings } from "./SchedulingParametersSettings";
+import UserManagement from "./UserManagement";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 
 const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
+  const roleAccess = useRoleAccess(profile?.user_type || 'admin');
   const [logoUrl, setLogoUrl] = useState("");
   const [companyName, setCompanyName] = useState("WasteWise");
   const [companyAddress, setCompanyAddress] = useState("");
@@ -97,6 +100,7 @@ const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
 
   return (
     <div className="space-y-4">
+      {roleAccess.isAdmin && <UserManagement />}
       <SchedulingParametersSettings />
       
       <Card>
