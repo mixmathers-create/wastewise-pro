@@ -286,7 +286,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       setItems([...items, item]);
     }
 
-    setNewItem({ quantity: 0, unit: "kg" });
+    setNewItem({ quantity: 0, unit: newItem.unit });
     toast({ title: "Item Added", description: `${newItem.quantity} ${newItem.unit} added` });
   };
 
@@ -511,12 +511,13 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     y += 4;
     doc.setFontSize(baseFontSize - 1);
     items.forEach((item) => {
-      doc.text(item.waste_type, 5, y);
-      y += 3;
+      doc.text(`${item.waste_type}: ${item.quantity} ${item.unit}`, 5, y, { maxWidth: 48 });
+      y += 4;
     });
     y += 2;
     doc.setFontSize(baseFontSize);
-    doc.text(`TOTAL: ${totalQuantity} (mixed units)`, 5, y);
+    const displayUnit = items.length > 0 ? items[0].unit : "units";
+    doc.text(`TOTAL: ${totalQuantity} ${displayUnit}`, 5, y);
     y += 6;
 
     // Signature
@@ -672,6 +673,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
                       setSelectedWasteType("");
                       setNewItem({ quantity: 0, unit: "kg" });
                     }}
+                    disabled={tallyEntries.length > 0}
                   >
                     Change
                   </Button>
@@ -688,11 +690,16 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
                         placeholder="0"
                         allowDecimal={true}
                         maxLength={8}
+                        onSubmit={handleAddItem}
                       />
                     </div>
                     <div>
                       <Label className="text-xs">Unit</Label>
-                      <Select value={newItem.unit} onValueChange={(v) => setNewItem({ ...newItem, unit: v })}>
+                      <Select 
+                        value={newItem.unit} 
+                        onValueChange={(v) => setNewItem({ ...newItem, unit: v })}
+                        disabled={tallyEntries.length > 0}
+                      >
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>{units.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                       </Select>
@@ -738,7 +745,11 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
                           </div>
                           <div>
                             <Label className="text-xs">Unit</Label>
-                            <Select value={editingEntry?.unit} onValueChange={(v) => setEditingEntry(prev => prev ? { ...prev, unit: v } : null)}>
+                            <Select 
+                              value={editingEntry?.unit} 
+                              onValueChange={(v) => setEditingEntry(prev => prev ? { ...prev, unit: v } : null)}
+                              disabled={true}
+                            >
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>{units.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                             </Select>

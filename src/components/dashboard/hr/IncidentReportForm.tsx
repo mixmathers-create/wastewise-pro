@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -15,7 +15,8 @@ import { AlertCircle, Send } from "lucide-react";
 const incidentReportSchema = z.object({
   incident_type: z.string().min(1, "Incident type is required"),
   incident_date: z.string().min(1, "Incident date is required"),
-  incident_time: z.string().optional(),
+  incident_hour: z.string().optional(),
+  incident_minute: z.string().optional(),
   location: z.string().optional(),
   description: z.string().min(10, "Description must be at least 10 characters"),
   severity: z.enum(["low", "medium", "high", "critical"]),
@@ -35,15 +36,45 @@ const incidentTypes = [
   "Other"
 ];
 
+const generateHourOptions = () => {
+  const hours = [];
+  for (let hour = 0; hour < 24; hour++) {
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    const label = `${hour12} ${period}`;
+    const value = hour.toString().padStart(2, '0');
+    hours.push({ value, label });
+  }
+  return hours;
+};
+
+const generateMinuteOptions = () => {
+  const minutes = [];
+  for (let minute = 0; minute < 60; minute++) {
+    const value = minute.toString().padStart(2, '0');
+    minutes.push({ value, label: value });
+  }
+  return minutes;
+};
+
 export default function IncidentReportForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  const currentTime = useMemo(() => {
+    const now = new Date();
+    return {
+      hours: now.getHours(),
+      minutes: now.getMinutes(),
+    };
+  }, []);
+
   const form = useForm<IncidentReportForm>({
     resolver: zodResolver(incidentReportSchema),
     defaultValues: {
       incident_type: "",
       incident_date: new Date().toISOString().split('T')[0],
-      incident_time: "",
+      incident_hour: currentTime.hours.toString().padStart(2, '0'),
+      incident_minute: "",
       location: "",
       description: "",
       severity: "medium",
@@ -62,10 +93,19 @@ export default function IncidentReportForm() {
         .eq("user_id", user.id)
         .single();
 
+      const incident_time = data.incident_hour && data.incident_minute 
+        ? `${data.incident_hour}:${data.incident_minute}` 
+        : undefined;
+
       const { error } = await supabase.from("incident_reports").insert({
         reported_by: user.id,
         reporter_name: profile?.full_name || "Unknown",
-        ...data,
+        incident_type: data.incident_type,
+        incident_date: data.incident_date,
+        incident_time: incident_time,
+        location: data.location,
+        description: data.description,
+        severity: data.severity,
       });
 
       if (error) throw error;
@@ -151,26 +191,140 @@ export default function IncidentReportForm() {
                   <FormItem>
                     <FormLabel>Incident Date *</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} />
+                      <Input 
+                        type="date" 
+                        max={new Date().toISOString().split('T')[0]}
+                        {...field} 
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="incident_time"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Incident Time</FormLabel>
-                    <FormControl>
-                      <Input type="time" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Incident Time</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <FormField
+                    control={form.control}
+                    name="incident_hour"
+                    render={({ field }) => {
+                      const selectedDate = form.watch("incident_date");
+                      const today = new Date().toISOString().split('T')[0];
+                      const isToday = selectedDate === today;
+                      
+                      // Get all hour options
+                      const allHours = generateHourOptions();
+                      
+                      // Filter hours if today is selected
+                      const availableHours = isToday
+                        ? allHours.filter(hour => {
+                            const hourValue = parseInt(hour.value);
+                            return hourValue <= currentTime.hours;
+                          })
+                        : allHours;
+                      
+                      return (
+                        <FormItem>
+                          <Select 
+                            onValueChange={(value) => {
+                              field.onChange(value);
+                              // Reset minute when hour changes
+                              form.setValue('incident_minute', '');
+                            }} 
+                            value={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Hour" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="max-h-[300px]">
+                              {availableHours.map((hour) => (
+                                <SelectItem key={hour.value} value={hour.value}>
+                                  {hour.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="incident_minute"
+                    render={({ field }) => {
+                      const selectedDate = form.watch("incident_date");
+                      const selectedHour = form.watch("incident_hour");
+                      const today = new Date().toISOString().split('T')[0];
+                      const isToday = selectedDate === today;
+                      const isCurrentHour = isToday && selectedHour && parseInt(selectedHour) === currentTime.hours;
+                      
+                      // Get all minute options
+                      const allMinutes = generateMinuteOptions();
+                      
+                      // Filter minutes if current hour is selected on today
+                      const availableMinutes = isCurrentHour
+                        ? allMinutes.filter(minute => {
+                            const minuteValue = parseInt(minute.value);
+                            return minuteValue <= currentTime.minutes;
+                          })
+                        : allMinutes;
+                      
+                      const isDisabled = !selectedHour;
+                      
+                      return (
+                        <FormItem>
+                          <Select 
+                            onValueChange={field.onChange} 
+                            value={field.value}
+                            disabled={isDisabled}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder={isDisabled ? "Min" : "Minute"} />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="max-h-[200px]">
+                              {availableMinutes.length > 0 ? (
+                                availableMinutes.map((minute) => (
+                                  <SelectItem key={minute.value} value={minute.value}>
+                                    {minute.label}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <SelectItem value="" disabled>
+                                  No minutes
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
+                  />
+                </div>
+                {(() => {
+                  const selectedDate = form.watch("incident_date");
+                  const selectedHour = form.watch("incident_hour");
+                  const today = new Date().toISOString().split('T')[0];
+                  const isToday = selectedDate === today;
+                  const isCurrentHour = isToday && selectedHour && parseInt(selectedHour) === currentTime.hours;
+                  
+                  if (isCurrentHour) {
+                    return (
+                      <p className="text-xs text-muted-foreground">
+                        Only times up to {currentTime.hours.toString().padStart(2, '0')}:{currentTime.minutes.toString().padStart(2, '0')} are available
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
 
               <FormField
                 control={form.control}

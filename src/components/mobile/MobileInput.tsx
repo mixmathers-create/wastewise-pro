@@ -11,6 +11,7 @@ interface MobileInputProps extends Omit<React.ComponentProps<typeof Input>, 'onC
   type?: "text" | "number";
   allowDecimal?: boolean;
   maxLength?: number;
+  onSubmit?: () => void;
 }
 
 export const MobileInput = ({
@@ -19,6 +20,7 @@ export const MobileInput = ({
   type = "text",
   allowDecimal = true,
   maxLength = 10,
+  onSubmit,
   ...props
 }: MobileInputProps) => {
   const [showKeypad, setShowKeypad] = useState(false);
@@ -58,6 +60,7 @@ export const MobileInput = ({
               value={value}
               onChange={handleKeypadChange}
               onClose={handleKeypadClose}
+              onSubmit={onSubmit}
               maxLength={maxLength}
               allowDecimal={allowDecimal}
             />

@@ -211,7 +211,7 @@ const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
               fontWeight: "bold",
             }}
           >
-            TOTAL: {totalQuantity} (mixed units)
+            TOTAL: {totalQuantity} {items[0]?.unit || ""}
           </div>
         </div>
 

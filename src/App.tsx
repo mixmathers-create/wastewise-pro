@@ -6,8 +6,8 @@ import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router
 import { lazy, Suspense } from "react";
 import { isNativePlatform } from "@/lib/capacitorUtils";
 import { Recycle } from "lucide-react";
+import { useBlockCommaInput } from "@/hooks/useBlockCommaInput";
 
-// Lazy load pages for code splitting
 const Index = lazy(() => import("./pages/Index"));
 const Login = lazy(() => import("./pages/Login"));
 const Signup = lazy(() => import("./pages/Signup"));
@@ -43,6 +43,8 @@ const LoadingFallback = () => (
 // Use HashRouter on native (Capacitor) to avoid blank screens on file:// routes
 const RouterComponent = isNativePlatform() ? HashRouter : BrowserRouter;
 const App = () => {
+  useBlockCommaInput();
+  
   // Automatically route to mobile dashboard on native platforms
   const DashboardComponent = isNativePlatform() ? MobileDashboard : Dashboard;
   
