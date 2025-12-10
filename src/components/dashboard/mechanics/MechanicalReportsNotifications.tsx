@@ -24,29 +24,42 @@ export default function MechanicalReportsNotifications() {
   const [reportToClose, setReportToClose] = useState<any>(null);
   const [selectedReports, setSelectedReports] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalReports, setTotalReports] = useState(0);
+  
+  const ITEMS_PER_PAGE = 10;
 
   useEffect(() => {
     fetchReports();
-  }, []);
+  }, [currentPage]);
 
   const fetchReports = async () => {
     setLoading(true);
+    setReports([]);
     try {
-      const { data: reportsData, error: reportsError } = await supabase
+      const from = (currentPage - 1) * ITEMS_PER_PAGE;
+      const to = from + ITEMS_PER_PAGE - 1;
+      
+      // Optimized query with join and limited fields
+      const { data: reportsData, error: reportsError, count } = await supabase
         .from("mechanical_reports")
-        .select("*")
-        .order("created_at", { ascending: false });
+        .select(`
+          id,created_at,truck_id,reporter_name,severity,truck_operational,status,
+          issue_description,mechanic_comments,job_order_id,reviewed_by,reviewed_at,
+          trucks!inner(id,code,plate_number)
+        `, { count: 'exact' })
+        .order("created_at", { ascending: false })
+        .range(from, to);
 
       if (reportsError) throw reportsError;
+      
+      setTotalReports(count || 0);
 
-      const { data: trucksData, error: trucksError } = await supabase
-        .from("trucks")
-        .select("*");
-
-      if (trucksError) throw trucksError;
-
-      const trucksMap = (trucksData || []).reduce((acc, truck) => {
-        acc[truck.id] = truck;
+      // Build trucks map from joined data
+      const trucksMap = (reportsData || []).reduce((acc, report) => {
+        if (report.trucks) {
+          acc[report.truck_id] = report.trucks;
+        }
         return acc;
       }, {} as Record<string, any>);
 
@@ -329,7 +342,22 @@ export default function MechanicalReportsNotifications() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {reports.map((report) => (
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                          Loading...
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : reports.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        No mechanical reports found
+                      </TableCell>
+                    </TableRow>
+                  ) : reports.map((report) => (
                     <TableRow key={report.id}>
                       <TableCell>
                         <Checkbox
@@ -462,6 +490,30 @@ export default function MechanicalReportsNotifications() {
                   ))}
                 </TableBody>
               </Table>
+              
+              {totalReports > ITEMS_PER_PAGE && (
+                <div className="flex justify-center items-center gap-2 mt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Page {currentPage} of {Math.ceil(totalReports / ITEMS_PER_PAGE)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalReports / ITEMS_PER_PAGE), p + 1))}
+                    disabled={currentPage >= Math.ceil(totalReports / ITEMS_PER_PAGE)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

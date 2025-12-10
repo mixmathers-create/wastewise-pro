@@ -33,10 +33,12 @@ export function JobOrders() {
   const [activeTimers, setActiveTimers] = useState<{[key: string]: number}>({});
   const [currentPage, setCurrentPage] = useState(1);
   const [completedCurrentPage, setCompletedCurrentPage] = useState(1);
+  const [totalActive, setTotalActive] = useState(0);
+  const [totalCompleted, setTotalCompleted] = useState(0);
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   
-  const ITEMS_PER_PAGE = 5;
-  const MAX_ITEMS = 100;
+  const ITEMS_PER_PAGE = 10;
 
   useEffect(() => {
     fetchJobOrders();
@@ -48,7 +50,7 @@ export function JobOrders() {
     }, 1000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [currentPage, completedCurrentPage]);
 
   const updateActiveTimers = () => {
     const newTimers: {[key: string]: number} = {};
@@ -63,70 +65,66 @@ export function JobOrders() {
   };
 
   const fetchJobOrders = async () => {
-    // Fetch active job orders
-    const { data: activeData } = await supabase
-      .from("job_orders")
-      .select("id,job_number,title,status,priority,scheduled_date,created_at,started_at,total_active_minutes,last_resume_at,mechanic_ids,mechanic_comments,description,truck_id,trucks(code)")
-      .in("status", ["pending", "in_progress", "suspended"])
-      .order("created_at", { ascending: false })
-      .limit(MAX_ITEMS);
-    
-    // Fetch completed job orders
-    const { data: completedData } = await supabase
-      .from("job_orders")
-      .select("id,job_number,title,status,priority,scheduled_date,created_at,completed_at,total_active_minutes,mechanic_ids,description,mechanic_comments,truck_id,trucks(code)")
-      .eq("status", "completed")
-      .order("completed_at", { ascending: false })
-      .limit(MAX_ITEMS);
-    
-    // Process active job orders
-    if (activeData && activeData.length > 0) {
-      const allMechanicIds = [...new Set(activeData.flatMap(job => job.mechanic_ids || []))];
+    setLoading(true);
+    setJobOrders([]);
+    setCompletedJobOrders([]);
+    try {
+      // Parallel fetch with optimized queries
+      const [activeResult, completedResult] = await Promise.all([
+        // Active job orders
+        supabase
+          .from("job_orders")
+          .select("id,job_number,title,status,priority,scheduled_date,created_at,started_at,total_active_minutes,last_resume_at,mechanic_ids,truck_id,trucks!inner(code)", { count: 'exact' })
+          .in("status", ["pending", "in_progress", "suspended"])
+          .order("created_at", { ascending: false })
+          .range((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE - 1),
+        
+        // Completed job orders
+        supabase
+          .from("job_orders")
+          .select("id,job_number,title,status,priority,scheduled_date,created_at,completed_at,total_active_minutes,mechanic_ids,truck_id,trucks!inner(code)", { count: 'exact' })
+          .eq("status", "completed")
+          .order("completed_at", { ascending: false })
+          .range((completedCurrentPage - 1) * ITEMS_PER_PAGE, completedCurrentPage * ITEMS_PER_PAGE - 1)
+      ]);
+
+      const { data: activeData, count: activeCount } = activeResult;
+      const { data: completedData, count: completedCount } = completedResult;
       
+      setTotalActive(activeCount || 0);
+      setTotalCompleted(completedCount || 0);
+
+      // Get all unique mechanic IDs from both datasets
+      const allMechanicIds = [...new Set([
+        ...(activeData?.flatMap(job => job.mechanic_ids || []) || []),
+        ...(completedData?.flatMap(job => job.mechanic_ids || []) || [])
+      ])];
+
+      // Single mechanics fetch for both datasets
+      let mechanicsMap = new Map();
       if (allMechanicIds.length > 0) {
         const { data: mechanicsData } = await supabase
           .from("mechanics")
           .select("id,name")
           .in("id", allMechanicIds);
-        
-        const mechanicsMap = new Map(mechanicsData?.map(m => [m.id, m]) || []);
-        
-        const jobOrdersWithMechanics = activeData.map(job => ({
-          ...job,
-          mechanics: (job.mechanic_ids || []).map(id => mechanicsMap.get(id)).filter(Boolean)
-        }));
-        
-        setJobOrders(jobOrdersWithMechanics);
-      } else {
-        setJobOrders(activeData);
+        mechanicsMap = new Map(mechanicsData?.map(m => [m.id, m]) || []);
       }
-    } else {
-      setJobOrders([]);
-    }
 
-    // Process completed job orders
-    if (completedData && completedData.length > 0) {
-      const allCompletedMechanicIds = [...new Set(completedData.flatMap(job => job.mechanic_ids || []))];
-      
-      if (allCompletedMechanicIds.length > 0) {
-        const { data: mechanicsData } = await supabase
-          .from("mechanics")
-          .select("id,name")
-          .in("id", allCompletedMechanicIds);
-        
-        const mechanicsMap = new Map(mechanicsData?.map(m => [m.id, m]) || []);
-        
-        const completedWithMechanics = completedData.map(job => ({
-          ...job,
-          mechanics: (job.mechanic_ids || []).map(id => mechanicsMap.get(id)).filter(Boolean)
-        }));
-        
-        setCompletedJobOrders(completedWithMechanics);
-      } else {
-        setCompletedJobOrders(completedData);
-      }
-    } else {
-      setCompletedJobOrders([]);
+      // Process data with mechanics
+      setJobOrders((activeData || []).map(job => ({
+        ...job,
+        mechanics: (job.mechanic_ids || []).map(id => mechanicsMap.get(id)).filter(Boolean)
+      })));
+
+      setCompletedJobOrders((completedData || []).map(job => ({
+        ...job,
+        mechanics: (job.mechanic_ids || []).map(id => mechanicsMap.get(id)).filter(Boolean)
+      })));
+    } catch (error) {
+      console.error('Error fetching job orders:', error);
+      toast({ title: "Error", description: "Failed to load job orders", variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -317,8 +315,8 @@ export function JobOrders() {
   return (
     <Tabs defaultValue="active" className="w-full">
       <TabsList className="grid w-full grid-cols-2">
-        <TabsTrigger value="active">Active Job Orders ({jobOrders.length})</TabsTrigger>
-        <TabsTrigger value="completed">Completed Job Orders ({completedJobOrders.length})</TabsTrigger>
+        <TabsTrigger value="active">Active Job Orders ({totalActive})</TabsTrigger>
+        <TabsTrigger value="completed">Completed Job Orders ({totalCompleted})</TabsTrigger>
       </TabsList>
 
       <TabsContent value="active">
@@ -359,7 +357,16 @@ export function JobOrders() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {jobOrders.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((job) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-8">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        Loading...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : jobOrders.map((job) => (
                   <>
                     <TableRow key={job.id}>
                       <TableCell>
@@ -503,7 +510,7 @@ export function JobOrders() {
                 ))}
               </TableBody>
             </Table>
-            {jobOrders.length > ITEMS_PER_PAGE && (
+            {totalActive > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -514,13 +521,13 @@ export function JobOrders() {
                   Previous
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                  Page {currentPage} of {Math.ceil(jobOrders.length / ITEMS_PER_PAGE)}
+                  Page {currentPage} of {Math.ceil(totalActive / ITEMS_PER_PAGE)}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(jobOrders.length / ITEMS_PER_PAGE), p + 1))}
-                  disabled={currentPage >= Math.ceil(jobOrders.length / ITEMS_PER_PAGE)}
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalActive / ITEMS_PER_PAGE), p + 1))}
+                  disabled={currentPage >= Math.ceil(totalActive / ITEMS_PER_PAGE)}
                 >
                   Next
                 </Button>
@@ -550,7 +557,16 @@ export function JobOrders() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {completedJobOrders.slice((completedCurrentPage - 1) * ITEMS_PER_PAGE, completedCurrentPage * ITEMS_PER_PAGE).map((job) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        Loading...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : completedJobOrders.map((job) => (
                   <TableRow key={job.id}>
                     <TableCell className="font-mono">{job.job_number}</TableCell>
                     <TableCell className="font-medium">{job.title}</TableCell>
@@ -604,7 +620,7 @@ export function JobOrders() {
                 ))}
               </TableBody>
             </Table>
-            {completedJobOrders.length > ITEMS_PER_PAGE && (
+            {totalCompleted > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -615,13 +631,13 @@ export function JobOrders() {
                   Previous
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                  Page {completedCurrentPage} of {Math.ceil(completedJobOrders.length / ITEMS_PER_PAGE)}
+                  Page {completedCurrentPage} of {Math.ceil(totalCompleted / ITEMS_PER_PAGE)}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCompletedCurrentPage(p => Math.min(Math.ceil(completedJobOrders.length / ITEMS_PER_PAGE), p + 1))}
-                  disabled={completedCurrentPage >= Math.ceil(completedJobOrders.length / ITEMS_PER_PAGE)}
+                  onClick={() => setCompletedCurrentPage(p => Math.min(Math.ceil(totalCompleted / ITEMS_PER_PAGE), p + 1))}
+                  disabled={completedCurrentPage >= Math.ceil(totalCompleted / ITEMS_PER_PAGE)}
                 >
                   Next
                 </Button>

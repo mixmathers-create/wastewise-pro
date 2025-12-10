@@ -24,46 +24,75 @@ export function ConsumablesInventory() {
   const [lowStockItems, setLowStockItems] = useState<any[]>([]);
   const [inventoryPage, setInventoryPage] = useState(1);
   const [usagePage, setUsagePage] = useState(1);
+  const [totalConsumables, setTotalConsumables] = useState(0);
+  const [totalCheckouts, setTotalCheckouts] = useState(0);
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   
-  const ITEMS_PER_PAGE = 5;
-  const MAX_ITEMS = 100;
+  const ITEMS_PER_PAGE = 10;
 
   useEffect(() => {
     fetchConsumables();
     fetchCheckouts();
-  }, []);
+  }, [inventoryPage, usagePage]);
 
   const fetchConsumables = async () => {
-    const { data, error } = await supabase
-      .from("mechanic_consumables")
-      .select("id,code,name,category,unit,quantity,min_stock_level,status,unit_cost")
-      .order("name")
-      .limit(MAX_ITEMS);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      setConsumables(data || []);
+    setLoading(true);
+    setConsumables([]);
+    try {
+      const from = (inventoryPage - 1) * ITEMS_PER_PAGE;
+      const to = from + ITEMS_PER_PAGE - 1;
       
-      // Check for low stock items
-      const lowStock = (data || []).filter(item => item.quantity <= item.min_stock_level);
-      setLowStockItems(lowStock);
+      const { data, error, count } = await supabase
+        .from("mechanic_consumables")
+        .select("id,code,name,category,unit,quantity,min_stock_level,status,unit_cost", { count: 'exact' })
+        .order("name")
+        .range(from, to);
+      
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      } else {
+        setConsumables(data || []);
+        setTotalConsumables(count || 0);
+        
+        // Fetch all items to check for low stock (separate query)
+        const { data: allItems } = await supabase
+          .from("mechanic_consumables")
+          .select("id,name,quantity,min_stock_level,unit")
+          .lte("quantity", supabase.rpc('get_min_stock_level'));
+        
+        const lowStock = (allItems || []).filter(item => item.quantity <= item.min_stock_level);
+        setLowStockItems(lowStock);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   const fetchCheckouts = async () => {
-    const { data } = await supabase
-      .from("mechanic_consumable_checkouts")
-      .select(`
-        id,quantity_used,checked_out_at,notes,
-        mechanic_consumables(name, code, unit),
-        mechanics(name, id_number),
-        trucks(code, plate_number),
-        job_orders(job_number)
-      `)
-      .order("checked_out_at", { ascending: false })
-      .limit(MAX_ITEMS);
-    setCheckouts(data || []);
+    setLoading(true);
+    setCheckouts([]);
+    try {
+      const from = (usagePage - 1) * ITEMS_PER_PAGE;
+      const to = from + ITEMS_PER_PAGE - 1;
+      
+      const { data, count } = await supabase
+        .from("mechanic_consumable_checkouts")
+        .select(`
+          id,quantity_used,checked_out_at,notes,
+          mechanic_consumables(name, code, unit),
+          mechanics(name, id_number),
+          trucks(code, plate_number),
+          job_orders(job_number)
+        `, { count: 'exact' })
+        .order("checked_out_at", { ascending: false })
+        .range(from, to);
+      
+      setCheckouts(data || []);
+      setTotalCheckouts(count || 0);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -181,7 +210,16 @@ export function ConsumablesInventory() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {consumables.slice((inventoryPage - 1) * ITEMS_PER_PAGE, inventoryPage * ITEMS_PER_PAGE).map((item) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-8">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        Loading...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : consumables.map((item) => (
                   <TableRow key={item.id} className={item.quantity <= item.min_stock_level ? 'bg-orange-50' : ''}>
                     <TableCell className="font-mono">{item.code}</TableCell>
                     <TableCell className="font-medium">{item.name}</TableCell>
@@ -220,7 +258,7 @@ export function ConsumablesInventory() {
                 ))}
               </TableBody>
             </Table>
-            {consumables.length > ITEMS_PER_PAGE && (
+            {totalConsumables > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -231,13 +269,13 @@ export function ConsumablesInventory() {
                   Previous
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                  Page {inventoryPage} of {Math.ceil(consumables.length / ITEMS_PER_PAGE)}
+                  Page {inventoryPage} of {Math.ceil(totalConsumables / ITEMS_PER_PAGE)}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setInventoryPage(p => Math.min(Math.ceil(consumables.length / ITEMS_PER_PAGE), p + 1))}
-                  disabled={inventoryPage >= Math.ceil(consumables.length / ITEMS_PER_PAGE)}
+                  onClick={() => setInventoryPage(p => Math.min(Math.ceil(totalConsumables / ITEMS_PER_PAGE), p + 1))}
+                  disabled={inventoryPage >= Math.ceil(totalConsumables / ITEMS_PER_PAGE)}
                 >
                   Next
                 </Button>
@@ -271,7 +309,16 @@ export function ConsumablesInventory() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {checkouts.slice((usagePage - 1) * ITEMS_PER_PAGE, usagePage * ITEMS_PER_PAGE).map((checkout) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        Loading...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : checkouts.map((checkout) => (
                   <TableRow key={checkout.id}>
                     <TableCell>
                       <div>
@@ -301,7 +348,7 @@ export function ConsumablesInventory() {
                 ))}
               </TableBody>
             </Table>
-            {checkouts.length > ITEMS_PER_PAGE && (
+            {totalCheckouts > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -312,13 +359,13 @@ export function ConsumablesInventory() {
                   Previous
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                  Page {usagePage} of {Math.ceil(checkouts.length / ITEMS_PER_PAGE)}
+                  Page {usagePage} of {Math.ceil(totalCheckouts / ITEMS_PER_PAGE)}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setUsagePage(p => Math.min(Math.ceil(checkouts.length / ITEMS_PER_PAGE), p + 1))}
-                  disabled={usagePage >= Math.ceil(checkouts.length / ITEMS_PER_PAGE)}
+                  onClick={() => setUsagePage(p => Math.min(Math.ceil(totalCheckouts / ITEMS_PER_PAGE), p + 1))}
+                  disabled={usagePage >= Math.ceil(totalCheckouts / ITEMS_PER_PAGE)}
                 >
                   Next
                 </Button>

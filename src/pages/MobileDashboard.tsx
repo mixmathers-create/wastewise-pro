@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Recycle, LogOut, QrCode, Users, Settings } from "lucide-react";
+import { Recycle, LogOut, QrCode, Users, Settings, Briefcase } from "lucide-react";
 import { Capacitor } from '@capacitor/core';
 import { useToast } from "@/hooks/use-toast";
 import CollectionsTab from "@/components/dashboard/CollectionsTab";
 import ClientsTab from "@/components/dashboard/ClientsTab";
 import SettingsTab from "@/components/dashboard/SettingsTab";
+import MobileHRTab from "@/components/dashboard/MobileHRTab";
 
 const MobileDashboard = () => {
   const navigate = useNavigate();
@@ -97,7 +98,7 @@ const MobileDashboard = () => {
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
         <Tabs defaultValue="collections" className="h-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-3 shrink-0 mx-3 mt-3">
+          <TabsList className="grid w-full grid-cols-4 shrink-0 mx-3 mt-3">
             <TabsTrigger value="collections" className="text-xs">
               <QrCode className="h-4 w-4 mr-1" />
               Collections
@@ -105,6 +106,10 @@ const MobileDashboard = () => {
             <TabsTrigger value="clients" className="text-xs">
               <Users className="h-4 w-4 mr-1" />
               Clients
+            </TabsTrigger>
+            <TabsTrigger value="hr" className="text-xs">
+              <Briefcase className="h-4 w-4 mr-1" />
+              HR
             </TabsTrigger>
             <TabsTrigger value="settings" className="text-xs">
               <Settings className="h-4 w-4 mr-1" />
@@ -118,6 +123,9 @@ const MobileDashboard = () => {
             </TabsContent>
             <TabsContent value="clients" className="mt-0">
               <ClientsTab profile={profile} />
+            </TabsContent>
+            <TabsContent value="hr" className="mt-0">
+              <MobileHRTab profile={profile} />
             </TabsContent>
             <TabsContent value="settings" className="mt-0">
               <SettingsTab profile={profile} />
