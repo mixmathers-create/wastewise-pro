@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Recycle, LogOut, QrCode, Users, Truck, UserCog, BarChart3, Settings, Calendar, Wrench, Briefcase } from "lucide-react";
+import { Recycle, LogOut, QrCode, Users, Truck, UserCog, BarChart3, Settings, Calendar, Wrench, Briefcase, UserCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 
@@ -17,6 +17,7 @@ const EnhancedAnalyticsTab = lazy(() => import("@/components/dashboard/EnhancedA
 const EnhancedSettingsTab = lazy(() => import("@/components/dashboard/EnhancedSettingsTab"));
 const MechanicsTab = lazy(() => import("@/components/dashboard/MechanicsTab").then(m => ({ default: m.MechanicsTab })));
 const HRTab = lazy(() => import("@/components/dashboard/HRTab").then(m => ({ default: m.HRTab })));
+const RegistrationApprovalsTab = lazy(() => import("@/components/dashboard/RegistrationApprovalsTab"));
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -158,6 +159,12 @@ const Dashboard = () => {
                 <span className="hidden sm:inline">Settings</span>
               </TabsTrigger>
             )}
+            {profile?.user_type === 'admin' && (
+              <TabsTrigger value="registrations" className="gap-2 data-[state=active]:bg-background">
+                <UserCheck className="h-4 w-4" />
+                <span className="hidden sm:inline">Registrations</span>
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <Suspense fallback={<div className="flex items-center justify-center p-8"><Recycle className="h-8 w-8 animate-spin text-primary" /></div>}>
@@ -212,6 +219,12 @@ const Dashboard = () => {
             {roleAccess.canAccessSettings && (
               <TabsContent value="settings">
                 <EnhancedSettingsTab profile={profile} />
+              </TabsContent>
+            )}
+
+            {profile?.user_type === 'admin' && (
+              <TabsContent value="registrations">
+                <RegistrationApprovalsTab profile={profile} />
               </TabsContent>
             )}
           </Suspense>
