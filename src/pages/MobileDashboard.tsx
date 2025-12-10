@@ -4,16 +4,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { Network } from "@capacitor/network";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Recycle, LogOut, QrCode, Clock, Wifi, WifiOff } from "lucide-react";
+import { 
+  Recycle, LogOut, QrCode, Users, Settings, Briefcase, 
+  Clock, Wifi, WifiOff 
+} from "lucide-react";
+import { Capacitor } from '@capacitor/core';
 import { useToast } from "@/hooks/use-toast";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 import { getCachedProfile, clearCacheOnLogout } from "@/lib/offlineDb";
 import CollectionsTab from "@/components/dashboard/CollectionsTab";
+import ClientsTab from "@/components/dashboard/ClientsTab";
+import SettingsTab from "@/components/dashboard/SettingsTab";
+import MobileHRTab from "@/components/dashboard/MobileHRTab";
 import PendingTab from "@/components/dashboard/PendingTab";
-// Commented out for offline mode - only Collections and Pending tabs
-// import ClientsTab from "@/components/dashboard/ClientsTab";
-// import SettingsTab from "@/components/dashboard/SettingsTab";
 
 const MobileDashboard = () => {
   const navigate = useNavigate();
@@ -229,39 +233,65 @@ const MobileDashboard = () => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">
-        <Tabs defaultValue="collections" className="h-full flex flex-col">
-          <div className="px-3 pt-3">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="collections" className="text-xs">
-                <QrCode className="h-4 w-4 mr-1" />
-                Collections
-              </TabsTrigger>
-              <TabsTrigger value="pending" className="text-xs">
-                <Clock className="h-4 w-4 mr-1" />
-                Pending
-              </TabsTrigger>
-            </TabsList>
-          </div>
+  <main className="flex-1 overflow-auto">
+        <Tabs defaultValue="collections" className="h-full flex flex-col">
+          {/* MERGE: Combining the two TabsList structures */}
+          <div className="px-3 pt-3">
+            {/* Using a grid-cols-5 if all tabs are needed, otherwise, make it dynamic/conditional */}
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="collections" className="text-xs">
+                <QrCode className="h-4 w-4 mr-1" />
+                Collections
+              </TabsTrigger>
+              <TabsTrigger value="pending" className="text-xs">
+                <Clock className="h-4 w-4 mr-1" />
+                Pending
+              </TabsTrigger>
+              <TabsTrigger value="clients" className="text-xs">
+                <Users className="h-4 w-4 mr-1" />
+                Clients
+              </TabsTrigger>
+              <TabsTrigger value="hr" className="text-xs">
+                <Briefcase className="h-4 w-4 mr-1" />
+                HR
+              </TabsTrigger>
+              <TabsTrigger value="settings" className="text-xs">
+                <Settings className="h-4 w-4 mr-1" />
+                Settings
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-          <div className="flex-1 overflow-auto p-3">
-            <TabsContent value="collections" className="mt-0">
-              <CollectionsTab 
-                profile={profile} 
-                isOnline={isOnline}
-                cachedClients={cachedClients}
-                cachedTrucks={cachedTrucks}
-                cachedDrivers={cachedDrivers}
-                cachedHelpers={cachedHelpers}
-              />
-            </TabsContent>
-            <TabsContent value="pending" className="mt-0">
-              <PendingTab isOnline={isOnline} />
-            </TabsContent>
-          </div>
-        </Tabs>
-      </main>
-    </div>
+          <div className="flex-1 overflow-auto p-3">
+            <TabsContent value="collections" className="mt-0">
+              <CollectionsTab
+                profile={profile}
+                isOnline={isOnline}
+                cachedClients={cachedClients}
+                cachedTrucks={cachedTrucks}
+                cachedDrivers={cachedDrivers}
+                cachedHelpers={cachedHelpers}
+              />
+            </TabsContent>
+            <TabsContent value="pending" className="mt-0">
+              <PendingTab isOnline={isOnline} />
+            </TabsContent>
+            {/* Content for Clients Tab (from caching-and-pagination) */}
+            <TabsContent value="clients" className="mt-0">
+              <ClientsTab profile={profile} />
+            </TabsContent>
+            {/* Content for HR Tab (from caching-and-pagination) */}
+            <TabsContent value="hr" className="mt-0">
+              <MobileHRTab profile={profile} />
+            </TabsContent>
+            {/* Content for Settings Tab (from caching-and-pagination) */}
+            <TabsContent value="settings" className="mt-0">
+              <SettingsTab profile={profile} />
+            </TabsContent>
+          </div>
+        </Tabs>
+      </main>
+    </div>
   );
 };
 

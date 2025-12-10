@@ -41,39 +41,49 @@ const CollectionsTab = ({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedReceipts, setSelectedReceipts] = useState<Set<string>>(new Set());
   const [tallyData, setTallyData] = useState<TallyTemplateProps | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalReceipts, setTotalReceipts] = useState(0);
   const tallyTemplateRef = useRef<HTMLDivElement>(null);
   const isMobile = Capacitor.isNativePlatform();
   const isAdmin = profile?.role === "admin";
+  const ITEMS_PER_PAGE = 10;
 
-  const fetchReceipts = async () => {
-    if (!isOnline) {
-      setError("Currently offline - cannot fetch collections");
-      setLoading(false);
-      return;
-    }
-    
-    setLoading(true);
-    setError(null);
-    const { data, error } = await supabase
-      .from("collection_receipts")
-      .select("id,created_at,qr_code,signed_by,pdf_url")
-      .order("created_at", { ascending: false })
-      .limit(20);
-    if (error) setError(error.message);
-    setReceipts(data || []);
-    setLoading(false);
-  };
+  const fetchReceipts = async (page = 1) => {
+    if (!isOnline) {
+      setError("Currently offline - cannot fetch collections");
+      setLoading(false);
+      return;
+    }
 
-  useEffect(() => {
-    fetchReceipts();
-  }, [isOnline]);
+    setLoading(true);
+    setError(null); // Clear previous errors
+    const from = (page - 1) * ITEMS_PER_PAGE; 
+    const to = from + ITEMS_PER_PAGE - 1;
 
-  const handleSuccess = () => {
-    setDialogOpen(false);
-    if (isOnline) {
-      fetchReceipts();
-    }
-  };
+    const { data, error, count } = await supabase
+      .from("collection_receipts")
+      .select("id,created_at,qr_code,signed_by,pdf_url", { count: 'exact' })
+      .order("created_at", { ascending: false })
+      .range(from, to); 
+
+    if (error) setError(error.message);
+    setReceipts(data || []);
+    setTotalReceipts(count || 0);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    // Trigger fetch on isOnline or currentPage change
+    fetchReceipts(currentPage);
+  }, [isOnline, currentPage]);
+
+  const handleSuccess = () => {
+    setDialogOpen(false);
+    // Only fetch if online, otherwise the offline message will remain
+    if (isOnline) {
+      fetchReceipts(currentPage); // Use currentPage to refresh the current page
+    }
+  };
 
   const handleViewReceipt = (receiptId: string) => {
     navigate(`/receipt-preview?id=${receiptId}`);
@@ -112,7 +122,7 @@ const CollectionsTab = ({
 
       toast({ title: "Success", description: `Deleted ${selectedReceipts.size} receipts` });
       setSelectedReceipts(new Set());
-      fetchReceipts();
+      fetchReceipts(currentPage);
     } catch (err: any) {
       toast({ title: "Delete Error", description: err.message, variant: "destructive" });
     }
@@ -423,6 +433,30 @@ const CollectionsTab = ({
               ))}
             </TableBody>
           </Table>
+        )}
+        
+        {!isMobile && totalReceipts > ITEMS_PER_PAGE && (
+          <div className="flex justify-center items-center gap-2 mt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {currentPage} of {Math.ceil(totalReceipts / ITEMS_PER_PAGE)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalReceipts / ITEMS_PER_PAGE), p + 1))}
+              disabled={currentPage >= Math.ceil(totalReceipts / ITEMS_PER_PAGE)}
+            >
+              Next
+            </Button>
+          </div>
         )}
       </CardContent>
 
