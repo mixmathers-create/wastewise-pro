@@ -15,9 +15,17 @@ import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { MobileInput } from "@/components/mobile/MobileInput";
-import { printerService } from "@/lib/printerService";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { 
+  offlineDb, 
+  generateLocalId,
+  type CachedClient,
+  type CachedTruck,
+  type CachedDriver,
+  type CachedHelper,
+  type PendingCollection,
+} from "@/lib/offlineDb";
 
 const wasteTypes = ["Municipal Solid Waste", "Food Waste", "Construction Waste", "Special Hauling"];
 const units = ["kg", "cbm", "truck load"];
@@ -25,9 +33,22 @@ const units = ["kg", "cbm", "truck load"];
 interface CreateReceiptFormProps {
   profile: any;
   onSuccess: () => void;
+  isOnline: boolean;
+  cachedClients: CachedClient[];
+  cachedTrucks: CachedTruck[];
+  cachedDrivers: CachedDriver[];
+  cachedHelpers: CachedHelper[];
 }
 
-const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
+const CreateReceiptForm = ({ 
+  profile, 
+  onSuccess, 
+  isOnline, 
+  cachedClients, 
+  cachedTrucks, 
+  cachedDrivers, 
+  cachedHelpers 
+}: CreateReceiptFormProps) => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -49,8 +70,21 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingEntry, setEditingEntry] = useState<{ waste_type: string; quantity: number; unit: string } | null>(null);
 
+  // Load data based on online/offline status
   useEffect(() => {
-    loadClients();
+    if (isOnline) {
+      // Online: fetch fresh data from Supabase
+      loadClients();
+    } else {
+      // Offline: use cached data
+      setAllClients(cachedClients);
+      setTrucks(cachedTrucks);
+      setDrivers(cachedDrivers);
+      setHelpers(cachedHelpers);
+    }
+  }, [isOnline, cachedClients, cachedTrucks, cachedDrivers, cachedHelpers]);
+
+  useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
     let listenerHandle: PluginListenerHandle | null = null;
@@ -95,18 +129,31 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     setIsScanning(false);
     toast({ title: "QR Code Scanned", description: "Looking up client..." });
     
-    await loadResources();
-    const { data, error } = await supabase
-      .from("clients")
-      .select("*")
-      .eq("qr_code", decodedText)
-      .single();
-      
-    if (error || !data) {
-      toast({ title: "Client not found", description: "No client matches this QR code.", variant: "destructive" });
+    if (isOnline) {
+      // Online: fetch from Supabase
+      await loadResources();
+      const { data, error } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("qr_code", decodedText)
+        .single();
+        
+      if (error || !data) {
+        toast({ title: "Client not found", description: "No client matches this QR code.", variant: "destructive" });
+      } else {
+        setClientData(data);
+        toast({ title: "Client Found", description: `Loaded: ${data.name}` });
+      }
     } else {
-      setClientData(data);
-      toast({ title: "Client Found", description: `Loaded: ${data.name}` });
+      // Offline: look up from cached data
+      const client = allClients.find(c => c.qr_code === decodedText);
+        
+      if (!client) {
+        toast({ title: "Client not found", description: "No client matches this QR code.", variant: "destructive" });
+      } else {
+        setClientData(client);
+        toast({ title: "Client Found", description: `Loaded: ${client.name}` });
+      }
     }
   };
 
@@ -203,46 +250,70 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   };
 
   const handleClientSelect = async (clientId: string) => {
-    setLoading(true);
-    try {
-      await loadResources();
-      const { data, error } = await supabase
-        .from("clients")
-        .select("*")
-        .eq("id", clientId)
-        .single();
-      if (error) throw error;
-      setClientData(data);
-      setQrInput(data.qr_code);
-      toast({ title: "Client Selected", description: data.name });
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } finally {
-      setLoading(false);
+    if (isOnline) {
+      // Online: fetch from Supabase
+      setLoading(true);
+      try {
+        await loadResources();
+        const { data, error } = await supabase
+          .from("clients")
+          .select("*")
+          .eq("id", clientId)
+          .single();
+        if (error) throw error;
+        setClientData(data);
+        setQrInput(data.qr_code);
+        toast({ title: "Client Selected", description: data.name });
+      } catch (error: any) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      // Offline: find from cached data
+      const client = allClients.find(c => c.id === clientId);
+      if (client) {
+        setClientData(client);
+        setQrInput(client.qr_code);
+        toast({ title: "Client Selected", description: client.name });
+      }
     }
   };
 
   const lookupClient = async () => {
     if (!qrInput) return;
-    setLoading(true);
-    try {
-      await loadResources();
-      const { data, error } = await supabase
-        .from("clients")
-        .select("*")
-        .eq("qr_code", qrInput)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) {
+    
+    if (isOnline) {
+      // Online: fetch from Supabase
+      setLoading(true);
+      try {
+        await loadResources();
+        const { data, error } = await supabase
+          .from("clients")
+          .select("*")
+          .eq("qr_code", qrInput)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) {
+          toast({ title: "Not Found", description: "No client with this QR code", variant: "destructive" });
+        } else {
+          setClientData(data);
+          toast({ title: "Client Found", description: data.name });
+        }
+      } catch (error: any) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      // Offline: find from cached data
+      const client = allClients.find(c => c.qr_code === qrInput);
+      if (!client) {
         toast({ title: "Not Found", description: "No client with this QR code", variant: "destructive" });
       } else {
-        setClientData(data);
-        toast({ title: "Client Found", description: data.name });
+        setClientData(client);
+        toast({ title: "Client Found", description: client.name });
       }
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -348,49 +419,70 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
     setLoading(true);
     try {
-      // Get authenticated user - for mobile app, use profile's user_id
-      let userId: string;
-      
-      if (Capacitor.isNativePlatform()) {
-        // Use the profile's user_id which should be set from login
-        userId = profile.user_id;
-      } else {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          throw new Error('User not authenticated');
+      const userId = profile.user_id;
+
+      if (isOnline) {
+        // ONLINE: Save directly to Supabase
+        const receiptQR = `RECEIPT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        const { data: insertedReceipt, error } = await supabase
+          .from("collection_receipts")
+          .insert({
+            client_id: clientData.id,
+            truck_id: selectedTruck,
+            driver_id: selectedDriver,
+            helper_ids: selectedHelpers,
+            items,
+            tally_entries: tallyEntries,
+            waste_types: items.map((i) => i.waste_type),
+            qr_code: receiptQR,
+            signed_by: signedBy,
+            signature_data: null,
+            created_by: userId,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        toast({ title: "Receipt Created", description: "Collection receipt saved successfully" });
+        
+        if (Capacitor.isNativePlatform()) {
+          navigate(`/receipt-preview?id=${insertedReceipt.id}`);
+        } else {
+          await generatePDF(receiptQR, clientData, null);
         }
-        userId = user.id;
-      }
+      } else {
+        // OFFLINE: Save to Dexie pending queue
+        const truckData = trucks.find(t => t.id === selectedTruck);
+        const driverData = drivers.find(d => d.id === selectedDriver);
+        const helperData = selectedHelpers.map(hid => helpers.find(h => h.id === hid));
 
-      const receiptQR = `RECEIPT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-      const { data: insertedReceipt, error } = await supabase
-        .from("collection_receipts")
-        .insert({
+        const pendingCollection: PendingCollection = {
+          id: generateLocalId(),
           client_id: clientData.id,
+          client_name: clientData.name,
           truck_id: selectedTruck,
+          truck_code: truckData?.code || selectedTruck,
           driver_id: selectedDriver,
+          driver_name: driverData?.name || selectedDriver,
           helper_ids: selectedHelpers,
+          helper_names: helperData.map(h => h?.name || 'Unknown'),
           items,
           tally_entries: tallyEntries,
           waste_types: items.map((i) => i.waste_type),
-          qr_code: receiptQR,
           signed_by: signedBy,
-          signature_data: null,
-          created_by: userId,
-        })
-        .select()
-        .single();
+          created_at: new Date(),
+          status: 'pending',
+          user_id: userId,
+        };
 
-      if (error) throw error;
+        await offlineDb.pendingCollections.add(pendingCollection);
 
-      toast({ title: "Receipt Created", description: "Collection receipt saved successfully" });
-      
-      // Navigate to receipt preview on mobile
-      if (Capacitor.isNativePlatform()) {
-        navigate(`/receipt-preview?id=${insertedReceipt.id}`);
-      } else {
-        await generatePDF(receiptQR, clientData, null);
+        toast({ 
+          title: "Saved Offline", 
+          description: "Collection saved to pending. Will sync when online.",
+        });
       }
 
       resetForm();
