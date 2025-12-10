@@ -22,28 +22,33 @@ const ClientsTab = ({ profile }: { profile: any }) => {
   const [editingClient, setEditingClient] = useState<any | null>(null);
   const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalClients, setTotalClients] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const roleAccess = useRoleAccess(profile?.user_type || 'admin');
   const isMobile = Capacitor.isNativePlatform();
   
-  const ITEMS_PER_PAGE = 5;
-  const MAX_ITEMS = 100;
+  const ITEMS_PER_PAGE = 10;
 
-  const fetchClients = async () => {
+  const fetchClients = async (page = 1) => {
     setLoading(true);
-    const { data, error } = await supabase
+    const from = (page - 1) * ITEMS_PER_PAGE;
+    const to = from + ITEMS_PER_PAGE - 1;
+    
+    const { data, error, count } = await supabase
       .from("clients")
-      .select("id,name,industry,address,qr_code,contact_person,contact_number,mt_requirement,collection_days,collection_shift,status,contract_file_url,contract_expiry_date")
+      .select("id,name,industry,address,qr_code,contact_person,contact_number,mt_requirement,collection_days,collection_shift,status,contract_file_url,contract_expiry_date", { count: 'exact' })
       .order("name")
-      .limit(MAX_ITEMS);
+      .range(from, to);
+    
     if (error) setError(error.message);
     setClients(data || []);
+    setTotalClients(count || 0);
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchClients();
-  }, []);
+    fetchClients(currentPage);
+  }, [currentPage]);
 
   const downloadQR = async (qrCode: string, clientName: string) => {
     try {
@@ -110,7 +115,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
       if (error) throw error;
 
       toast({ title: "Success", description: `Imported ${clientsToInsert.length} clients` });
-      fetchClients();
+      fetchClients(currentPage);
     } catch (err: any) {
       toast({ title: "Import Error", description: err.message, variant: "destructive" });
     }
@@ -151,7 +156,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
 
       toast({ title: "Success", description: `Deleted ${selectedClients.size} clients` });
       setSelectedClients(new Set());
-      fetchClients();
+      fetchClients(currentPage);
     } catch (err: any) {
       toast({ title: "Delete Error", description: err.message, variant: "destructive" });
     }
@@ -193,7 +198,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
                   />
                 </>
               )}
-              <AddClientDialog profile={profile} onAdded={fetchClients} />
+              <AddClientDialog profile={profile} onAdded={() => fetchClients(currentPage)} />
             </div>
           )}
         </div>
@@ -233,7 +238,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {clients.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((client) => (
+                {clients.map((client) => (
                   <TableRow key={client.id}>
                     {roleAccess.canEditClients && (
                       <TableCell>
@@ -293,7 +298,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
                 ))}
               </TableBody>
             </Table>
-            {clients.length > ITEMS_PER_PAGE && (
+            {totalClients > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -304,13 +309,13 @@ const ClientsTab = ({ profile }: { profile: any }) => {
                   Previous
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                  Page {currentPage} of {Math.ceil(clients.length / ITEMS_PER_PAGE)}
+                  Page {currentPage} of {Math.ceil(totalClients / ITEMS_PER_PAGE)}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(clients.length / ITEMS_PER_PAGE), p + 1))}
-                  disabled={currentPage >= Math.ceil(clients.length / ITEMS_PER_PAGE)}
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalClients / ITEMS_PER_PAGE), p + 1))}
+                  disabled={currentPage >= Math.ceil(totalClients / ITEMS_PER_PAGE)}
                 >
                   Next
                 </Button>
@@ -324,7 +329,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
           client={editingClient}
           open={!!editingClient}
           onOpenChange={(open) => !open && setEditingClient(null)}
-          onUpdated={fetchClients}
+          onUpdated={() => fetchClients(currentPage)}
         />
       )}
     </Card>

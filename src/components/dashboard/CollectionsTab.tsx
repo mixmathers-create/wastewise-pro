@@ -24,29 +24,37 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedReceipts, setSelectedReceipts] = useState<Set<string>>(new Set());
   const [tallyData, setTallyData] = useState<TallyTemplateProps | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalReceipts, setTotalReceipts] = useState(0);
   const tallyTemplateRef = useRef<HTMLDivElement>(null);
   const isMobile = Capacitor.isNativePlatform();
   const isAdmin = profile?.role === "admin";
+  const ITEMS_PER_PAGE = 10;
 
-  const fetchReceipts = async () => {
+  const fetchReceipts = async (page = 1) => {
     setLoading(true);
-    const { data, error } = await supabase
+    const from = (page - 1) * ITEMS_PER_PAGE;
+    const to = from + ITEMS_PER_PAGE - 1;
+    
+    const { data, error, count } = await supabase
       .from("collection_receipts")
-      .select("id,created_at,qr_code,signed_by,pdf_url")
+      .select("id,created_at,qr_code,signed_by,pdf_url", { count: 'exact' })
       .order("created_at", { ascending: false })
-      .limit(20);
+      .range(from, to);
+    
     if (error) setError(error.message);
     setReceipts(data || []);
+    setTotalReceipts(count || 0);
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchReceipts();
-  }, []);
+    fetchReceipts(currentPage);
+  }, [currentPage]);
 
   const handleSuccess = () => {
     setDialogOpen(false);
-    fetchReceipts();
+    fetchReceipts(currentPage);
   };
 
   const handleViewReceipt = (receiptId: string) => {
@@ -86,7 +94,7 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
 
       toast({ title: "Success", description: `Deleted ${selectedReceipts.size} receipts` });
       setSelectedReceipts(new Set());
-      fetchReceipts();
+      fetchReceipts(currentPage);
     } catch (err: any) {
       toast({ title: "Delete Error", description: err.message, variant: "destructive" });
     }
@@ -381,6 +389,30 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
               ))}
             </TableBody>
           </Table>
+        )}
+        
+        {!isMobile && totalReceipts > ITEMS_PER_PAGE && (
+          <div className="flex justify-center items-center gap-2 mt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {currentPage} of {Math.ceil(totalReceipts / ITEMS_PER_PAGE)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalReceipts / ITEMS_PER_PAGE), p + 1))}
+              disabled={currentPage >= Math.ceil(totalReceipts / ITEMS_PER_PAGE)}
+            >
+              Next
+            </Button>
+          </div>
         )}
       </CardContent>
 

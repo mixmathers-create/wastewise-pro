@@ -36,42 +36,66 @@ export function ToolsInventory() {
   const [cameraActive, setCameraActive] = useState(false);
   const [inventoryPage, setInventoryPage] = useState(1);
   const [checkoutsPage, setCheckoutsPage] = useState(1);
+  const [totalTools, setTotalTools] = useState(0);
+  const [totalCheckouts, setTotalCheckouts] = useState(0);
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   
-  const ITEMS_PER_PAGE = 5;
-  const MAX_ITEMS = 100;
+  const ITEMS_PER_PAGE = 10;
 
   useEffect(() => {
-    fetchTools();
-    fetchCheckouts();
+    fetchTools(inventoryPage);
+    fetchCheckouts(checkoutsPage);
     fetchJobOrders();
-  }, []);
+  }, [inventoryPage, checkoutsPage]);
 
-  const fetchTools = async () => {
-    const { data, error } = await supabase
-      .from("tools")
-      .select("id,name,code,category,condition,status")
-      .eq("status", "available")
-      .order("name")
-      .limit(MAX_ITEMS);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      setTools(data || []);
+  const fetchTools = async (page = 1) => {
+    setLoading(true);
+    setTools([]);
+    try {
+      const from = (page - 1) * ITEMS_PER_PAGE;
+      const to = from + ITEMS_PER_PAGE - 1;
+      
+      const { data, error, count } = await supabase
+        .from("tools")
+        .select("id,name,code,category,condition,status", { count: 'exact' })
+        .eq("status", "available")
+        .order("name")
+        .range(from, to);
+      
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      } else {
+        setTools(data || []);
+        setTotalTools(count || 0);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
-  const fetchCheckouts = async () => {
-    const { data } = await supabase
-      .from("tool_checkouts")
-      .select(`
-        id,checked_out_at,checked_in_at,status,tool_id,
-        tools(name, code),
-        job_orders(job_number, trucks(code, plate_number))
-      `)
-      .order("checked_out_at", { ascending: false })
-      .limit(MAX_ITEMS);
-    setCheckouts(data || []);
+  const fetchCheckouts = async (page = 1) => {
+    setLoading(true);
+    setCheckouts([]);
+    try {
+      const from = (page - 1) * ITEMS_PER_PAGE;
+      const to = from + ITEMS_PER_PAGE - 1;
+      
+      const { data, count } = await supabase
+        .from("tool_checkouts")
+        .select(`
+          id,checked_out_at,checked_in_at,status,tool_id,
+          tools(name, code),
+          job_orders(job_number, trucks(code, plate_number))
+        `, { count: 'exact' })
+        .order("checked_out_at", { ascending: false })
+        .range(from, to);
+      
+      setCheckouts(data || []);
+      setTotalCheckouts(count || 0);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchJobOrders = async () => {
@@ -409,7 +433,16 @@ export function ToolsInventory() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tools.slice((inventoryPage - 1) * ITEMS_PER_PAGE, inventoryPage * ITEMS_PER_PAGE).map((tool) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        Loading...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : tools.map((tool) => (
                   <TableRow key={tool.id}>
                     <TableCell className="font-mono">{tool.code}</TableCell>
                     <TableCell className="font-medium">{tool.name}</TableCell>
@@ -445,7 +478,7 @@ export function ToolsInventory() {
                 ))}
               </TableBody>
             </Table>
-            {tools.length > ITEMS_PER_PAGE && (
+            {totalTools > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -456,13 +489,13 @@ export function ToolsInventory() {
                   Previous
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                  Page {inventoryPage} of {Math.ceil(tools.length / ITEMS_PER_PAGE)}
+                  Page {inventoryPage} of {Math.ceil(totalTools / ITEMS_PER_PAGE)}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setInventoryPage(p => Math.min(Math.ceil(tools.length / ITEMS_PER_PAGE), p + 1))}
-                  disabled={inventoryPage >= Math.ceil(tools.length / ITEMS_PER_PAGE)}
+                  onClick={() => setInventoryPage(p => Math.min(Math.ceil(totalTools / ITEMS_PER_PAGE), p + 1))}
+                  disabled={inventoryPage >= Math.ceil(totalTools / ITEMS_PER_PAGE)}
                 >
                   Next
                 </Button>
@@ -496,7 +529,16 @@ export function ToolsInventory() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {checkouts.slice((checkoutsPage - 1) * ITEMS_PER_PAGE, checkoutsPage * ITEMS_PER_PAGE).map((checkout) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        Loading...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : checkouts.map((checkout) => (
                   <TableRow key={checkout.id}>
                     <TableCell>
                       <div>
@@ -543,7 +585,7 @@ export function ToolsInventory() {
                 ))}
               </TableBody>
             </Table>
-            {checkouts.length > ITEMS_PER_PAGE && (
+            {totalCheckouts > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -554,13 +596,13 @@ export function ToolsInventory() {
                   Previous
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                  Page {checkoutsPage} of {Math.ceil(checkouts.length / ITEMS_PER_PAGE)}
+                  Page {checkoutsPage} of {Math.ceil(totalCheckouts / ITEMS_PER_PAGE)}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCheckoutsPage(p => Math.min(Math.ceil(checkouts.length / ITEMS_PER_PAGE), p + 1))}
-                  disabled={checkoutsPage >= Math.ceil(checkouts.length / ITEMS_PER_PAGE)}
+                  onClick={() => setCheckoutsPage(p => Math.min(Math.ceil(totalCheckouts / ITEMS_PER_PAGE), p + 1))}
+                  disabled={checkoutsPage >= Math.ceil(totalCheckouts / ITEMS_PER_PAGE)}
                 >
                   Next
                 </Button>
