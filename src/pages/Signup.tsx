@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Recycle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import bcrypt from "bcryptjs";
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -16,7 +17,7 @@ const Signup = () => {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [teamName, setTeamName] = useState("");
-  const [role, setRole] = useState<"admin" | "user">("admin");
+  const [requestedRole, setRequestedRole] = useState<"admin" | "mechanic" | "collector" | "hr">("collector");
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -24,44 +25,30 @@ const Signup = () => {
     setLoading(true);
 
     try {
-      // Create auth user with email redirect
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`
-        }
+      // Hash password for storage
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      // Create pending registration
+      const { error } = await supabase
+        .from("pending_registrations")
+        .insert({
+          email,
+          full_name: fullName,
+          password_hash: passwordHash,
+          requested_role: requestedRole,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Registration submitted!",
+        description: "Your registration request has been sent to administrators for approval. You'll be notified once approved.",
       });
 
-      if (authError) throw authError;
-
-      if (authData.user) {
-        const { error: roleError } = await supabase.from("user_roles").insert({
-          user_id: authData.user.id,
-          role: role,
-        });
-
-        if (roleError) throw roleError;
-
-        const { error: profileError } = await supabase.from("profiles").insert({
-          user_id: authData.user.id,
-          full_name: fullName,
-          email: email,
-          role: role,
-        });
-
-        if (profileError) throw profileError;
-
-        toast({
-          title: "Account created!",
-          description: "You're now logged in. Welcome to WasteWise!",
-        });
-
-        navigate("/dashboard");
-      }
+      navigate("/login");
     } catch (error: any) {
       toast({
-        title: "Signup failed",
+        title: "Registration failed",
         description: error.message,
         variant: "destructive",
       });
@@ -115,14 +102,16 @@ const Signup = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
-              <Select value={role} onValueChange={(value: "admin" | "user") => setRole(value)}>
+              <Label htmlFor="role">Requested Role</Label>
+              <Select value={requestedRole} onValueChange={(value: "admin" | "mechanic" | "collector" | "hr") => setRequestedRole(value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="admin">Administrator</SelectItem>
-                  <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="mechanic">Mechanic</SelectItem>
+                  <SelectItem value="collector">Collector</SelectItem>
+                  <SelectItem value="hr">HR</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -133,7 +122,7 @@ const Signup = () => {
                   Creating account...
                 </>
               ) : (
-                "Create Account"
+                "Submit Registration Request"
               )}
             </Button>
             <div className="text-center text-sm text-muted-foreground">
