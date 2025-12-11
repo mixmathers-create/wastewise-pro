@@ -1,7 +1,8 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Network } from "@capacitor/network";
+import { App } from "@capacitor/app";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { 
@@ -11,7 +12,8 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { useToast } from "@/hooks/use-toast";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
-import { useOfflineSync } from "@/hooks/useOfflineSync";
+import { useCollectionOfflineSync } from "@/hooks/useCollectionOfflineSync";
+import { useHROfflineSync } from "@/hooks/useHROfflineSync";
 import { getCachedProfile, clearCacheOnLogout } from "@/lib/offlineDb";
 import CollectionsTab from "@/components/dashboard/CollectionsTab";
 import ClientsTab from "@/components/dashboard/ClientsTab";
@@ -27,8 +29,14 @@ const MobileDashboard = () => {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const isFirstRender = useRef(true);
+  const [pendingRefreshTrigger, setPendingRefreshTrigger] = useState(0);
 
-  // Sync dropdown data for offline use
+  // Callback to refresh PendingTab when a new pending item is added
+  const handlePendingItemAdded = () => {
+    setPendingRefreshTrigger(prev => prev + 1);
+  };
+
+  // Sync dropdown data for offline use (Collections)
   const { 
     clients: cachedClients, 
     trucks: cachedTrucks, 
@@ -38,9 +46,49 @@ const MobileDashboard = () => {
     isSyncingPending,
     lastSyncedAt,
     lastPendingSyncResult,
-  } = useOfflineSync({ isOnline, profile });
+    syncDropdownData,
+  } = useCollectionOfflineSync({ isOnline, profile });
+
+  // Sync HR data for offline use (called at app level so data is ready when visiting HR tab)
+  const hrSync = useHROfflineSync({ 
+    isOnline, 
+    profile: profile || { user_id: 'temp' } 
+  });
 
   const wasSyncing = useRef(false);
+  const lastResumeSync = useRef<Date | null>(null);
+
+  // Sync data when app resumes from background (to keep data fresh)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    const handleAppStateChange = async (state: { isActive: boolean }) => {
+      if (state.isActive && isOnline && profile) {
+        // App became active (resumed from background)
+        const now = new Date();
+        const lastSync = lastResumeSync.current;
+        
+        // Only sync if at least 5 minutes have passed since last resume sync
+        // This prevents excessive syncing if user rapidly switches apps
+        const minSyncInterval = 5 * 60 * 1000; // 5 minutes
+        
+        if (!lastSync || (now.getTime() - lastSync.getTime()) > minSyncInterval) {
+          console.log('App resumed - syncing data...');
+          lastResumeSync.current = now;
+          
+          // Trigger sync for both Collections and HR data
+          syncDropdownData();
+          hrSync.syncHRData();
+        }
+      }
+    };
+
+    const listener = App.addListener('appStateChange', handleAppStateChange);
+
+    return () => {
+      listener.then(l => l.remove());
+    };
+  }, [isOnline, profile, syncDropdownData, hrSync.syncHRData]);
 
   // Show toast when online/offline status changes
   useEffect(() => {
@@ -70,30 +118,30 @@ const MobileDashboard = () => {
     if (wasSyncing.current && !isSyncing && cachedClients.length > 0) {
       toast({
         title: "Offline Mode Ready",
-        description: `Synced ${cachedClients.length} clients, ${cachedTrucks.length} trucks, ${cachedDrivers.length} drivers`,
+        description: "Data synced for Collections and HR pages",
       });
     }
     wasSyncing.current = isSyncing;
   }, [isSyncing, cachedClients.length, cachedTrucks.length, cachedDrivers.length]);
 
-  // Show toast when pending collections sync completes
+  // Show toast when pending items sync completes
   useEffect(() => {
     if (lastPendingSyncResult && (lastPendingSyncResult.synced > 0 || lastPendingSyncResult.failed > 0)) {
       if (lastPendingSyncResult.failed === 0) {
         toast({
-          title: "Collections Synced",
-          description: `Successfully uploaded ${lastPendingSyncResult.synced} collection(s)`,
+          title: "Pending Items Synced",
+          description: `Successfully uploaded ${lastPendingSyncResult.synced} pending item(s)`,
         });
       } else if (lastPendingSyncResult.synced === 0) {
         toast({
           title: "Sync Failed",
-          description: `Failed to sync ${lastPendingSyncResult.failed} collection(s)`,
+          description: `Failed to sync ${lastPendingSyncResult.failed} pending item(s)`,
           variant: "destructive",
         });
       } else {
         toast({
           title: "Partial Sync",
-          description: `Synced ${lastPendingSyncResult.synced}, failed ${lastPendingSyncResult.failed}`,
+          description: `Synced ${lastPendingSyncResult.synced}, failed ${lastPendingSyncResult.failed} item(s)`,
           variant: "destructive",
         });
       }
@@ -273,17 +321,28 @@ const MobileDashboard = () => {
                 cachedHelpers={cachedHelpers}
               />
             </TabsContent>
-            <TabsContent value="pending" className="mt-0">
-              <PendingTab isOnline={isOnline} />
-            </TabsContent>
+            <TabsContent value="pending" className="mt-0">
+              <PendingTab 
+                isOnline={isOnline} 
+                profile={profile} 
+                refreshTrigger={pendingRefreshTrigger}
+                lastSyncResult={lastPendingSyncResult}
+                lastHRSyncResult={hrSync.lastPendingSyncResult}
+              />
+            </TabsContent>
             {/* Content for Clients Tab (from caching-and-pagination) */}
             <TabsContent value="clients" className="mt-0">
               <ClientsTab profile={profile} />
             </TabsContent>
             {/* Content for HR Tab (from caching-and-pagination) */}
-            <TabsContent value="hr" className="mt-0">
-              <MobileHRTab profile={profile} />
-            </TabsContent>
+            <TabsContent value="hr" className="mt-0">
+              <MobileHRTab 
+                profile={profile} 
+                isOnline={isOnline} 
+                hrSync={hrSync}
+                onPendingItemAdded={handlePendingItemAdded}
+              />
+            </TabsContent>
             {/* Content for Settings Tab (from caching-and-pagination) */}
             <TabsContent value="settings" className="mt-0">
               <SettingsTab profile={profile} />

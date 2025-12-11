@@ -10,7 +10,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertCircle, Send } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { AlertCircle, Send, WifiOff } from "lucide-react";
+import type { PendingIncidentReport, Severity } from "@/lib/offlineDb";
 
 const incidentReportSchema = z.object({
   incident_type: z.string().min(1, "Incident type is required"),
@@ -57,7 +59,19 @@ const generateMinuteOptions = () => {
   return minutes;
 };
 
-export default function IncidentReportForm() {
+interface IncidentReportFormProps {
+  isOnline?: boolean;
+  profile?: any;
+  createPendingIncidentReport?: (data: Omit<PendingIncidentReport, 'id' | 'created_at' | 'status' | 'user_id'>) => Promise<string>;
+  onOfflineSuccess?: () => void;
+}
+
+export default function IncidentReportForm({ 
+  isOnline = true, 
+  profile,
+  createPendingIncidentReport,
+  onOfflineSuccess,
+}: IncidentReportFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const currentTime = useMemo(() => {
@@ -84,22 +98,48 @@ export default function IncidentReportForm() {
   const onSubmit = async (data: IncidentReportForm) => {
     setIsSubmitting(true);
     try {
+      const incident_time = data.incident_hour && data.incident_minute 
+        ? `${data.incident_hour}:${data.incident_minute}` 
+        : null;
+
+      // Handle offline mode
+      if (!isOnline) {
+        if (!createPendingIncidentReport || !profile) {
+          toast.error("Profile information is required for offline submission");
+          return;
+        }
+
+        await createPendingIncidentReport({
+          reporter_name: profile.full_name || "Unknown",
+          incident_type: data.incident_type,
+          incident_date: data.incident_date,
+          incident_time: incident_time,
+          location: data.location || null,
+          description: data.description,
+          severity: data.severity as Severity,
+        });
+
+        toast.success("Incident report saved offline. Will sync when online.");
+        if (onOfflineSuccess) {
+          onOfflineSuccess();
+        }
+        form.reset();
+        return;
+      }
+
+      // Online mode
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { data: profile } = await supabase
+      const { data: userProfile } = await supabase
         .from("profiles")
         .select("full_name")
         .eq("user_id", user.id)
         .single();
 
-      const incident_time = data.incident_hour && data.incident_minute 
-        ? `${data.incident_hour}:${data.incident_minute}` 
-        : undefined;
-
       const { error } = await supabase.from("incident_reports").insert({
         reported_by: user.id,
-        reporter_name: profile?.full_name || "Unknown",
+        reporter_name: userProfile?.full_name || "Unknown",
         incident_type: data.incident_type,
         incident_date: data.incident_date,
         incident_time: incident_time,
@@ -123,12 +163,23 @@ export default function IncidentReportForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <AlertCircle className="h-5 w-5" />
-          Submit Incident Report
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5" />
+            Submit Incident Report
+          </CardTitle>
+          {!isOnline && (
+            <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+              <WifiOff className="h-3 w-3 mr-1" />
+              Offline
+            </Badge>
+          )}
+        </div>
         <CardDescription>
-          Report accidents, injuries, conflicts, or any noteworthy incidents
+          {!isOnline 
+            ? "Report will be saved locally and submitted when you're back online"
+            : "Report accidents, injuries, conflicts, or any noteworthy incidents"
+          }
         </CardDescription>
       </CardHeader>
       <CardContent>

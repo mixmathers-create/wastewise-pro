@@ -5,8 +5,27 @@ import LeaveFilingForm from "./hr/LeaveFilingForm";
 import LeaveAdminPanel from "./hr/LeaveAdminPanel";
 import DriversHelpersTimeTracking from "./hr/DriversHelpersTimeTracking";
 import ReportsTab from "./hr/ReportsTab";
+import type { UseHROfflineSyncReturn } from "@/hooks/useHROfflineSync";
 
-export function MobileHRTab() {
+interface MobileHRTabProps {
+  profile?: any;
+  isOnline?: boolean;
+  hrSync?: UseHROfflineSyncReturn;
+  onPendingItemAdded?: () => void; // Callback to refresh PendingTab when item added
+}
+
+export function MobileHRTab({ profile, isOnline = true, hrSync, onPendingItemAdded }: MobileHRTabProps) {
+  // Use hrSync data passed from parent (synced at app level in MobileDashboard)
+  const trucks = hrSync?.trucks || [];
+  const drivers = hrSync?.drivers || [];
+  const helpers = hrSync?.helpers || [];
+  const mechanics = hrSync?.mechanics || [];
+  const recyclers = hrSync?.recyclers || [];
+  const management = hrSync?.management || [];
+  const createPendingLeaveRequest = hrSync?.createPendingLeaveRequest;
+  const createPendingIncidentReport = hrSync?.createPendingIncidentReport;
+  const createPendingMechanicalReport = hrSync?.createPendingMechanicalReport;
+  const refreshPendingItems = hrSync?.refreshPendingItems;
   return (
     <div className="space-y-4 px-2">
       <div className="text-center">
@@ -40,7 +59,14 @@ export function MobileHRTab() {
 
         <TabsContent value="personnel" className="mt-4">
           <div className="mobile-responsive overflow-x-auto">
-            <PersonnelList />
+            <PersonnelList 
+              isOnline={isOnline}
+              cachedDrivers={drivers}
+              cachedHelpers={helpers}
+              cachedMechanics={mechanics}
+              cachedRecyclers={recyclers}
+              cachedManagement={management}
+            />
           </div>
         </TabsContent>
 
@@ -52,7 +78,18 @@ export function MobileHRTab() {
 
         <TabsContent value="file-leave" className="mt-4">
           <div className="mobile-responsive">
-            <LeaveFilingForm />
+            <LeaveFilingForm 
+              profile={profile} 
+              isOnline={isOnline}
+              cachedDrivers={drivers}
+              cachedHelpers={helpers}
+              cachedMechanics={mechanics}
+              cachedRecyclers={recyclers}
+              cachedManagement={management}
+              createPendingLeaveRequest={profile ? createPendingLeaveRequest : undefined}
+              refreshPendingItems={refreshPendingItems}
+              onOfflineSuccess={onPendingItemAdded}
+            />
           </div>
         </TabsContent>
 
@@ -64,7 +101,14 @@ export function MobileHRTab() {
 
         <TabsContent value="reports" className="mt-4">
           <div className="mobile-responsive overflow-x-auto">
-            <ReportsTab />
+            <ReportsTab 
+              isOnline={isOnline}
+              profile={profile}
+              cachedTrucks={trucks}
+              createPendingIncidentReport={profile ? createPendingIncidentReport : undefined}
+              createPendingMechanicalReport={profile ? createPendingMechanicalReport : undefined}
+              onOfflineSuccess={onPendingItemAdded}
+            />
           </div>
         </TabsContent>
       </Tabs>

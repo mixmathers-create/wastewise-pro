@@ -12,7 +12,7 @@ import {
   type PendingCollection,
 } from '@/lib/offlineDb';
 
-interface UseOfflineSyncProps {
+interface UseCollectionOfflineSyncProps {
   isOnline: boolean;
   profile: any;
 }
@@ -22,7 +22,7 @@ interface SyncResult {
   failed: number;
 }
 
-interface UseOfflineSyncReturn {
+interface UseCollectionOfflineSyncReturn {
   clients: CachedClient[];
   trucks: CachedTruck[];
   drivers: CachedDriver[];
@@ -37,9 +37,9 @@ interface UseOfflineSyncReturn {
 }
 
 /**
- * Hook to sync dropdown data from Supabase to Dexie for offline use
+ * Hook to sync Collection tab data from Supabase to Dexie for offline use
  */
-export function useOfflineSync({ isOnline, profile }: UseOfflineSyncProps): UseOfflineSyncReturn {
+export function useCollectionOfflineSync({ isOnline, profile }: UseCollectionOfflineSyncProps): UseCollectionOfflineSyncReturn {
   const [clients, setClients] = useState<CachedClient[]>([]);
   const [trucks, setTrucks] = useState<CachedTruck[]>([]);
   const [drivers, setDrivers] = useState<CachedDriver[]>([]);
@@ -82,17 +82,23 @@ export function useOfflineSync({ isOnline, profile }: UseOfflineSyncProps): UseO
   }, []);
 
   // Sync dropdown data from Supabase to Dexie
+  // Use ref to track if sync is in progress (prevents concurrent syncs)
+  const isSyncingRef = useRef(false);
+
   const syncDropdownData = useCallback(async () => {
     if (!isOnline) return;
+    if (isSyncingRef.current) return; // Already syncing, skip
 
+    isSyncingRef.current = true;
     setIsSyncing(true);
 
     try {
+      // Fetch ALL needed fields for both Collections and HR (single source of truth)
       const [clientsRes, trucksRes, driversRes, helpersRes] = await Promise.all([
         supabase.from('clients').select('id, name, industry, address, qr_code, contact_person, contact_number').order('name'),
-        supabase.from('trucks').select('id, code, type'),
-        supabase.from('drivers').select('id, name'),
-        supabase.from('helpers').select('id, name'),
+        supabase.from('trucks').select('id, code, type, plate_number'),
+        supabase.from('drivers').select('id, name, contact_number, status, birthdate, leaves_available, id_number'),
+        supabase.from('helpers').select('id, name, contact_number, status, birthdate, leaves_available, id_number'),
       ]);
 
       if (clientsRes.error) throw clientsRes.error;
@@ -139,6 +145,7 @@ export function useOfflineSync({ isOnline, profile }: UseOfflineSyncProps): UseO
     } catch (error) {
       // Silent fail - will retry on next online
     } finally {
+      isSyncingRef.current = false;
       setIsSyncing(false);
     }
   }, [isOnline]);
@@ -286,3 +293,7 @@ export function useOfflineSync({ isOnline, profile }: UseOfflineSyncProps): UseO
     syncPendingCollections,
   };
 }
+
+// Keep backward compatibility alias
+export const useOfflineSync = useCollectionOfflineSync;
+
