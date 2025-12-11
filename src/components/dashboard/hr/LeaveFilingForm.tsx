@@ -100,12 +100,6 @@ const LeaveFilingForm = ({
   useEffect(() => {
     if (personnelId) {
       checkAvailableLeaves();
-      
-      // Auto-populate personnel ID number for testing
-      const selectedPerson = personnel.find(p => p.id === personnelId);
-      if (selectedPerson && selectedPerson.id_number) {
-        form.setValue("personnel_id_number", selectedPerson.id_number);
-      }
     }
   }, [personnelId, personnel]);
 
