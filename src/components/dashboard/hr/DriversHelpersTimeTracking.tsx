@@ -272,28 +272,29 @@ const startCamera = async () => {
       return;
     }
 
-    if (!capturedPhoto) {
-      toast.error("Please capture a group photo");
-      return;
-    }
-
     try {
       const location = await getCurrentLocation();
       const groupSessionId = crypto.randomUUID();
       const timestamp = new Date().toISOString();
 
-      // Upload photo to storage
-      const photoBlob = await fetch(capturedPhoto).then(r => r.blob());
-      const photoFileName = `time-logs/${groupSessionId}.jpg`;
-      const { error: uploadError } = await supabase.storage
-        .from("time-logs")
-        .upload(photoFileName, photoBlob);
+      let publicUrl = null;
+      
+      // Upload photo to storage if captured
+      if (capturedPhoto) {
+        const photoBlob = await fetch(capturedPhoto).then(r => r.blob());
+        const photoFileName = `time-logs/${groupSessionId}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from("time-logs")
+          .upload(photoFileName, photoBlob);
 
-      if (uploadError) throw uploadError;
+        if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage
-        .from("time-logs")
-        .getPublicUrl(photoFileName);
+        const { data: { publicUrl: url } } = supabase.storage
+          .from("time-logs")
+          .getPublicUrl(photoFileName);
+        
+        publicUrl = url;
+      }
 
       // Create time logs for all selected personnel
       const logs = [];
@@ -810,15 +811,13 @@ const startCamera = async () => {
               <Camera className="h-4 w-4 mr-2" />
               Capture Group Photo
             </Button>
-            {capturedPhoto && (
-              <Button 
-                onClick={handleTimeIn} 
-                disabled={!selectedTruck || (selectedDrivers.size === 0 && selectedHelpers.size === 0 && selectedRecyclers.size === 0)}
-              >
-                <Clock className="h-4 w-4 mr-2" />
-                Time In ({selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size} selected)
-              </Button>
-            )}
+            <Button 
+              onClick={handleTimeIn} 
+              disabled={!selectedTruck || (selectedDrivers.size === 0 && selectedHelpers.size === 0 && selectedRecyclers.size === 0)}
+            >
+              <Clock className="h-4 w-4 mr-2" />
+              Time In ({selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size} selected)
+            </Button>
           </div>
 
           {capturedPhoto && (
