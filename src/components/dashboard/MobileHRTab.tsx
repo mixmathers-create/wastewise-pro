@@ -22,9 +22,13 @@ export function MobileHRTab({ profile, isOnline = true, hrSync, onPendingItemAdd
   const mechanics = hrSync?.mechanics || [];
   const recyclers = hrSync?.recyclers || [];
   const management = hrSync?.management || [];
+  const cachedTimeLogs = hrSync?.cachedTimeLogs || [];
+  const pendingTimeIns = hrSync?.pendingTimeIns || [];
   const createPendingLeaveRequest = hrSync?.createPendingLeaveRequest;
   const createPendingIncidentReport = hrSync?.createPendingIncidentReport;
   const createPendingMechanicalReport = hrSync?.createPendingMechanicalReport;
+  const createPendingTimeIn = hrSync?.createPendingTimeIn;
+  const createPendingTimeOut = hrSync?.createPendingTimeOut;
   const refreshPendingItems = hrSync?.refreshPendingItems;
   return (
     <div className="space-y-4 px-2">
@@ -72,7 +76,18 @@ export function MobileHRTab({ profile, isOnline = true, hrSync, onPendingItemAdd
 
         <TabsContent value="time-tracking" className="mt-4">
           <div className="mobile-responsive overflow-x-auto">
-            <DriversHelpersTimeTracking />
+            <DriversHelpersTimeTracking 
+              isOnline={isOnline}
+              cachedTrucks={trucks}
+              cachedDrivers={drivers}
+              cachedHelpers={helpers}
+              cachedRecyclers={recyclers}
+              cachedTimeLogs={cachedTimeLogs}
+              pendingTimeIns={pendingTimeIns}
+              createPendingTimeIn={profile ? createPendingTimeIn : undefined}
+              createPendingTimeOut={profile ? createPendingTimeOut : undefined}
+              onOfflineSuccess={onPendingItemAdded}
+            />
           </div>
         </TabsContent>
 
