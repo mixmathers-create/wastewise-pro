@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Camera, Clock, Download, Loader2 } from "lucide-react";
@@ -65,20 +65,19 @@ export default function DriversHelpersTimeTracking() {
   const [selectedGroupTruck, setSelectedGroupTruck] = useState<string | null>(null);
   const [groupMembersToTimeOut, setGroupMembersToTimeOut] = useState<Set<string>>(new Set());
   const [selectedTimedOutLogs, setSelectedTimedOutLogs] = useState<Set<string>>(new Set());
+  const [showGroupTimeOutCamera, setShowGroupTimeOutCamera] = useState(false);
+  const [groupTimeOutPhoto, setGroupTimeOutPhoto] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const groupVideoRef = useRef<HTMLVideoElement>(null);
+  const groupCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  useEffect(() => {
-    fetchPersonnel();
-    fetchTrucks();
-    fetchTimeLogs();
 
-    return () => {
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, []);
+useEffect(() => {
+  fetchPersonnel();
+  fetchTrucks();
+  fetchTimeLogs();
+}, []);
 
   const fetchPersonnel = async () => {
     try {
@@ -181,36 +180,86 @@ export default function DriversHelpersTimeTracking() {
     });
   };
 
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "user" } 
-      });
-      setCameraStream(stream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-      setShowCamera(true);
-    } catch (error) {
-      console.error("Error accessing camera:", error);
-      toast.error("Failed to access camera");
+const startCamera = async () => {
+  try {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
     }
-  };
+    
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: 1280, height: 720 }
+    }).catch(() => 
+      navigator.mediaDevices.getUserMedia({ video: true })
+    );
+
+    console.log("✅ Camera stream obtained:", stream.getVideoTracks()[0].label);
+    
+    // First set the stream state
+    setCameraStream(stream);
+    
+    // Then open the dialog
+    setShowCamera(true);
+    
+    // Wait for Dialog to mount, then assign stream to video
+    setTimeout(() => {
+      if (videoRef.current) {
+        console.log("📹 Assigning stream to video element");
+        videoRef.current.srcObject = stream;
+        videoRef.current.play()
+          .then(() => console.log("✅ Video playing"))
+          .catch(err => console.error("❌ Video play error:", err));
+      } else {
+        console.error("❌ Video ref is null!");
+      }
+    }, 200);
+    
+  } catch (error: any) {
+    console.error("❌ Camera error:", error);
+    toast.error(error.name === "NotAllowedError" 
+      ? "Camera permission denied" 
+      : "Failed to access camera");
+  }
+};
+
 
   const capturePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return;
+  if (!videoRef.current || !canvasRef.current) {
+    console.error("❌ Video or canvas ref is null");
+    return;
+  }
 
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.drawImage(video, 0, 0);
-      const photoData = canvas.toDataURL("image/jpeg");
-      setCapturedPhoto(photoData);
+  const canvas = canvasRef.current;
+  const video = videoRef.current;
+  
+  console.log("📸 Video dimensions:", video.videoWidth, "x", video.videoHeight);
+  
+  if (video.videoWidth === 0 || video.videoHeight === 0) {
+    toast.error("Camera not ready. Please wait a moment.");
+    return;
+  }
+  
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.drawImage(video, 0, 0);
+    const photoData = canvas.toDataURL("image/jpeg", 0.9);
+    
+    if (photoData === 'data:,' || photoData.length < 100) {
+      toast.error("Failed to capture photo. Please try again.");
+      return;
     }
-  };
+    
+    console.log("✅ Photo captured, size:", photoData.length);
+    setCapturedPhoto(photoData);
+    setShowCamera(false);
+    
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+  }
+};
 
   const handleTimeIn = async () => {
     if (!selectedTruck) {
@@ -347,17 +396,110 @@ export default function DriversHelpersTimeTracking() {
     setShowGroupTimeOutDialog(true);
   };
 
+  const startGroupTimeOutCamera = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { facingMode: "user", width: 1280, height: 720 }
+    });
+    
+    console.log("✅ Group camera stream obtained:", stream.getVideoTracks()[0].label);
+    
+    setShowGroupTimeOutCamera(true);
+    
+    setTimeout(() => {
+      if (groupVideoRef.current) {
+        console.log("📹 Assigning stream to group video element");
+        groupVideoRef.current.srcObject = stream;
+        groupVideoRef.current.play()
+          .then(() => console.log("✅ Group video playing"))
+          .catch(err => console.error("❌ Group video play error:", err));
+      } else {
+        console.error("❌ Group video ref is null!");
+      }
+    }, 200);
+    
+  } catch (error: any) {
+    console.error("❌ Group camera error:", error);
+    toast.error(error.name === "NotAllowedError"
+      ? "Camera permission denied"
+      : "Failed to access camera");
+  }
+};
+
+  const captureGroupTimeOutPhoto = () => {
+  if (!groupVideoRef.current || !groupCanvasRef.current) {
+    console.error("❌ Group video or canvas ref is null");
+    return;
+  }
+
+  const canvas = groupCanvasRef.current;
+  const video = groupVideoRef.current;
+  
+  console.log("📸 Group video dimensions:", video.videoWidth, "x", video.videoHeight);
+  
+  if (video.videoWidth === 0 || video.videoHeight === 0) {
+    toast.error("Camera not ready. Please wait a moment.");
+    return;
+  }
+  
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.drawImage(video, 0, 0);
+    const photoData = canvas.toDataURL("image/jpeg", 0.9);
+    
+    if (photoData === 'data:,' || photoData.length < 100) {
+      toast.error("Failed to capture photo. Please try again.");
+      return;
+    }
+    
+    console.log("✅ Group photo captured, size:", photoData.length);
+    setGroupTimeOutPhoto(photoData);
+    setShowGroupTimeOutCamera(false);
+    
+    // Stop camera stream
+    const stream = video.srcObject as MediaStream;
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+  }
+};
+
   const handleGroupTimeOut = async () => {
     if (groupMembersToTimeOut.size === 0) {
       toast.error("Please select at least one person to time out");
       return;
     }
 
+    if (!groupTimeOutPhoto) {
+      toast.error("Please capture a group photo for time out");
+      return;
+    }
+
     try {
       const timestamp = new Date().toISOString();
+      const groupSessionId = crypto.randomUUID();
+
+      // Upload photo to storage
+      const photoBlob = await fetch(groupTimeOutPhoto).then(r => r.blob());
+      const photoFileName = `time-logs/timeout-${groupSessionId}.jpg`;
+      const { error: uploadError } = await supabase.storage
+        .from("time-logs")
+        .upload(photoFileName, photoBlob);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from("time-logs")
+        .getPublicUrl(photoFileName);
+
       const { error } = await supabase
         .from("personnel_time_logs")
-        .update({ time_out: timestamp })
+        .update({ 
+          time_out: timestamp,
+          timeout_photo_url: publicUrl
+        })
         .in("id", Array.from(groupMembersToTimeOut));
 
       if (error) throw error;
@@ -366,6 +508,7 @@ export default function DriversHelpersTimeTracking() {
       setShowGroupTimeOutDialog(false);
       setSelectedGroupTruck(null);
       setGroupMembersToTimeOut(new Set());
+      setGroupTimeOutPhoto(null);
       fetchTimeLogs();
     } catch (error) {
       console.error("Error recording group time out:", error);
@@ -874,35 +1017,54 @@ export default function DriversHelpersTimeTracking() {
           </TabsContent>
         </Tabs>
 
-        <Dialog open={showCamera} onOpenChange={setShowCamera}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Capture Group Photo</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <video ref={videoRef} autoPlay playsInline className="w-full rounded" />
-              <canvas ref={canvasRef} className="hidden" />
-              <div className="flex gap-2">
-                <Button onClick={capturePhoto}>
-                  <Camera className="h-4 w-4 mr-2" />
-                  Capture Photo
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (cameraStream) {
-                      cameraStream.getTracks().forEach(track => track.stop());
-                      setCameraStream(null);
-                    }
-                    setShowCamera(false);
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Dialog open={showCamera} onOpenChange={(open) => {
+  if (!open && cameraStream) {
+    cameraStream.getTracks().forEach(track => track.stop());
+    setCameraStream(null);
+  }
+  setShowCamera(open);
+}}>
+  <DialogContent className="max-w-2xl">
+    <DialogHeader>
+      <DialogTitle>Capture Group Photo</DialogTitle>
+      <DialogDescription>
+        Position everyone in frame and capture a group photo for time-in
+      </DialogDescription>
+    </DialogHeader>
+    <div className="space-y-4">
+      <div className="relative bg-black rounded overflow-hidden" style={{ minHeight: '400px' }}>
+        <video 
+          ref={videoRef} 
+          autoPlay 
+          playsInline 
+          muted
+          className="w-full h-full"
+          style={{ display: 'block' }}
+        />
+      </div>
+      <canvas ref={canvasRef} className="hidden" />
+      <div className="flex gap-2">
+        <Button onClick={capturePhoto} disabled={!cameraStream}>
+          <Camera className="h-4 w-4 mr-2" />
+          Capture Photo
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => {
+            if (cameraStream) {
+              cameraStream.getTracks().forEach(track => track.stop());
+              setCameraStream(null);
+            }
+            setShowCamera(false);
+          }}
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  </DialogContent>
+</Dialog>
+
 
         <Dialog open={showGroupTimeOutDialog} onOpenChange={setShowGroupTimeOutDialog}>
           <DialogContent className="max-w-lg">
@@ -949,6 +1111,11 @@ export default function DriversHelpersTimeTracking() {
                   </div>
                 ))}
               </div>
+              {groupTimeOutPhoto && (
+                <div className="border rounded p-2">
+                  <img src={groupTimeOutPhoto} alt="Group timeout photo" className="max-h-32 mx-auto" />
+                </div>
+              )}
               <div className="flex justify-end gap-2">
                 <Button 
                   variant="outline" 
@@ -956,20 +1123,77 @@ export default function DriversHelpersTimeTracking() {
                     setShowGroupTimeOutDialog(false);
                     setSelectedGroupTruck(null);
                     setGroupMembersToTimeOut(new Set());
+                    setGroupTimeOutPhoto(null);
                   }}
                 >
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleGroupTimeOut}
-                  disabled={groupMembersToTimeOut.size === 0}
-                >
-                  Time Out ({groupMembersToTimeOut.size} selected)
-                </Button>
+                {!groupTimeOutPhoto ? (
+                  <Button onClick={startGroupTimeOutCamera}>
+                    <Camera className="h-4 w-4 mr-2" />
+                    Capture Photo
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={handleGroupTimeOut}
+                    disabled={groupMembersToTimeOut.size === 0}
+                  >
+                    Time Out ({groupMembersToTimeOut.size} selected)
+                  </Button>
+                )}
               </div>
             </div>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={showGroupTimeOutCamera} onOpenChange={(open) => {
+  if (!open && groupVideoRef.current?.srcObject) {
+    const stream = groupVideoRef.current.srcObject as MediaStream;
+    stream.getTracks().forEach(track => track.stop());
+  }
+  setShowGroupTimeOutCamera(open);
+}}>
+  <DialogContent className="max-w-2xl">
+    <DialogHeader>
+      <DialogTitle>Capture Group Time Out Photo</DialogTitle>
+      <DialogDescription>
+        Take a group photo to record the time-out
+      </DialogDescription>
+    </DialogHeader>
+    <div className="space-y-4">
+      <div className="relative bg-black rounded overflow-hidden" style={{ minHeight: '400px' }}>
+        <video 
+          ref={groupVideoRef} 
+          autoPlay 
+          playsInline 
+          muted
+          className="w-full h-full"
+          style={{ display: 'block' }}
+        />
+      </div>
+      <canvas ref={groupCanvasRef} className="hidden" />
+      <div className="flex gap-2">
+        <Button onClick={captureGroupTimeOutPhoto}>
+          <Camera className="h-4 w-4 mr-2" />
+          Capture Photo
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => {
+            const video = groupVideoRef.current;
+            if (video?.srcObject) {
+              const stream = video.srcObject as MediaStream;
+              stream.getTracks().forEach(track => track.stop());
+            }
+            setShowGroupTimeOutCamera(false);
+          }}
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  </DialogContent>
+</Dialog>
       </CardContent>
     </Card>
   );
