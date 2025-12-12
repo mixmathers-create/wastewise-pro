@@ -7,61 +7,60 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Recycle } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Signup = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [teamName, setTeamName] = useState("");
-  const [role, setRole] = useState<"admin" | "user">("admin");
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (password !== confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Passwords do not match",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 6 characters",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // Create auth user with email redirect
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`
-        }
+      const { error } = await supabase
+        .from("pending_users")
+        .insert({
+          email,
+          password_hash: password,
+          full_name: fullName,
+          user_type: "driver"
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Registration submitted!",
+        description: "Please wait for admin approval before you can log in.",
       });
 
-      if (authError) throw authError;
-
-      if (authData.user) {
-        const { error: roleError } = await supabase.from("user_roles").insert({
-          user_id: authData.user.id,
-          role: role,
-        });
-
-        if (roleError) throw roleError;
-
-        const { error: profileError } = await supabase.from("profiles").insert({
-          user_id: authData.user.id,
-          full_name: fullName,
-          email: email,
-          role: role,
-        });
-
-        if (profileError) throw profileError;
-
-        toast({
-          title: "Account created!",
-          description: "You're now logged in. Welcome to WasteWise!",
-        });
-
-        navigate("/dashboard");
-      }
+      navigate("/login");
     } catch (error: any) {
       toast({
-        title: "Signup failed",
+        title: "Registration failed",
         description: error.message,
         variant: "destructive",
       });
@@ -78,7 +77,7 @@ const Signup = () => {
             <Recycle className="h-8 w-8 text-primary-foreground" />
           </div>
           <CardTitle className="text-2xl">WasteWise</CardTitle>
-          <CardDescription>Create your team account</CardDescription>
+          <CardDescription>Request account access</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignup} className="space-y-4">
@@ -115,25 +114,24 @@ const Signup = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
-              <Select value={role} onValueChange={(value: "admin" | "user") => setRole(value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Administrator</SelectItem>
-                  <SelectItem value="user">User</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={6}
+              />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating account...
+                  Submitting request...
                 </>
               ) : (
-                "Create Account"
+                "Request Account"
               )}
             </Button>
             <div className="text-center text-sm text-muted-foreground">

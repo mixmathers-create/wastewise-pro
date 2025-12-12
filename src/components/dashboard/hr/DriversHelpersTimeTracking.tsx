@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Camera, Clock, Download, Loader2, WifiOff } from "lucide-react";
+import { Camera, Clock, Download, Loader2, WifiOff, MoreHorizontal } from "lucide-react";
 import { format } from "date-fns";
 import type { PendingTimeIn, PendingTimeOut, TimeInPersonnel, CachedTimeLog } from "@/lib/offline/hrTypes";
 import type { CachedTruck } from "@/lib/offline/commonTypes";
@@ -112,6 +112,11 @@ export default function DriversHelpersTimeTracking({
   const [groupTimeOutLoading, setGroupTimeOutLoading] = useState(false);
   // Personnel ID lookup cache
   const [personnelIdNumbers, setPersonnelIdNumbers] = useState<Record<string, string>>({});
+  // Mobile modal states
+  const [selectedActiveLog, setSelectedActiveLog] = useState<TimeLog | null>(null);
+  const [selectedTimedOutLog, setSelectedTimedOutLog] = useState<TimeLog | null>(null);
+  const [showActiveDetailsModal, setShowActiveDetailsModal] = useState(false);
+  const [showTimedOutDetailsModal, setShowTimedOutDetailsModal] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const groupVideoRef = useRef<HTMLVideoElement>(null);
@@ -430,27 +435,8 @@ const startCamera = async () => {
       const groupSessionId = crypto.randomUUID();
       const timestamp = new Date().toISOString();
 
-      let publicUrl = null;
-      
-      // Upload photo to storage if captured
-      if (capturedPhoto) {
-        const photoBlob = await fetch(capturedPhoto).then(r => r.blob());
-        const photoFileName = `time-logs/${groupSessionId}.jpg`;
-        const { error: uploadError } = await supabase.storage
-          .from("time-logs")
-          .upload(photoFileName, photoBlob);
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl: url } } = supabase.storage
-          .from("time-logs")
-          .getPublicUrl(photoFileName);
-        
-        publicUrl = url;
-      }
-
-      // Create time logs for all selected personnel
-      const logs = [];
+      // Build personnel list
+      const personnelList: TimeInPersonnel[] = [];
       
       for (const driverId of selectedDrivers) {
         const driver = drivers.find(d => d.id === driverId);
@@ -473,7 +459,6 @@ const startCamera = async () => {
 
       const selectedTruckObj = trucks.find(t => t.id === selectedTruck);
       const truckCode = selectedTruckObj?.code || selectedTruck;
-      const groupSessionId = crypto.randomUUID();
 
       // Handle offline mode
       if (!isOnline) {
@@ -521,7 +506,6 @@ const startCamera = async () => {
         const { data: tid } = await supabase.rpc('get_user_team_id', { _user_id: user.id });
         teamId = tid;
       }
-      const timestamp = new Date().toISOString();
 
       let publicUrl: string | null = null;
 
@@ -1198,43 +1182,83 @@ const startCamera = async () => {
                         </div>
                       </CardHeader>
                       <CardContent>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Name</TableHead>
-                              <TableHead>Type</TableHead>
-                              <TableHead>Time In</TableHead>
-                              <TableHead>Duration</TableHead>
-                              <TableHead>Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {logs.map((log) => (
-                              <TableRow key={log.id} className={log.isPending ? "bg-yellow-50" : ""}>
-                                <TableCell>
-                                  {log.personnel_name}
-                                  {log.isPending && (
-                                    <Badge variant="outline" className="ml-2 text-yellow-600 border-yellow-600 text-[10px]">
-                                      Pending Sync
-                                    </Badge>
-                                  )}
-                                </TableCell>
-                                <TableCell className="capitalize">{log.personnel_type}</TableCell>
-                                <TableCell>{format(new Date(log.time_in), "MMM dd, yyyy HH:mm")}</TableCell>
-                                <TableCell>{calculateTotalTime(log.time_in, log.time_out)}</TableCell>
-                                <TableCell>
-                                  {log.isPending ? (
-                                    <span className="text-xs text-muted-foreground">Sync first</span>
-                                  ) : (
-                                    <Button onClick={() => handleTimeOutClick(log)} size="sm" variant="outline">
-                                      Individual Time Out
-                                    </Button>
-                                  )}
-                                </TableCell>
+                        <div className="block md:hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Name</TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Actions</TableHead>
                               </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                            </TableHeader>
+                            <TableBody>
+                              {logs.map((log) => (
+                                <TableRow key={log.id} className={log.isPending ? "bg-yellow-50" : ""}>
+                                  <TableCell>
+                                    {log.personnel_name}
+                                    {log.isPending && (
+                                      <Badge variant="outline" className="ml-2 text-yellow-600 border-yellow-600 text-[10px]">
+                                        Pending
+                                      </Badge>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="capitalize">{log.personnel_type}</TableCell>
+                                  <TableCell>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      onClick={() => {
+                                        setSelectedActiveLog(log);
+                                        setShowActiveDetailsModal(true);
+                                      }}
+                                    >
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                        <div className="hidden md:block">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Name</TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Time In</TableHead>
+                                <TableHead>Duration</TableHead>
+                                <TableHead>Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {logs.map((log) => (
+                                <TableRow key={log.id} className={log.isPending ? "bg-yellow-50" : ""}>
+                                  <TableCell>
+                                    {log.personnel_name}
+                                    {log.isPending && (
+                                      <Badge variant="outline" className="ml-2 text-yellow-600 border-yellow-600 text-[10px]">
+                                        Pending Sync
+                                      </Badge>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="capitalize">{log.personnel_type}</TableCell>
+                                  <TableCell>{format(new Date(log.time_in), "MMM dd, yyyy HH:mm")}</TableCell>
+                                  <TableCell>{calculateTotalTime(log.time_in, log.time_out)}</TableCell>
+                                  <TableCell>
+                                    {log.isPending ? (
+                                      <span className="text-xs text-muted-foreground">Sync first</span>
+                                    ) : (
+                                      <Button onClick={() => handleTimeOutClick(log)} size="sm" variant="outline">
+                                        Individual Time Out
+                                      </Button>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
                       </CardContent>
                     </Card>
                   );
@@ -1264,69 +1288,102 @@ const startCamera = async () => {
                   </Button>
                 </div>
               )}
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
-                      <Checkbox
-                        checked={selectedTimedOutLogs.size === paginatedTimedOutLogs.length && paginatedTimedOutLogs.length > 0}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedTimedOutLogs(new Set(paginatedTimedOutLogs.map(log => log.id)));
-                          } else {
-                            setSelectedTimedOutLogs(new Set());
-                          }
-                        }}
-                      />
-                    </TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Vehicle</TableHead>
-                    <TableHead>Time In</TableHead>
-                    <TableHead>Time Out</TableHead>
-                    <TableHead>Total Time</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedTimedOutLogs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell>
+              <div className="block md:hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedTimedOutLogs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell>{log.personnel_name}</TableCell>
+                        <TableCell className="capitalize">{log.personnel_type}</TableCell>
+                        <TableCell>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => {
+                              setSelectedTimedOutLog(log);
+                              setShowTimedOutDetailsModal(true);
+                            }}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">
                         <Checkbox
-                          checked={selectedTimedOutLogs.has(log.id)}
+                          checked={selectedTimedOutLogs.size === paginatedTimedOutLogs.length && paginatedTimedOutLogs.length > 0}
                           onCheckedChange={(checked) => {
-                            const newSet = new Set(selectedTimedOutLogs);
                             if (checked) {
-                              newSet.add(log.id);
+                              setSelectedTimedOutLogs(new Set(paginatedTimedOutLogs.map(log => log.id)));
                             } else {
-                              newSet.delete(log.id);
+                              setSelectedTimedOutLogs(new Set());
                             }
-                            setSelectedTimedOutLogs(newSet);
                           }}
                         />
-                      </TableCell>
-                      <TableCell>{log.personnel_name}</TableCell>
-                      <TableCell className="capitalize">{log.personnel_type}</TableCell>
-                      <TableCell>
-                        {log.trucks ? (
-                          <div className="text-sm">
-                            <div className="font-medium">{log.trucks.code}</div>
-                            {log.trucks.plate_number && (
-                              <div className="text-xs text-muted-foreground">{log.trucks.plate_number}</div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">N/A</span>
-                        )}
-                      </TableCell>
-                      <TableCell>{format(new Date(log.time_in), "MMM dd, yyyy HH:mm")}</TableCell>
-                      <TableCell>
-                        {log.time_out ? format(new Date(log.time_out), "MMM dd, yyyy HH:mm") : "N/A"}
-                      </TableCell>
-                      <TableCell>{calculateTotalTime(log.time_in, log.time_out)}</TableCell>
+                      </TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Vehicle</TableHead>
+                      <TableHead>Time In</TableHead>
+                      <TableHead>Time Out</TableHead>
+                      <TableHead>Total Time</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedTimedOutLogs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedTimedOutLogs.has(log.id)}
+                            onCheckedChange={(checked) => {
+                              const newSet = new Set(selectedTimedOutLogs);
+                              if (checked) {
+                                newSet.add(log.id);
+                              } else {
+                                newSet.delete(log.id);
+                              }
+                              setSelectedTimedOutLogs(newSet);
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>{log.personnel_name}</TableCell>
+                        <TableCell className="capitalize">{log.personnel_type}</TableCell>
+                        <TableCell>
+                          {log.trucks ? (
+                            <div className="text-sm">
+                              <div className="font-medium">{log.trucks.code}</div>
+                              {log.trucks.plate_number && (
+                                <div className="text-xs text-muted-foreground">{log.trucks.plate_number}</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">N/A</span>
+                          )}
+                        </TableCell>
+                        <TableCell>{format(new Date(log.time_in), "MMM dd, yyyy HH:mm")}</TableCell>
+                        <TableCell>
+                          {log.time_out ? format(new Date(log.time_out), "MMM dd, yyyy HH:mm") : "N/A"}
+                        </TableCell>
+                        <TableCell>{calculateTotalTime(log.time_in, log.time_out)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
               {timedOutLogs.length > ITEMS_PER_PAGE && (
                 <div className="flex items-center justify-center gap-2 mt-4">
                   <Button
@@ -1631,6 +1688,112 @@ const startCamera = async () => {
                 </Button>
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Active Log Details Modal */}
+        <Dialog open={showActiveDetailsModal} onOpenChange={setShowActiveDetailsModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Active Log Details</DialogTitle>
+            </DialogHeader>
+            {selectedActiveLog && (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Name</label>
+                  <p className="text-sm text-muted-foreground">{selectedActiveLog.personnel_name}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Type</label>
+                  <p className="text-sm text-muted-foreground capitalize">{selectedActiveLog.personnel_type}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Time In</label>
+                  <p className="text-sm text-muted-foreground">{format(new Date(selectedActiveLog.time_in), "MMM dd, yyyy HH:mm")}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Duration</label>
+                  <p className="text-sm text-muted-foreground">{calculateTotalTime(selectedActiveLog.time_in, selectedActiveLog.time_out)}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Vehicle</label>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedActiveLog.trucks ? `${selectedActiveLog.trucks.code} ${selectedActiveLog.trucks.plate_number || ''}` : 'N/A'}
+                  </p>
+                </div>
+                {!selectedActiveLog.isPending && (
+                  <Button 
+                    onClick={() => {
+                      handleTimeOutClick(selectedActiveLog);
+                      setShowActiveDetailsModal(false);
+                    }} 
+                    className="w-full"
+                  >
+                    Individual Time Out
+                  </Button>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Timed Out Log Details Modal */}
+        <Dialog open={showTimedOutDetailsModal} onOpenChange={setShowTimedOutDetailsModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Time Log Details</DialogTitle>
+            </DialogHeader>
+            {selectedTimedOutLog && (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Name</label>
+                  <p className="text-sm text-muted-foreground">{selectedTimedOutLog.personnel_name}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Type</label>
+                  <p className="text-sm text-muted-foreground capitalize">{selectedTimedOutLog.personnel_type}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Vehicle</label>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedTimedOutLog.trucks ? (
+                      `${selectedTimedOutLog.trucks.code} ${selectedTimedOutLog.trucks.plate_number || ''}`
+                    ) : 'N/A'}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Time In</label>
+                  <p className="text-sm text-muted-foreground">{format(new Date(selectedTimedOutLog.time_in), "MMM dd, yyyy HH:mm")}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Time Out</label>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedTimedOutLog.time_out ? format(new Date(selectedTimedOutLog.time_out), "MMM dd, yyyy HH:mm") : "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Total Time</label>
+                  <p className="text-sm text-muted-foreground">{calculateTotalTime(selectedTimedOutLog.time_in, selectedTimedOutLog.time_out)}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      const newSet = new Set(selectedTimedOutLogs);
+                      if (selectedTimedOutLogs.has(selectedTimedOutLog.id)) {
+                        newSet.delete(selectedTimedOutLog.id);
+                      } else {
+                        newSet.add(selectedTimedOutLog.id);
+                      }
+                      setSelectedTimedOutLogs(newSet);
+                    }}
+                    className="flex-1"
+                  >
+                    {selectedTimedOutLogs.has(selectedTimedOutLog.id) ? 'Unselect' : 'Select for Delete'}
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </CardContent>
