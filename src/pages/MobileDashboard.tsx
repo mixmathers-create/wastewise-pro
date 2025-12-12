@@ -73,7 +73,6 @@ const MobileDashboard = () => {
         const minSyncInterval = 5 * 60 * 1000; // 5 minutes
         
         if (!lastSync || (now.getTime() - lastSync.getTime()) > minSyncInterval) {
-          console.log('App resumed - syncing data...');
           lastResumeSync.current = now;
           
           // Trigger sync for both Collections and HR data

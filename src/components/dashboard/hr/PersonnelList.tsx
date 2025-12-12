@@ -24,7 +24,6 @@ interface CachedPersonnel {
 
 interface PersonnelListProps {
   isOnline?: boolean;
-  // Cached data from hrSync (passed from parent)
   cachedDrivers?: CachedPersonnel[];
   cachedHelpers?: CachedPersonnel[];
   cachedMechanics?: CachedPersonnel[];
@@ -48,11 +47,14 @@ const PersonnelList = ({
   useEffect(() => {
     if (isOnline) {
       fetchPersonnel();
-    } else {
-      // Use cached data when offline
+    }
+  }, [isOnline]);
+
+  useEffect(() => {
+    if (!isOnline) {
       loadCachedPersonnel();
     }
-  }, [isOnline, cachedDrivers, cachedHelpers, cachedMechanics, cachedRecyclers, cachedManagement]);
+  }, [isOnline, cachedDrivers.length, cachedHelpers.length, cachedMechanics.length, cachedRecyclers.length, cachedManagement.length]);
 
   const loadCachedPersonnel = () => {
     const allCached: Personnel[] = [

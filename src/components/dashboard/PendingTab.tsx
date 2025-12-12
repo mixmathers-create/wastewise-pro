@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, CheckCircle, XCircle, Trash2, CloudUpload, RefreshCw, Trash, FileText, Users, AlertTriangle, Wrench } from "lucide-react";
+import { Clock, CheckCircle, XCircle, Trash2, CloudUpload, RefreshCw, Trash, FileText, Users, AlertTriangle, Wrench, ChevronDown, ChevronUp } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { offlineDb, type PendingCollection, type PendingLeaveRequest, type PendingTimeIn, type PendingTimeOut, type PendingIncidentReport, type PendingMechanicalReport } from "@/lib/offlineDb";
 import { useToast } from "@/hooks/use-toast";
@@ -32,6 +32,7 @@ const PendingTab = ({ isOnline, profile, onSyncComplete, refreshTrigger, lastSyn
   const [pendingMechanicalReports, setPendingMechanicalReports] = useState<PendingMechanicalReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("collections");
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   const loadAllPendingItems = async () => {
     setLoading(true);
@@ -206,27 +207,51 @@ const PendingTab = ({ isOnline, profile, onSyncComplete, refreshTrigger, lastSyn
     return format(new Date(date), "MMM dd, yyyy HH:mm");
   };
 
+  // Toggle expanded state for an item
+  const toggleExpanded = (itemId: string) => {
+    setExpandedItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+      } else {
+        newSet.add(itemId);
+      }
+      return newSet;
+    });
+  };
+
   // Generic pending item renderer
   const renderPendingItem = (
     item: any,
     type: 'collection' | 'leave' | 'timeIn' | 'timeOut' | 'incident' | 'mechanical',
     title: string,
-    subtitle: string
+    subtitle: string,
+    expandableDetails?: React.ReactNode
   ) => {
+    const isExpanded = expandedItems.has(item.id);
+    const hasExpandable = !!expandableDetails;
+    
     return (
       <div key={item.id} className="border rounded-lg p-3 bg-card">
         <div className="flex items-start justify-between">
           <div 
-            className={`flex-1 ${item.status === 'failed' ? 'cursor-pointer' : ''}`}
+            className={`flex-1 ${item.status === 'failed' || hasExpandable ? 'cursor-pointer' : ''}`}
             onClick={() => {
               if (item.status === 'failed') {
                 handleRetry(item.id, type);
+              } else if (hasExpandable) {
+                toggleExpanded(item.id);
               }
             }}
           >
             <div className="flex items-center gap-2 mb-1">
               {getStatusIcon(item.status)}
               <span className="font-medium text-sm">{title}</span>
+              {hasExpandable && (
+                <span className="text-muted-foreground">
+                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </span>
+              )}
             </div>
             <div className="text-xs text-muted-foreground space-y-0.5">
               <p>{subtitle}</p>
@@ -244,9 +269,18 @@ const PendingTab = ({ isOnline, profile, onSyncComplete, refreshTrigger, lastSyn
               {item.status === 'failed' && (
                 <span className="text-xs text-muted-foreground">(tap to retry)</span>
               )}
+              {hasExpandable && !isExpanded && (
+                <span className="text-xs text-muted-foreground">(tap for details)</span>
+              )}
             </div>
             {item.error_message && (
               <p className="text-xs text-red-500 mt-1">{item.error_message}</p>
+            )}
+            {/* Expandable details section */}
+            {isExpanded && expandableDetails && (
+              <div className="mt-3 pt-3 border-t border-dashed">
+                {expandableDetails}
+              </div>
             )}
           </div>
           <AlertDialog>
@@ -431,7 +465,18 @@ const PendingTab = ({ isOnline, profile, onSyncComplete, refreshTrigger, lastSyn
                           timeIn,
                           'timeIn',
                           `Truck: ${timeIn.truck_code}`,
-                          `${timeIn.personnel.length} personnel • ${formatDate(timeIn.created_at)}`
+                          `${timeIn.personnel.length} personnel`,
+                          // Expandable personnel list
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground mb-2">Personnel:</p>
+                            {timeIn.personnel.map((p, idx) => (
+                              <div key={idx} className="text-xs flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-primary" />
+                                <span>{p.name}</span>
+                                <span className="text-muted-foreground capitalize">({p.type})</span>
+                              </div>
+                            ))}
+                          </div>
                         )
                       )}
                     </div>

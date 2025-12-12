@@ -10,6 +10,7 @@ import SignatureCanvas from "react-signature-canvas";
 import { Label } from "@/components/ui/label";
 import ReceiptTemplate, { ReceiptTemplateProps } from "@/components/collection/ReceiptTemplate";
 import QRCode from "qrcode";
+import { useReceiptSettings } from "@/hooks/useReceiptSettings";
 
 const QRCodeDisplay = ({ value, size }: { value: string; size: number }) => {
   const [qrUrl, setQrUrl] = useState<string>("");
@@ -29,6 +30,7 @@ const ReceiptPreview = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const receiptId = searchParams.get("id");
+  const { logoUrl: dbLogoUrl } = useReceiptSettings();
   
   const [receipt, setReceipt] = useState<any>(null);
   const [client, setClient] = useState<any>(null);
@@ -159,7 +161,7 @@ const ReceiptPreview = () => {
   const getReceiptProps = (): ReceiptTemplateProps | null => {
     if (!receipt || !client) return null;
     
-    const logoUrl = localStorage.getItem("receipt_logo");
+    const logoUrl = dbLogoUrl;
     const companyName = localStorage.getItem("receipt_company_name") || "WASTEWISE";
     const companyAddress = localStorage.getItem("receipt_company_address") || "";
     const companyContact = localStorage.getItem("receipt_company_contact") || "";

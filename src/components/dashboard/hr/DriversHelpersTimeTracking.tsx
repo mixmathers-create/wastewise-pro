@@ -1,14 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Camera, Clock, Download, Loader2 } from "lucide-react";
+import { Camera, Clock, Download, Loader2, WifiOff } from "lucide-react";
 import { format } from "date-fns";
+import type { PendingTimeIn, PendingTimeOut, TimeInPersonnel, CachedTimeLog } from "@/lib/offline/hrTypes";
+import type { CachedTruck } from "@/lib/offline/commonTypes";
 
 const ITEMS_PER_PAGE = 5;
 const MAX_ITEMS = 100;
@@ -17,6 +20,12 @@ interface Personnel {
   id: string;
   name: string;
   type: 'driver' | 'helper' | 'recycler';
+}
+
+interface CachedPersonnel {
+  id: string;
+  name: string;
+  id_number?: string | null;
 }
 
 interface Truck {
@@ -42,9 +51,34 @@ interface TimeLog {
     code: string;
     plate_number: string | null;
   } | null;
+  isPending?: boolean;  // Flag for pending offline items
 }
 
-export default function DriversHelpersTimeTracking() {
+interface DriversHelpersTimeTrackingProps {
+  isOnline?: boolean;
+  cachedTrucks?: CachedTruck[];
+  cachedDrivers?: CachedPersonnel[];
+  cachedHelpers?: CachedPersonnel[];
+  cachedRecyclers?: CachedPersonnel[];
+  cachedTimeLogs?: CachedTimeLog[];
+  pendingTimeIns?: PendingTimeIn[];
+  createPendingTimeIn?: (data: Omit<PendingTimeIn, 'id' | 'created_at' | 'status' | 'user_id'>) => Promise<string>;
+  createPendingTimeOut?: (data: Omit<PendingTimeOut, 'id' | 'created_at' | 'status' | 'user_id'>) => Promise<string>;
+  onOfflineSuccess?: () => void;
+}
+
+export default function DriversHelpersTimeTracking({
+  isOnline = true,
+  cachedTrucks = [],
+  cachedDrivers = [],
+  cachedHelpers = [],
+  cachedRecyclers = [],
+  cachedTimeLogs = [],
+  pendingTimeIns = [],
+  createPendingTimeIn,
+  createPendingTimeOut,
+  onOfflineSuccess,
+}: DriversHelpersTimeTrackingProps) {
   const [drivers, setDrivers] = useState<Personnel[]>([]);
   const [helpers, setHelpers] = useState<Personnel[]>([]);
   const [recyclers, setRecyclers] = useState<Personnel[]>([]);
@@ -67,35 +101,93 @@ export default function DriversHelpersTimeTracking() {
   const [selectedTimedOutLogs, setSelectedTimedOutLogs] = useState<Set<string>>(new Set());
   const [showGroupTimeOutCamera, setShowGroupTimeOutCamera] = useState(false);
   const [groupTimeOutPhoto, setGroupTimeOutPhoto] = useState<string | null>(null);
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'getting-location' | 'saving'>('idle');
+  // Individual time out dialog state
+  const [showIndividualTimeOutDialog, setShowIndividualTimeOutDialog] = useState(false);
+  const [selectedLogForTimeOut, setSelectedLogForTimeOut] = useState<TimeLog | null>(null);
+  const [individualIdInput, setIndividualIdInput] = useState("");
+  const [individualTimeOutLoading, setIndividualTimeOutLoading] = useState(false);
+  // Group time out ID verification
+  const [groupIdInputs, setGroupIdInputs] = useState<Record<string, string>>({});
+  const [groupTimeOutLoading, setGroupTimeOutLoading] = useState(false);
+  // Personnel ID lookup cache
+  const [personnelIdNumbers, setPersonnelIdNumbers] = useState<Record<string, string>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const groupVideoRef = useRef<HTMLVideoElement>(null);
   const groupCanvasRef = useRef<HTMLCanvasElement>(null);
 
 
+// Fetch data based on online status
 useEffect(() => {
-  fetchPersonnel();
-  fetchTrucks();
-  fetchTimeLogs();
-}, []);
+  if (isOnline) {
+    fetchPersonnel();
+    fetchTrucks();
+    fetchTimeLogs();
+  } else {
+    loadCachedData();
+  }
+}, [isOnline]);
+
+  // Load cached data when offline
+  const loadCachedData = () => {
+    // Load personnel from cache
+    const idMap: Record<string, string> = {};
+    
+    setDrivers(cachedDrivers.map(d => ({ id: d.id, name: d.name, type: 'driver' as const })));
+    cachedDrivers.forEach(d => { if (d.id_number) idMap[d.id] = d.id_number; });
+    
+    setHelpers(cachedHelpers.map(h => ({ id: h.id, name: h.name, type: 'helper' as const })));
+    cachedHelpers.forEach(h => { if (h.id_number) idMap[h.id] = h.id_number; });
+    
+    setRecyclers(cachedRecyclers.map(r => ({ id: r.id, name: r.name, type: 'recycler' as const })));
+    cachedRecyclers.forEach(r => { if (r.id_number) idMap[r.id] = r.id_number; });
+    
+    setPersonnelIdNumbers(idMap);
+    
+    // Load trucks from cache
+    setTrucks(cachedTrucks.map(t => ({ 
+      id: t.id, 
+      code: t.code, 
+      plate_number: t.plate_number || null, 
+      type: t.type || 'truck' 
+    })));
+    
+    // Load time logs from cache (pending time-ins are shown in Pending tab, not here)
+    const cachedLogs: TimeLog[] = cachedTimeLogs.map(log => ({
+      ...log,
+      trucks: log.truck_code ? { code: log.truck_code, plate_number: null } : null,
+    }));
+    
+    setTimeLogs(cachedLogs);
+    setLoading(false);
+  };
 
   const fetchPersonnel = async () => {
     try {
       const [driversData, helpersData, recyclersData] = await Promise.all([
-        supabase.from("drivers").select("id,name").eq("status", "available").limit(MAX_ITEMS),
-        supabase.from("helpers").select("id,name").eq("status", "available").limit(MAX_ITEMS),
-        supabase.from("recyclers").select("id,name").eq("status", "available").limit(MAX_ITEMS)
+        supabase.from("drivers").select("id,name,id_number").eq("status", "available").limit(MAX_ITEMS),
+        supabase.from("helpers").select("id,name,id_number").eq("status", "available").limit(MAX_ITEMS),
+        supabase.from("recyclers").select("id,name,id_number").eq("status", "available").limit(MAX_ITEMS)
       ]);
 
+      // Build ID number lookup map
+      const idMap: Record<string, string> = {};
+      
       if (driversData.data) {
         setDrivers(driversData.data.map(d => ({ ...d, type: 'driver' as const })));
+        driversData.data.forEach(d => { if (d.id_number) idMap[d.id] = d.id_number; });
       }
       if (helpersData.data) {
         setHelpers(helpersData.data.map(h => ({ ...h, type: 'helper' as const })));
+        helpersData.data.forEach(h => { if (h.id_number) idMap[h.id] = h.id_number; });
       }
       if (recyclersData.data) {
         setRecyclers(recyclersData.data.map(r => ({ ...r, type: 'recycler' as const })));
+        recyclersData.data.forEach(r => { if (r.id_number) idMap[r.id] = r.id_number; });
       }
+      
+      setPersonnelIdNumbers(idMap);
     } catch (error) {
       console.error("Error fetching personnel:", error);
       toast.error("Failed to load personnel");
@@ -158,24 +250,94 @@ useEffect(() => {
     }
   };
 
-  const getCurrentLocation = (): Promise<{ latitude: number; longitude: number }> => {
-    return new Promise((resolve, reject) => {
+  // Get cached location from localStorage
+  const getCachedLocation = (): { latitude: number; longitude: number } | null => {
+    try {
+      const cached = localStorage.getItem('cachedGPSLocation');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        // Check if cache is less than 1 hour old
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 60 * 60 * 1000) {
+          return { latitude: parsed.latitude, longitude: parsed.longitude };
+        }
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
+    return null;
+  };
+
+  // Save location to cache
+  const saveCachedLocation = (latitude: number, longitude: number) => {
+    try {
+      localStorage.setItem('cachedGPSLocation', JSON.stringify({
+        latitude,
+        longitude,
+        timestamp: Date.now()
+      }));
+    } catch (e) {
+      // Ignore storage errors
+    }
+  };
+
+  // Get location: try fresh GPS first, then cached, then fallback to 0,0
+  const getCurrentLocation = (): Promise<{ latitude: number; longitude: number; success: boolean }> => {
+    return new Promise((resolve) => {
       if (!navigator.geolocation) {
-        reject(new Error("Geolocation not supported"));
+        const cached = getCachedLocation();
+        if (cached) {
+          resolve({ ...cached, success: true });
+        } else {
+          resolve({ latitude: 0, longitude: 0, success: false });
+        }
         return;
       }
 
+      let resolved = false;
+      
+      // Timeout: if GPS doesn't respond in 3 seconds, try cached
+      const timeoutId = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          const cached = getCachedLocation();
+          if (cached) {
+            resolve({ ...cached, success: true });
+          } else {
+            resolve({ latitude: 0, longitude: 0, success: false });
+          }
+        }
+      }, 3000);
+
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeoutId);
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            // Cache successful location
+            saveCachedLocation(lat, lng);
+            resolve({
+              latitude: lat,
+              longitude: lng,
+              success: true,
+            });
+          }
         },
-        (error) => {
-          console.error("Error getting location:", error);
-          resolve({ latitude: 0, longitude: 0 });
-        }
+        () => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeoutId);
+            // Try cached location on failure
+            const cached = getCachedLocation();
+            if (cached) {
+              resolve({ ...cached, success: true });
+            } else {
+              resolve({ latitude: 0, longitude: 0, success: false });
+            }
+          }
+        },
+        { enableHighAccuracy: false, maximumAge: 60000 }
       );
     });
   };
@@ -192,24 +354,14 @@ const startCamera = async () => {
       navigator.mediaDevices.getUserMedia({ video: true })
     );
 
-    console.log("✅ Camera stream obtained:", stream.getVideoTracks()[0].label);
-    
-    // First set the stream state
     setCameraStream(stream);
-    
-    // Then open the dialog
     setShowCamera(true);
     
     // Wait for Dialog to mount, then assign stream to video
     setTimeout(() => {
       if (videoRef.current) {
-        console.log("📹 Assigning stream to video element");
         videoRef.current.srcObject = stream;
-        videoRef.current.play()
-          .then(() => console.log("✅ Video playing"))
-          .catch(err => console.error("❌ Video play error:", err));
-      } else {
-        console.error("❌ Video ref is null!");
+        videoRef.current.play().catch(() => {});
       }
     }, 200);
     
@@ -231,8 +383,6 @@ const startCamera = async () => {
   const canvas = canvasRef.current;
   const video = videoRef.current;
   
-  console.log("📸 Video dimensions:", video.videoWidth, "x", video.videoHeight);
-  
   if (video.videoWidth === 0 || video.videoHeight === 0) {
     toast.error("Camera not ready. Please wait a moment.");
     return;
@@ -250,7 +400,6 @@ const startCamera = async () => {
       return;
     }
     
-    console.log("✅ Photo captured, size:", photoData.length);
     setCapturedPhoto(photoData);
     setShowCamera(false);
     
@@ -262,6 +411,8 @@ const startCamera = async () => {
 };
 
   const handleTimeIn = async () => {
+    if (submitStatus !== 'idle') return; // Prevent double-tap
+    
     if (!selectedTruck) {
       toast.error("Please select a vehicle");
       return;
@@ -273,6 +424,8 @@ const startCamera = async () => {
     }
 
     try {
+      // Step 1: Get location
+      setSubmitStatus('getting-location');
       const location = await getCurrentLocation();
       const groupSessionId = crypto.randomUUID();
       const timestamp = new Date().toISOString();
@@ -302,61 +455,116 @@ const startCamera = async () => {
       for (const driverId of selectedDrivers) {
         const driver = drivers.find(d => d.id === driverId);
         if (driver) {
-          logs.push({
-            personnel_id: driverId,
-            personnel_type: 'driver',
-            personnel_name: driver.name,
-            time_in: timestamp,
-            photo_url: publicUrl,
-            latitude: location.latitude,
-            longitude: location.longitude,
-            group_session_id: groupSessionId,
-            truck_id: selectedTruck
-          });
+          personnelList.push({ id: driverId, name: driver.name, type: 'driver' });
         }
       }
-
       for (const helperId of selectedHelpers) {
         const helper = helpers.find(h => h.id === helperId);
         if (helper) {
-          logs.push({
-            personnel_id: helperId,
-            personnel_type: 'helper',
-            personnel_name: helper.name,
-            time_in: timestamp,
-            photo_url: publicUrl,
-            latitude: location.latitude,
-            longitude: location.longitude,
-            group_session_id: groupSessionId,
-            truck_id: selectedTruck
-          });
+          personnelList.push({ id: helperId, name: helper.name, type: 'helper' });
         }
       }
-
       for (const recyclerId of selectedRecyclers) {
         const recycler = recyclers.find(r => r.id === recyclerId);
         if (recycler) {
-          logs.push({
-            personnel_id: recyclerId,
-            personnel_type: 'recycler',
-            personnel_name: recycler.name,
-            time_in: timestamp,
-            photo_url: publicUrl,
-            latitude: location.latitude,
-            longitude: location.longitude,
-            group_session_id: groupSessionId,
-            truck_id: selectedTruck
-          });
+          personnelList.push({ id: recyclerId, name: recycler.name, type: 'recycler' });
         }
       }
+
+      const selectedTruckObj = trucks.find(t => t.id === selectedTruck);
+      const truckCode = selectedTruckObj?.code || selectedTruck;
+      const groupSessionId = crypto.randomUUID();
+
+      // Handle offline mode
+      if (!isOnline) {
+        if (!createPendingTimeIn) {
+          toast.error("Offline mode not available");
+          return;
+        }
+
+        setSubmitStatus('saving');
+        
+        await createPendingTimeIn({
+          truck_id: selectedTruck,
+          truck_code: truckCode,
+          personnel: personnelList,
+          photo_base64: capturedPhoto,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          group_session_id: groupSessionId,
+        });
+
+        const locationMsg = location.success ? "" : " (Location not recorded)";
+        toast.success(`Time in saved offline for ${personnelList.length} personnel${locationMsg}. Will sync when online.`);
+        
+        // Reset form
+        setSelectedTruck("");
+        setSelectedDrivers(new Set());
+        setSelectedHelpers(new Set());
+        setSelectedRecyclers(new Set());
+        setCapturedPhoto(null);
+        
+        if (onOfflineSuccess) onOfflineSuccess();
+        loadCachedData(); // Refresh to show pending items
+        
+        setSubmitStatus('idle');
+        return;
+      }
+
+      // Online mode - save to database
+      setSubmitStatus('saving');
+      
+      // Get user's team_id for RLS policy
+      const { data: { user } } = await supabase.auth.getUser();
+      let teamId: string | null = null;
+      if (user) {
+        const { data: tid } = await supabase.rpc('get_user_team_id', { _user_id: user.id });
+        teamId = tid;
+      }
+      const timestamp = new Date().toISOString();
+
+      let publicUrl: string | null = null;
+
+      if (capturedPhoto) {
+        const photoBlob = await fetch(capturedPhoto).then(r => r.blob());
+        const photoFileName = `time-logs/${groupSessionId}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from("time-logs")
+          .upload(photoFileName, photoBlob);
+
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage
+          .from("time-logs")
+          .getPublicUrl(photoFileName);
+        publicUrl = data.publicUrl;
+      }
+
+      // Create time logs for all selected personnel
+      const logs = personnelList.map(p => ({
+        personnel_id: p.id,
+        personnel_type: p.type,
+        personnel_name: p.name,
+        time_in: timestamp,
+        photo_url: publicUrl,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        group_session_id: groupSessionId,
+        truck_id: selectedTruck,
+        team_id: teamId
+      }));
 
       const { error } = await supabase
         .from("personnel_time_logs")
         .insert(logs);
 
-      if (error) throw error;
+      if (error) {
+        console.error("❌ Insert error:", error);
+        throw error;
+      }
 
-      toast.success(`Time in recorded for ${logs.length} personnel`);
+      const locationMsg = location.success ? "" : " (Location not recorded)";
+      toast.success(`Time in recorded for ${logs.length} personnel${locationMsg}`);
       setSelectedTruck("");
       setSelectedDrivers(new Set());
       setSelectedHelpers(new Set());
@@ -368,25 +576,84 @@ const startCamera = async () => {
         setCameraStream(null);
       }
       fetchTimeLogs();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error recording time in:", error);
-      toast.error("Failed to record time in");
+      toast.error(error?.message || "Failed to record time in");
+    } finally {
+      setSubmitStatus('idle');
     }
   };
 
-  const handleTimeOut = async (logId: string) => {
+  // Open individual time out dialog
+  const handleTimeOutClick = (log: TimeLog) => {
+    setSelectedLogForTimeOut(log);
+    setIndividualIdInput("");
+    setShowIndividualTimeOutDialog(true);
+  };
+
+  // Verify ID and perform individual time out
+  const handleIndividualTimeOut = async () => {
+    if (!selectedLogForTimeOut) return;
+    
+    const expectedId = personnelIdNumbers[selectedLogForTimeOut.personnel_id];
+    if (!expectedId) {
+      toast.error("Could not verify ID - personnel record not found");
+      return;
+    }
+    
+    if (individualIdInput.trim() !== expectedId) {
+      toast.error("ID number does not match. Please enter the correct ID.");
+      return;
+    }
+    
+    // Check if this is a pending (offline) time-in - can't time out pending items
+    if (selectedLogForTimeOut.isPending || selectedLogForTimeOut.id.startsWith('pending-')) {
+      toast.error("Cannot time out a pending time-in. Please wait for it to sync first.");
+      return;
+    }
+    
+    setIndividualTimeOutLoading(true);
     try {
+      // Handle offline mode
+      if (!isOnline) {
+        if (!createPendingTimeOut) {
+          toast.error("Offline mode not available");
+          return;
+        }
+        
+        await createPendingTimeOut({
+          time_log_ids: [selectedLogForTimeOut.id],
+          personnel_names: [selectedLogForTimeOut.personnel_name],
+          truck_code: selectedLogForTimeOut.trucks?.code || null,
+          time_out: new Date(),
+        });
+        
+        toast.success("Time out saved offline. Will sync when online.");
+        setShowIndividualTimeOutDialog(false);
+        setSelectedLogForTimeOut(null);
+        setIndividualIdInput("");
+        if (onOfflineSuccess) onOfflineSuccess();
+        loadCachedData();
+        return;
+      }
+      
+      // Online mode
       const { error } = await supabase
         .from("personnel_time_logs")
         .update({ time_out: new Date().toISOString() })
-        .eq("id", logId);
+        .eq("id", selectedLogForTimeOut.id);
 
       if (error) throw error;
       toast.success("Time out recorded");
+      setShowIndividualTimeOutDialog(false);
+      setSelectedLogForTimeOut(null);
+      setIndividualIdInput("");
       fetchTimeLogs();
     } catch (error) {
       console.error("Error recording time out:", error);
       toast.error("Failed to record time out");
+    } finally {
+      setIndividualTimeOutLoading(false);
     }
   };
 
@@ -394,6 +661,10 @@ const startCamera = async () => {
     const groupMembers = activeLogs.filter(log => log.truck_id === truckId);
     setSelectedGroupTruck(truckId);
     setGroupMembersToTimeOut(new Set(groupMembers.map(log => log.id)));
+    // Initialize empty ID inputs
+    const initialInputs: Record<string, string> = {};
+    groupMembers.forEach(log => { initialInputs[log.id] = ""; });
+    setGroupIdInputs(initialInputs);
     setShowGroupTimeOutDialog(true);
   };
 
@@ -403,19 +674,12 @@ const startCamera = async () => {
       video: { facingMode: "user", width: 1280, height: 720 }
     });
     
-    console.log("✅ Group camera stream obtained:", stream.getVideoTracks()[0].label);
-    
     setShowGroupTimeOutCamera(true);
     
     setTimeout(() => {
       if (groupVideoRef.current) {
-        console.log("📹 Assigning stream to group video element");
         groupVideoRef.current.srcObject = stream;
-        groupVideoRef.current.play()
-          .then(() => console.log("✅ Group video playing"))
-          .catch(err => console.error("❌ Group video play error:", err));
-      } else {
-        console.error("❌ Group video ref is null!");
+        groupVideoRef.current.play().catch(() => {});
       }
     }, 200);
     
@@ -436,8 +700,6 @@ const startCamera = async () => {
   const canvas = groupCanvasRef.current;
   const video = groupVideoRef.current;
   
-  console.log("📸 Group video dimensions:", video.videoWidth, "x", video.videoHeight);
-  
   if (video.videoWidth === 0 || video.videoHeight === 0) {
     toast.error("Camera not ready. Please wait a moment.");
     return;
@@ -455,7 +717,6 @@ const startCamera = async () => {
       return;
     }
     
-    console.log("✅ Group photo captured, size:", photoData.length);
     setGroupTimeOutPhoto(photoData);
     setShowGroupTimeOutCamera(false);
     
@@ -473,34 +734,85 @@ const startCamera = async () => {
       return;
     }
 
-    if (!groupTimeOutPhoto) {
+    // Photo only required for group (2+ people)
+    if (groupMembersToTimeOut.size > 1 && !groupTimeOutPhoto) {
       toast.error("Please capture a group photo for time out");
       return;
     }
 
+    // Verify all IDs
+    const membersToTimeOut = activeLogs.filter(log => groupMembersToTimeOut.has(log.id));
+    
+    // Check if any are pending (offline) time-ins
+    const hasPendingItems = membersToTimeOut.some(m => m.isPending || m.id.startsWith('pending-'));
+    if (hasPendingItems) {
+      toast.error("Cannot time out pending time-ins. Please wait for them to sync first.");
+      return;
+    }
+    
+    for (const member of membersToTimeOut) {
+      const expectedId = personnelIdNumbers[member.personnel_id];
+      const enteredId = groupIdInputs[member.id]?.trim() || "";
+      
+      if (!expectedId) {
+        toast.error(`Could not verify ID for ${member.personnel_name}`);
+        return;
+      }
+      
+      if (enteredId !== expectedId) {
+        toast.error(`ID does not match for ${member.personnel_name}`);
+        return;
+      }
+    }
+
+    setGroupTimeOutLoading(true);
     try {
+      // Handle offline mode
+      if (!isOnline) {
+        if (!createPendingTimeOut) {
+          toast.error("Offline mode not available");
+          return;
+        }
+        
+        const truckCode = membersToTimeOut[0]?.trucks?.code || null;
+        const personnelNames = membersToTimeOut.map(m => m.personnel_name);
+        
+        await createPendingTimeOut({
+          time_log_ids: Array.from(groupMembersToTimeOut),
+          personnel_names: personnelNames,
+          truck_code: truckCode,
+          time_out: new Date(),
+        });
+        
+        toast.success(`Time out saved offline for ${membersToTimeOut.length} personnel. Will sync when online.`);
+        setShowGroupTimeOutDialog(false);
+        setSelectedGroupTruck(null);
+        setGroupMembersToTimeOut(new Set());
+        setGroupTimeOutPhoto(null);
+        setGroupIdInputs({});
+        if (onOfflineSuccess) onOfflineSuccess();
+        loadCachedData();
+        return;
+      }
+      
+      // Online mode
       const timestamp = new Date().toISOString();
-      const groupSessionId = crypto.randomUUID();
 
-      // Upload photo to storage
-      const photoBlob = await fetch(groupTimeOutPhoto).then(r => r.blob());
-      const photoFileName = `time-logs/timeout-${groupSessionId}.jpg`;
-      const { error: uploadError } = await supabase.storage
-        .from("time-logs")
-        .upload(photoFileName, photoBlob);
+      // Upload photo to storage only if captured
+      if (groupTimeOutPhoto) {
+        const groupSessionId = crypto.randomUUID();
+        const photoBlob = await fetch(groupTimeOutPhoto).then(r => r.blob());
+        const photoFileName = `time-logs/timeout-${groupSessionId}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from("time-logs")
+          .upload(photoFileName, photoBlob);
 
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from("time-logs")
-        .getPublicUrl(photoFileName);
+        if (uploadError) throw uploadError;
+      }
 
       const { error } = await supabase
         .from("personnel_time_logs")
-        .update({ 
-          time_out: timestamp,
-          timeout_photo_url: publicUrl
-        })
+        .update({ time_out: timestamp })
         .in("id", Array.from(groupMembersToTimeOut));
 
       if (error) throw error;
@@ -510,10 +822,13 @@ const startCamera = async () => {
       setSelectedGroupTruck(null);
       setGroupMembersToTimeOut(new Set());
       setGroupTimeOutPhoto(null);
+      setGroupIdInputs({});
       fetchTimeLogs();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error recording group time out:", error);
-      toast.error("Failed to record time out");
+      toast.error(error?.message || "Failed to record time out");
+    } finally {
+      setGroupTimeOutLoading(false);
     }
   };
 
@@ -661,12 +976,19 @@ const startCamera = async () => {
   const activeLogs = timeLogs.filter(log => !log.time_out);
   const timedOutLogs = timeLogs.filter(log => log.time_out);
   
-  // Get set of truck IDs that are currently in use
+  // Get set of truck IDs that are currently in use (from active logs)
   const activeTruckIds = new Set(
     activeLogs
       .filter(log => log.truck_id !== null)
       .map(log => log.truck_id)
   );
+  
+  // Also include trucks from pending time-ins (in case timeLogs hasn't refreshed yet)
+  pendingTimeIns.forEach(pending => {
+    if (pending.truck_id) {
+      activeTruckIds.add(pending.truck_id);
+    }
+  });
   
   // Filter available trucks to exclude those currently in use
   const availableTrucks = trucks.filter(truck => !activeTruckIds.has(truck.id));
@@ -806,10 +1128,10 @@ const startCamera = async () => {
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <Button onClick={startCamera} variant="outline">
               <Camera className="h-4 w-4 mr-2" />
-              Capture Group Photo
+              {(selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size) === 1 ? "Photo (Optional)" : "Capture Group Photo"}
             </Button>
             <Button 
               onClick={handleTimeIn} 
@@ -819,6 +1141,11 @@ const startCamera = async () => {
               Time In ({selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size} selected)
             </Button>
           </div>
+          {(selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size) > 1 && !capturedPhoto && (
+            <p className="text-xs text-amber-600">
+              Group photo required for 2+ personnel
+            </p>
+          )}
 
           {capturedPhoto && (
             <div className="border rounded p-2">
@@ -883,15 +1210,26 @@ const startCamera = async () => {
                           </TableHeader>
                           <TableBody>
                             {logs.map((log) => (
-                              <TableRow key={log.id}>
-                                <TableCell>{log.personnel_name}</TableCell>
+                              <TableRow key={log.id} className={log.isPending ? "bg-yellow-50" : ""}>
+                                <TableCell>
+                                  {log.personnel_name}
+                                  {log.isPending && (
+                                    <Badge variant="outline" className="ml-2 text-yellow-600 border-yellow-600 text-[10px]">
+                                      Pending Sync
+                                    </Badge>
+                                  )}
+                                </TableCell>
                                 <TableCell className="capitalize">{log.personnel_type}</TableCell>
                                 <TableCell>{format(new Date(log.time_in), "MMM dd, yyyy HH:mm")}</TableCell>
                                 <TableCell>{calculateTotalTime(log.time_in, log.time_out)}</TableCell>
                                 <TableCell>
-                                  <Button onClick={() => handleTimeOut(log.id)} size="sm" variant="outline">
-                                    Individual Time Out
-                                  </Button>
+                                  {log.isPending ? (
+                                    <span className="text-xs text-muted-foreground">Sync first</span>
+                                  ) : (
+                                    <Button onClick={() => handleTimeOutClick(log)} size="sm" variant="outline">
+                                      Individual Time Out
+                                    </Button>
+                                  )}
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -1066,7 +1404,7 @@ const startCamera = async () => {
 
 
         <Dialog open={showGroupTimeOutDialog} onOpenChange={setShowGroupTimeOutDialog}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="w-[95vw] max-w-lg mx-auto">
             <DialogHeader>
               <DialogTitle>Group Time Out</DialogTitle>
             </DialogHeader>
@@ -1084,29 +1422,40 @@ const startCamera = async () => {
                 </div>
               )}
               <p className="text-sm text-muted-foreground">
-                Select which personnel to time out. You can deselect individuals if they need to continue working.
+                Each person must enter their ID number to verify identity before timing out.
               </p>
-              <div className="border rounded p-3 space-y-2 max-h-64 overflow-y-auto">
+              <div className="border rounded p-3 space-y-3 max-h-72 overflow-y-auto">
                 {selectedGroupTruck && getGroupMembersForTruck(selectedGroupTruck).map((log) => (
-                  <div key={log.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      checked={groupMembersToTimeOut.has(log.id)}
-                      onCheckedChange={(checked) => {
-                        const newSet = new Set(groupMembersToTimeOut);
-                        if (checked) {
-                          newSet.add(log.id);
-                        } else {
-                          newSet.delete(log.id);
-                        }
-                        setGroupMembersToTimeOut(newSet);
-                      }}
-                    />
-                    <label className="text-sm flex-1">
-                      {log.personnel_name} ({log.personnel_type})
-                    </label>
-                    <span className="text-xs text-muted-foreground">
-                      {calculateTotalTime(log.time_in, null)}
-                    </span>
+                  <div key={log.id} className="p-2 bg-muted/50 rounded space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        checked={groupMembersToTimeOut.has(log.id)}
+                        onCheckedChange={(checked) => {
+                          const newSet = new Set(groupMembersToTimeOut);
+                          if (checked) {
+                            newSet.add(log.id);
+                          } else {
+                            newSet.delete(log.id);
+                          }
+                          setGroupMembersToTimeOut(newSet);
+                        }}
+                      />
+                      <label className="text-sm flex-1 font-medium">
+                        {log.personnel_name} ({log.personnel_type})
+                      </label>
+                      <span className="text-xs text-muted-foreground">
+                        {calculateTotalTime(log.time_in, null)}
+                      </span>
+                    </div>
+                    {groupMembersToTimeOut.has(log.id) && (
+                      <input
+                        type="text"
+                        placeholder="Enter ID number"
+                        value={groupIdInputs[log.id] || ""}
+                        onChange={(e) => setGroupIdInputs(prev => ({ ...prev, [log.id]: e.target.value }))}
+                        className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    )}
                   </div>
                 ))}
               </div>
@@ -1115,31 +1464,49 @@ const startCamera = async () => {
                   <img src={groupTimeOutPhoto} alt="Group timeout photo" className="max-h-32 mx-auto" />
                 </div>
               )}
-              <div className="flex justify-end gap-2">
+              {groupMembersToTimeOut.size > 1 && !groupTimeOutPhoto && (
+                <p className="text-xs text-amber-600 text-center">
+                  Group photo required for 2+ personnel
+                </p>
+              )}
+              <div className="flex flex-col sm:flex-row gap-2">
                 <Button 
                   variant="outline" 
+                  className="w-full sm:w-auto"
                   onClick={() => {
                     setShowGroupTimeOutDialog(false);
                     setSelectedGroupTruck(null);
                     setGroupMembersToTimeOut(new Set());
                     setGroupTimeOutPhoto(null);
+                    setGroupIdInputs({});
                   }}
                 >
                   Cancel
                 </Button>
-                {!groupTimeOutPhoto ? (
-                  <Button onClick={startGroupTimeOutCamera}>
+                {!groupTimeOutPhoto && (
+                  <Button onClick={startGroupTimeOutCamera} variant="outline" className="w-full sm:w-auto">
                     <Camera className="h-4 w-4 mr-2" />
-                    Capture Photo
-                  </Button>
-                ) : (
-                  <Button 
-                    onClick={handleGroupTimeOut}
-                    disabled={groupMembersToTimeOut.size === 0}
-                  >
-                    Time Out ({groupMembersToTimeOut.size} selected)
+                    {groupMembersToTimeOut.size === 1 ? "Photo (Optional)" : "Capture Photo"}
                   </Button>
                 )}
+                <Button 
+                  className="w-full sm:w-auto"
+                  onClick={handleGroupTimeOut}
+                  disabled={
+                    groupMembersToTimeOut.size === 0 || 
+                    groupTimeOutLoading ||
+                    (groupMembersToTimeOut.size > 1 && !groupTimeOutPhoto)
+                  }
+                >
+                  {groupTimeOutLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Verifying...
+                    </>
+                  ) : (
+                    `Time Out (${groupMembersToTimeOut.size})`
+                  )}
+                </Button>
               </div>
             </div>
           </DialogContent>
@@ -1193,6 +1560,79 @@ const startCamera = async () => {
     </div>
   </DialogContent>
 </Dialog>
+
+        {/* Individual Time Out Dialog */}
+        <Dialog open={showIndividualTimeOutDialog} onOpenChange={(open) => {
+          if (!open) {
+            setShowIndividualTimeOutDialog(false);
+            setSelectedLogForTimeOut(null);
+            setIndividualIdInput("");
+          }
+        }}>
+          <DialogContent className="w-[95vw] max-w-sm mx-auto">
+            <DialogHeader>
+              <DialogTitle>Time Out Verification</DialogTitle>
+              <DialogDescription>
+                Enter your ID number to confirm time out
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {selectedLogForTimeOut && (
+                <div className="bg-muted p-3 rounded">
+                  <div className="text-sm font-medium">{selectedLogForTimeOut.personnel_name}</div>
+                  <div className="text-xs text-muted-foreground capitalize">{selectedLogForTimeOut.personnel_type}</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Time in: {format(new Date(selectedLogForTimeOut.time_in), "MMM dd, yyyy HH:mm")}
+                  </div>
+                  <div className="text-xs font-medium mt-1">
+                    Duration: {calculateTotalTime(selectedLogForTimeOut.time_in, null)}
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="text-sm font-medium mb-2 block">ID Number</label>
+                <input
+                  type="text"
+                  placeholder="Enter your ID number"
+                  value={individualIdInput}
+                  onChange={(e) => setIndividualIdInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleIndividualTimeOut();
+                  }}
+                  className="w-full px-3 py-3 text-base border rounded focus:outline-none focus:ring-2 focus:ring-primary"
+                  autoFocus
+                />
+              </div>
+              <div className="flex flex-col-reverse sm:flex-row gap-2">
+                <Button 
+                  variant="outline" 
+                  className="w-full sm:flex-1"
+                  onClick={() => {
+                    setShowIndividualTimeOutDialog(false);
+                    setSelectedLogForTimeOut(null);
+                    setIndividualIdInput("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  className="w-full sm:flex-1"
+                  onClick={handleIndividualTimeOut}
+                  disabled={!individualIdInput.trim() || individualTimeOutLoading}
+                >
+                  {individualTimeOutLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Verifying...
+                    </>
+                  ) : (
+                    "Confirm Time Out"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
