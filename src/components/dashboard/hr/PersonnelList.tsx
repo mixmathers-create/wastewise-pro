@@ -3,7 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, WifiOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, WifiOff, MoreHorizontal } from "lucide-react";
 
 interface Personnel {
   id: string;
@@ -43,6 +45,8 @@ const PersonnelList = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [usingCachedData, setUsingCachedData] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState<Personnel | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   useEffect(() => {
     if (isOnline) {
@@ -203,36 +207,111 @@ const PersonnelList = ({
         ) : personnel.length === 0 ? (
           <p className="text-muted-foreground">No personnel found.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Birthdate</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {personnel.map((person) => (
-                <TableRow key={`${person.type}-${person.id}`}>
-                  <TableCell className="font-medium">{person.name}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{person.type}</Badge>
-                  </TableCell>
-                  <TableCell>{person.contact_number || "N/A"}</TableCell>
-                  <TableCell>{person.birthdate || "N/A"}</TableCell>
-                  <TableCell>
-                    <Badge variant={person.status === "available" ? "default" : "secondary"}>
-                      {person.status || "N/A"}
-                    </Badge>
-                  </TableCell>
+          <>
+          <div className="block md:hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {personnel.map((person) => (
+                  <TableRow key={`${person.type}-${person.id}`}>
+                    <TableCell className="font-medium">{person.name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{person.type}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => {
+                          setSelectedPerson(person);
+                          setShowDetailsModal(true);
+                        }}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Birthdate</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {personnel.map((person) => (
+                  <TableRow key={`${person.type}-${person.id}`}>
+                    <TableCell className="font-medium">{person.name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{person.type}</Badge>
+                    </TableCell>
+                    <TableCell>{person.contact_number || "N/A"}</TableCell>
+                    <TableCell>{person.birthdate || "N/A"}</TableCell>
+                    <TableCell>
+                      <Badge variant={person.status === "available" ? "default" : "secondary"}>
+                        {person.status || "N/A"}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          </>
         )}
       </CardContent>
+      
+      <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Personnel Details</DialogTitle>
+          </DialogHeader>
+          {selectedPerson && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Name</label>
+                <p className="text-sm text-muted-foreground">{selectedPerson.name}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Type</label>
+                <p className="text-sm text-muted-foreground">
+                  <Badge variant="outline">{selectedPerson.type}</Badge>
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Contact</label>
+                <p className="text-sm text-muted-foreground">{selectedPerson.contact_number || "N/A"}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Birthdate</label>
+                <p className="text-sm text-muted-foreground">{selectedPerson.birthdate || "N/A"}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Status</label>
+                <p className="text-sm text-muted-foreground">
+                  <Badge variant={selectedPerson.status === "available" ? "default" : "secondary"}>
+                    {selectedPerson.status || "N/A"}
+                  </Badge>
+                </p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

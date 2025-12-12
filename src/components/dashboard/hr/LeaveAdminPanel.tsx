@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Check, X, Loader2, ExternalLink, FileText, AlertTriangle } from "lucide-react";
+import { Check, X, Loader2, ExternalLink, FileText, AlertTriangle, MoreHorizontal } from "lucide-react";
 import { format } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import IncidentReportsAdmin from "./IncidentReportsAdmin";
@@ -37,6 +37,7 @@ const LeaveAdminPanel = () => {
   const [selectedLeave, setSelectedLeave] = useState<Leave | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [showLeaveDetailsModal, setShowLeaveDetailsModal] = useState(false);
 
   useEffect(() => {
     fetchLeaves();
@@ -154,57 +155,106 @@ const LeaveAdminPanel = () => {
             <CardTitle>Leave Requests Management</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Personnel</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Leave Type</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {leaves.map((leave) => (
-                  <TableRow key={leave.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{leave.personnel_name}</div>
-                        <div className="text-sm text-muted-foreground capitalize">{leave.personnel_type}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="capitalize">{leave.leave_type.replace("_", " ")}</TableCell>
-                    <TableCell className="capitalize">{leave.leave_type}</TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        {format(new Date(leave.start_date), "MMM d, yyyy")} - {format(new Date(leave.end_date), "MMM d, yyyy")}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          leave.status === "approved"
-                            ? "default"
-                            : leave.status === "rejected"
-                            ? "destructive"
-                            : "secondary"
-                        }
-                      >
-                        {leave.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSelectedLeave(leave)}
-                          >
-                            Review
-                          </Button>
-                        </DialogTrigger>
+            <div className="block md:hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Personnel</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {leaves.map((leave) => (
+                    <TableRow key={leave.id}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{leave.personnel_name}</div>
+                          <div className="text-sm text-muted-foreground capitalize">{leave.personnel_type}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            leave.status === "approved"
+                              ? "default"
+                              : leave.status === "rejected"
+                              ? "destructive"
+                              : "secondary"
+                          }
+                        >
+                          {leave.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => {
+                            setSelectedLeave(leave);
+                            setShowLeaveDetailsModal(true);
+                          }}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Personnel</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Leave Type</TableHead>
+                    <TableHead>Period</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {leaves.map((leave) => (
+                    <TableRow key={leave.id}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{leave.personnel_name}</div>
+                          <div className="text-sm text-muted-foreground capitalize">{leave.personnel_type}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="capitalize">{leave.leave_type.replace("_", " ")}</TableCell>
+                      <TableCell className="capitalize">{leave.leave_type}</TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          {format(new Date(leave.start_date), "MMM d, yyyy")} - {format(new Date(leave.end_date), "MMM d, yyyy")}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            leave.status === "approved"
+                              ? "default"
+                              : leave.status === "rejected"
+                              ? "destructive"
+                              : "secondary"
+                          }
+                        >
+                          {leave.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedLeave(leave)}
+                            >
+                              Review
+                            </Button>
+                          </DialogTrigger>
                         <DialogContent className="max-w-2xl">
                           <DialogHeader>
                             <DialogTitle>Leave Request Details</DialogTitle>
@@ -320,6 +370,7 @@ const LeaveAdminPanel = () => {
                 ))}
               </TableBody>
             </Table>
+          </div>
           </CardContent>
         </Card>
       </TabsContent>
@@ -327,6 +378,127 @@ const LeaveAdminPanel = () => {
       <TabsContent value="incidents">
         <IncidentReportsAdmin />
       </TabsContent>
+      
+      {/* Mobile Leave Details Modal */}
+      <Dialog open={showLeaveDetailsModal} onOpenChange={setShowLeaveDetailsModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Leave Request Details</DialogTitle>
+          </DialogHeader>
+          {selectedLeave && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Personnel</p>
+                  <p className="text-sm">{selectedLeave.personnel_name}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Type</p>
+                  <p className="text-sm capitalize">{selectedLeave.personnel_type}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Leave Type</p>
+                  <p className="text-sm capitalize">{selectedLeave.leave_type}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Status</p>
+                  <Badge variant={selectedLeave.status === "approved" ? "default" : selectedLeave.status === "rejected" ? "destructive" : "secondary"}>
+                    {selectedLeave.status}
+                  </Badge>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Period</p>
+                <p className="text-sm">
+                  {format(new Date(selectedLeave.start_date), "MMMM d, yyyy")} - {format(new Date(selectedLeave.end_date), "MMMM d, yyyy")}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {selectedLeave.leave_days} day(s) • {selectedLeave.is_paid ? "Paid" : "Unpaid"}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Reason</p>
+                <p className="text-sm">{selectedLeave.reason}</p>
+              </div>
+
+              {selectedLeave.medical_certificate_url && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Medical Documentation</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(selectedLeave.medical_certificate_url!, "_blank")}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    View Document/Photo
+                  </Button>
+                </div>
+              )}
+
+              {selectedLeave.status === "pending" && (
+                <>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground mb-2">Review Notes (Optional)</p>
+                    <Textarea
+                      placeholder="Add notes about this decision..."
+                      value={reviewNotes}
+                      onChange={(e) => setReviewNotes(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => {
+                        handleReview(selectedLeave.id, "approved");
+                        setShowLeaveDetailsModal(false);
+                      }}
+                      disabled={processing}
+                      className="flex-1"
+                    >
+                      {processing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Check className="h-4 w-4 mr-2" />
+                          Approve
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        handleReview(selectedLeave.id, "rejected");
+                        setShowLeaveDetailsModal(false);
+                      }}
+                      disabled={processing}
+                      variant="destructive"
+                      className="flex-1"
+                    >
+                      {processing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <X className="h-4 w-4 mr-2" />
+                          Reject
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {selectedLeave.status !== "pending" && selectedLeave.review_notes && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Review Notes</p>
+                  <p className="text-sm">{selectedLeave.review_notes}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Tabs>
   );
 };

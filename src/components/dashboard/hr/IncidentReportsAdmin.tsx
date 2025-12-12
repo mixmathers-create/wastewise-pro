@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
-import { AlertCircle, MessageSquare, CheckCircle, XCircle } from "lucide-react";
+import { AlertCircle, MessageSquare, CheckCircle, XCircle, MoreHorizontal } from "lucide-react";
 
 export default function IncidentReportsAdmin() {
   const [reports, setReports] = useState<any[]>([]);
@@ -20,6 +20,7 @@ export default function IncidentReportsAdmin() {
   const [newStatus, setNewStatus] = useState("");
   const [newSeverity, setNewSeverity] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showIncidentDetailsModal, setShowIncidentDetailsModal] = useState(false);
 
   useEffect(() => {
     fetchReports();
@@ -135,7 +136,41 @@ export default function IncidentReportsAdmin() {
           {reports.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No incident reports found</p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="block md:hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Reporter</TableHead>
+                    <TableHead>Severity</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {reports.map((report) => (
+                    <TableRow key={report.id}>
+                      <TableCell>{report.reporter_name}</TableCell>
+                      <TableCell>{getSeverityBadge(report.severity)}</TableCell>
+                      <TableCell>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => {
+                            setSelectedReport(report);
+                            setNewStatus(report.status);
+                            setNewSeverity(report.severity);
+                            setShowIncidentDetailsModal(true);
+                          }}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -268,9 +303,119 @@ export default function IncidentReportsAdmin() {
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>
+      
+      {/* Mobile Incident Details Modal */}
+      <Dialog open={showIncidentDetailsModal} onOpenChange={setShowIncidentDetailsModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Review Incident Report</DialogTitle>
+            {selectedReport && (
+              <DialogDescription>
+                Reported by {selectedReport.reporter_name} on {format(new Date(selectedReport.incident_date), "MMM dd, yyyy")}
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          {selectedReport && (
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-semibold mb-2">Incident Type:</h4>
+                <p className="text-sm text-muted-foreground">{selectedReport.incident_type}</p>
+              </div>
+
+              <div>
+                <h4 className="font-semibold mb-2">Description:</h4>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {selectedReport.description}
+                </p>
+              </div>
+
+              {selectedReport.location && (
+                <div>
+                  <h4 className="font-semibold mb-2">Location:</h4>
+                  <p className="text-sm text-muted-foreground">{selectedReport.location}</p>
+                </div>
+              )}
+
+              <div>
+                <h4 className="font-semibold mb-2">Current Status:</h4>
+                <p className="text-sm text-muted-foreground">{getStatusBadge(selectedReport.status)}</p>
+              </div>
+
+              <div>
+                <h4 className="font-semibold mb-2">Current Severity:</h4>
+                <p className="text-sm text-muted-foreground">{getSeverityBadge(selectedReport.severity)}</p>
+              </div>
+
+              {selectedReport.review_notes && (
+                <div>
+                  <h4 className="font-semibold mb-2">Previous Review Notes:</h4>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                    {selectedReport.review_notes}
+                  </p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Update Severity</Label>
+                  <Select value={newSeverity} onValueChange={setNewSeverity}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Update Status</Label>
+                  <Select value={newStatus} onValueChange={setNewStatus}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="submitted">Submitted</SelectItem>
+                      <SelectItem value="under_review">Under Review</SelectItem>
+                      <SelectItem value="resolved">Resolved</SelectItem>
+                      <SelectItem value="closed">Closed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <Label>Review Notes</Label>
+                <Textarea
+                  value={reviewNotes}
+                  onChange={(e) => setReviewNotes(e.target.value)}
+                  placeholder="Add your review notes, actions taken, or recommendations..."
+                  className="min-h-[100px]"
+                />
+              </div>
+
+              <Button
+                onClick={() => {
+                  reviewReport();
+                  setShowIncidentDetailsModal(false);
+                }}
+                disabled={isSubmitting}
+                className="w-full"
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Submit Review
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
