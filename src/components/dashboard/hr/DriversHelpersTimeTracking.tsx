@@ -423,20 +423,34 @@ const startCamera = async () => {
       return;
     }
 
-    const totalSelected = selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size;
-
-    if (totalSelected > 1 && !capturedPhoto) {
-      toast.error("Please capture a group photo");
-      return;
-    }
-
     try {
       // Step 1: Get location
       setSubmitStatus('getting-location');
       const location = await getCurrentLocation();
+      const groupSessionId = crypto.randomUUID();
+      const timestamp = new Date().toISOString();
 
-      // Step 2: Build personnel list
-      const personnelList: TimeInPersonnel[] = [];
+      let publicUrl = null;
+      
+      // Upload photo to storage if captured
+      if (capturedPhoto) {
+        const photoBlob = await fetch(capturedPhoto).then(r => r.blob());
+        const photoFileName = `time-logs/${groupSessionId}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from("time-logs")
+          .upload(photoFileName, photoBlob);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl: url } } = supabase.storage
+          .from("time-logs")
+          .getPublicUrl(photoFileName);
+        
+        publicUrl = url;
+      }
+
+      // Create time logs for all selected personnel
+      const logs = [];
       
       for (const driverId of selectedDrivers) {
         const driver = drivers.find(d => d.id === driverId);
@@ -1121,21 +1135,10 @@ const startCamera = async () => {
             </Button>
             <Button 
               onClick={handleTimeIn} 
-              disabled={
-                submitStatus !== 'idle' ||
-                !selectedTruck || 
-                (selectedDrivers.size === 0 && selectedHelpers.size === 0 && selectedRecyclers.size === 0) ||
-                ((selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size) > 1 && !capturedPhoto)
-              }
+              disabled={!selectedTruck || (selectedDrivers.size === 0 && selectedHelpers.size === 0 && selectedRecyclers.size === 0)}
             >
-              {submitStatus !== 'idle' ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Clock className="h-4 w-4 mr-2" />
-              )}
-              {submitStatus === 'getting-location' ? "Getting location..." : 
-               submitStatus === 'saving' ? "Saving..." : 
-               `Time In (${selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size} selected)`}
+              <Clock className="h-4 w-4 mr-2" />
+              Time In ({selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size} selected)
             </Button>
           </div>
           {(selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size) > 1 && !capturedPhoto && (
