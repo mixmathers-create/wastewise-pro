@@ -26,6 +26,7 @@ import {
   type CachedHelper,
   type PendingCollection,
 } from "@/lib/offlineDb";
+import { useReceiptSettings } from "@/hooks/useReceiptSettings";
 
 const wasteTypes = ["Municipal Solid Waste", "Food Waste", "Construction Waste", "Special Hauling"];
 const units = ["kg", "cbm", "truck load"];
@@ -51,6 +52,7 @@ const CreateReceiptForm = ({
 }: CreateReceiptFormProps) => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { logoUrl: dbLogoUrl } = useReceiptSettings();
   const [loading, setLoading] = useState(false);
   const [qrInput, setQrInput] = useState("");
   const [clientData, setClientData] = useState<any>(null);
@@ -496,7 +498,7 @@ const CreateReceiptForm = ({
 
   const generatePDF = async (receiptQR: string, client: any, signature: string) => {
     const now = new Date();
-    const logoUrl = localStorage.getItem("receipt_logo");
+    const logoUrl = dbLogoUrl;
     const companyName = localStorage.getItem("receipt_company_name") || "WASTEWISE";
     const companyAddress = localStorage.getItem("receipt_company_address") || "";
     const companyContact = localStorage.getItem("receipt_company_contact") || "";
