@@ -459,13 +459,23 @@ const CreateReceiptForm = ({
         const truckData = trucks.find(t => t.id === selectedTruck);
         const driverData = drivers.find(d => d.id === selectedDriver);
         const helperData = selectedHelpers.map(hid => helpers.find(h => h.id === hid));
+        
+        // Generate receipt QR code for offline use
+        const receiptQR = `RECEIPT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const pendingId = generateLocalId();
 
         const pendingCollection: PendingCollection = {
-          id: generateLocalId(),
+          id: pendingId,
           client_id: clientData.id,
           client_name: clientData.name,
+          client_industry: clientData.industry,
+          client_address: clientData.address || null,
+          client_qr_code: clientData.qr_code,
+          client_contact_person: clientData.contact_person || null,
+          client_contact_number: clientData.contact_number || null,
           truck_id: selectedTruck,
           truck_code: truckData?.code || selectedTruck,
+          truck_type: truckData?.type || null,
           driver_id: selectedDriver,
           driver_name: driverData?.name || selectedDriver,
           helper_ids: selectedHelpers,
@@ -474,6 +484,9 @@ const CreateReceiptForm = ({
           tally_entries: tallyEntries,
           waste_types: items.map((i) => i.waste_type),
           signed_by: signedBy,
+          qr_code: receiptQR,
+          signature_data: null,
+          receipt_printed: false,
           created_at: new Date(),
           status: 'pending',
           user_id: userId,
@@ -483,8 +496,13 @@ const CreateReceiptForm = ({
 
         toast({ 
           title: "Saved Offline", 
-          description: "Collection saved to pending. Will sync when online.",
+          description: "Collection saved. Proceeding to receipt preview...",
         });
+        
+        // Navigate to receipt preview for signature and printing
+        if (Capacitor.isNativePlatform()) {
+          navigate(`/receipt-preview?pendingId=${pendingId}`);
+        }
       }
 
       resetForm();

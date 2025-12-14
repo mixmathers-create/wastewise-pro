@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertCircle, Send, WifiOff, Camera, X } from "lucide-react";
 import type { PendingIncidentReport, Severity } from "@/lib/offlineDb";
 
@@ -74,6 +75,10 @@ export default function IncidentReportForm({
 }: IncidentReportFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   
   const currentTime = useMemo(() => {
     const now = new Date();
@@ -116,6 +121,83 @@ export default function IncidentReportForm({
     setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
+  const startCamera = async () => {
+    try {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+      
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: 1280, height: 720 }
+      }).catch(() => 
+        navigator.mediaDevices.getUserMedia({ video: true })
+      );
+
+      setCameraStream(stream);
+      setShowCamera(true);
+      
+      // Wait for Dialog to mount, then assign stream to video
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      }, 200);
+      
+    } catch (error: any) {
+      console.error("Camera error:", error);
+      toast.error(error.name === "NotAllowedError" 
+        ? "Camera permission denied" 
+        : "Failed to access camera");
+    }
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current) {
+      console.error("Video or canvas ref is null");
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      toast.error("Camera not ready. Please wait a moment.");
+      return;
+    }
+    
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.drawImage(video, 0, 0);
+      const photoData = canvas.toDataURL("image/jpeg", 0.9);
+      
+      if (photoData === 'data:,' || photoData.length < 100) {
+        toast.error("Failed to capture photo. Please try again.");
+        return;
+      }
+      
+      setPhotos(prev => [...prev, photoData]);
+      setShowCamera(false);
+      
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        setCameraStream(null);
+      }
+      
+      toast.success("Photo captured successfully");
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setShowCamera(false);
+  };
+
   const onSubmit = async (data: IncidentReportForm) => {
     setIsSubmitting(true);
     try {
@@ -138,6 +220,7 @@ export default function IncidentReportForm({
           location: data.location || null,
           description: data.description,
           severity: data.severity as Severity,
+          photos_base64: photos.length > 0 ? photos : null,
         });
 
         toast.success("Incident report saved offline. Will sync when online.");
@@ -437,13 +520,24 @@ export default function IncidentReportForm({
             <div className="space-y-2">
               <label className="text-sm font-medium">Photos (Optional)</label>
               <div className="space-y-2">
-                <Input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handlePhotoUpload}
-                  className="cursor-pointer"
-                />
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={startCamera}
+                    size="icon"
+                    title="Take Photo"
+                  >
+                    <Camera className="h-4 w-4" />
+                  </Button>
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handlePhotoUpload}
+                    className="cursor-pointer flex-1"
+                  />
+                </div>
                 {photos.length > 0 && (
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                     {photos.map((photo, index) => (
@@ -468,6 +562,45 @@ export default function IncidentReportForm({
                 )}
               </div>
             </div>
+
+            {/* Camera Dialog */}
+            <Dialog open={showCamera} onOpenChange={(open) => {
+              if (!open) {
+                stopCamera();
+              }
+            }}>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Capture Photo</DialogTitle>
+                  <DialogDescription>
+                    Position the camera and tap capture to take a photo
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="relative bg-black rounded-lg overflow-hidden">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      className="w-full h-auto max-h-[60vh]"
+                    />
+                    <canvas ref={canvasRef} className="hidden" />
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button onClick={capturePhoto} disabled={!cameraStream}>
+                      <Camera className="h-4 w-4 mr-2" />
+                      Capture Photo
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={stopCamera}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
 
             <Button type="submit" disabled={isSubmitting} className="w-full md:w-auto">
               <Send className="h-4 w-4 mr-2" />

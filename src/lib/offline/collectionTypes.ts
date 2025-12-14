@@ -49,8 +49,14 @@ export interface WasteItem {
 export interface PendingCollection extends BasePendingItem {
   client_id: string;
   client_name: string;           // For display in pending tab
+  client_industry: string;       // For receipt
+  client_address: string | null; // For receipt
+  client_qr_code: string;        // For receipt QR code
+  client_contact_person: string | null;
+  client_contact_number: string | null;
   truck_id: string;
   truck_code: string;            // For display
+  truck_type: string | null;     // For receipt
   driver_id: string;
   driver_name: string;           // For display
   helper_ids: string[];
@@ -59,5 +65,8 @@ export interface PendingCollection extends BasePendingItem {
   tally_entries: WasteItem[];
   waste_types: string[];
   signed_by: string;
+  qr_code: string;               // Receipt QR code
+  signature_data: string | null; // Base64 signature (captured offline)
+  receipt_printed: boolean;      // Track if receipt was printed (prevent deletion)
 }
 

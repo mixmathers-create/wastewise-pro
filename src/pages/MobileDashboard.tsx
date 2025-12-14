@@ -6,8 +6,9 @@ import { App } from "@capacitor/app";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { 
-  Recycle, LogOut, QrCode, Users, Settings, Briefcase, 
+  Recycle, LogOut, QrCode, Briefcase, 
   Clock, Wifi, WifiOff 
+  // Users, Settings - commented out since clients and settings tabs are disabled
 } from "lucide-react";
 import { Capacitor } from '@capacitor/core';
 import { useToast } from "@/hooks/use-toast";
@@ -16,8 +17,8 @@ import { useCollectionOfflineSync } from "@/hooks/useCollectionOfflineSync";
 import { useHROfflineSync } from "@/hooks/useHROfflineSync";
 import { getCachedProfile, clearCacheOnLogout } from "@/lib/offlineDb";
 import CollectionsTab from "@/components/dashboard/CollectionsTab";
-import ClientsTab from "@/components/dashboard/ClientsTab";
-import SettingsTab from "@/components/dashboard/SettingsTab";
+// import ClientsTab from "@/components/dashboard/ClientsTab";
+// import SettingsTab from "@/components/dashboard/SettingsTab";
 import MobileHRTab from "@/components/dashboard/MobileHRTab";
 import PendingTab from "@/components/dashboard/PendingTab";
 
@@ -283,31 +284,31 @@ const MobileDashboard = () => {
   <main className="flex-1 overflow-auto">
         <Tabs defaultValue="collections" className="h-full flex flex-col">
           {/* MERGE: Combining the two TabsList structures */}
-          <div className="px-3 pt-3">
-            {/* Using a grid-cols-5 if all tabs are needed, otherwise, make it dynamic/conditional */}
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="collections" className="text-xs">
-                <QrCode className="h-4 w-4 mr-1" />
-                Collections
-              </TabsTrigger>
-              <TabsTrigger value="pending" className="text-xs">
-                <Clock className="h-4 w-4 mr-1" />
-                Pending
-              </TabsTrigger>
-              <TabsTrigger value="clients" className="text-xs">
-                <Users className="h-4 w-4 mr-1" />
-                Clients
-              </TabsTrigger>
-              <TabsTrigger value="hr" className="text-xs">
-                <Briefcase className="h-4 w-4 mr-1" />
-                HR
-              </TabsTrigger>
-              <TabsTrigger value="settings" className="text-xs">
-                <Settings className="h-4 w-4 mr-1" />
-                Settings
-              </TabsTrigger>
-            </TabsList>
-          </div>
+          <div className="px-3 pt-3">
+            {/* Using a grid-cols-3 since clients and settings are commented out */}
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="collections" className="text-xs">
+                <QrCode className="h-4 w-4 mr-1" />
+                Collections
+              </TabsTrigger>
+              <TabsTrigger value="pending" className="text-xs">
+                <Clock className="h-4 w-4 mr-1" />
+                Pending
+              </TabsTrigger>
+              {/* <TabsTrigger value="clients" className="text-xs">
+                <Users className="h-4 w-4 mr-1" />
+                Clients
+              </TabsTrigger> */}
+              <TabsTrigger value="hr" className="text-xs">
+                <Briefcase className="h-4 w-4 mr-1" />
+                HR
+              </TabsTrigger>
+              {/* <TabsTrigger value="settings" className="text-xs">
+                <Settings className="h-4 w-4 mr-1" />
+                Settings
+              </TabsTrigger> */}
+            </TabsList>
+          </div>
 
           <div className="flex-1 overflow-auto p-3">
             <TabsContent value="collections" className="mt-0">
@@ -330,9 +331,9 @@ const MobileDashboard = () => {
               />
             </TabsContent>
             {/* Content for Clients Tab (from caching-and-pagination) */}
-            <TabsContent value="clients" className="mt-0">
-              <ClientsTab profile={profile} />
-            </TabsContent>
+            {/* <TabsContent value="clients" className="mt-0">
+              <ClientsTab profile={profile} />
+            </TabsContent> */}
             {/* Content for HR Tab (from caching-and-pagination) */}
             <TabsContent value="hr" className="mt-0">
               <MobileHRTab 
@@ -343,9 +344,9 @@ const MobileDashboard = () => {
               />
             </TabsContent>
             {/* Content for Settings Tab (from caching-and-pagination) */}
-            <TabsContent value="settings" className="mt-0">
-              <SettingsTab profile={profile} />
-            </TabsContent>
+            {/* <TabsContent value="settings" className="mt-0">
+              <SettingsTab profile={profile} />
+            </TabsContent> */}
           </div>
         </Tabs>
       </main>
