@@ -28,6 +28,11 @@ export function MechanicsTimeTracking() {
   const [totalTimedOut, setTotalTimedOut] = useState(0);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("active");
+  const [showTimeOutDialog, setShowTimeOutDialog] = useState(false);
+  const [selectedLogForTimeOut, setSelectedLogForTimeOut] = useState<any>(null);
+  const [idInput, setIdInput] = useState("");
+  const [timeOutLoading, setTimeOutLoading] = useState(false);
+  const [mechanicIdNumbers, setMechanicIdNumbers] = useState<Record<string, string>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -81,9 +86,14 @@ export function MechanicsTimeTracking() {
     try {
       const { data } = await supabase
         .from("mechanics")
-        .select("id,name")
+        .select("id,name,id_number")
         .order("name");
       setMechanics(data || []);
+      
+      // Build ID number lookup map
+      const idMap: Record<string, string> = {};
+      data?.forEach(m => { if (m.id_number) idMap[m.id] = m.id_number; });
+      setMechanicIdNumbers(idMap);
     } catch (error) {
       console.error('Error fetching mechanics:', error);
     }
@@ -283,19 +293,44 @@ export function MechanicsTimeTracking() {
     setShowCamera(false);
   };
 
-  const handleTimeOut = async (logId: string) => {
+  const handleTimeOutClick = (log: any) => {
+    setSelectedLogForTimeOut(log);
+    setIdInput("");
+    setShowTimeOutDialog(true);
+  };
+
+  const handleTimeOut = async () => {
+    if (!selectedLogForTimeOut) return;
+    
+    const expectedId = mechanicIdNumbers[selectedLogForTimeOut.mechanic_id];
+    if (!expectedId) {
+      toast({ title: "Error", description: "Could not verify ID - mechanic record not found", variant: "destructive" });
+      return;
+    }
+    
+    if (idInput.trim() !== expectedId) {
+      toast({ title: "Error", description: "ID number does not match. Please enter the correct ID.", variant: "destructive" });
+      return;
+    }
+    
+    setTimeOutLoading(true);
     try {
       const { error } = await supabase
         .from("mechanic_time_logs")
         .update({ time_out: new Date().toISOString() })
-        .eq("id", logId);
+        .eq("id", selectedLogForTimeOut.id);
 
       if (error) throw error;
 
       toast({ title: "Success", description: "Time out recorded" });
+      setShowTimeOutDialog(false);
+      setSelectedLogForTimeOut(null);
+      setIdInput("");
       fetchTimeLogs();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setTimeOutLoading(false);
     }
   };
 
@@ -502,7 +537,7 @@ export function MechanicsTimeTracking() {
                     </TableCell>
                     <TableCell>
                       {!log.time_out && (
-                        <Button variant="outline" size="sm" onClick={() => handleTimeOut(log.id)}>
+                        <Button variant="outline" size="sm" onClick={() => handleTimeOutClick(log)}>
                           <Clock className="h-4 w-4 mr-2" /> Time Out
                         </Button>
                       )}
@@ -623,6 +658,58 @@ export function MechanicsTimeTracking() {
           </TabsContent>
         </Tabs>
       </CardContent>
+
+      <Dialog open={showTimeOutDialog} onOpenChange={setShowTimeOutDialog}>
+        <DialogContent className="w-[95vw] max-w-sm mx-auto">
+          <DialogHeader>
+            <DialogTitle>Time Out Verification</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {selectedLogForTimeOut && (
+              <div className="bg-muted p-3 rounded">
+                <div className="text-sm font-medium">{selectedLogForTimeOut.mechanics?.name}</div>
+                <div className="text-xs text-muted-foreground">
+                  Time in: {format(new Date(selectedLogForTimeOut.time_in), "MMM dd, yyyy HH:mm")}
+                </div>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium mb-2 block">ID Number</label>
+              <Input
+                type="text"
+                placeholder="Enter your ID number"
+                value={idInput}
+                onChange={(e) => setIdInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleTimeOut();
+                }}
+                className="text-base"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => {
+                  setShowTimeOutDialog(false);
+                  setSelectedLogForTimeOut(null);
+                  setIdInput("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                className="flex-1"
+                onClick={handleTimeOut}
+                disabled={!idInput.trim() || timeOutLoading}
+              >
+                {timeOutLoading ? "Verifying..." : "Confirm Time Out"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!showPhotoPreview} onOpenChange={() => setShowPhotoPreview(null)}>
         <DialogContent className="max-w-2xl">
