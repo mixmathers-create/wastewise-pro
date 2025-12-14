@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, FileText, Shield, Clock, AlertTriangle } from "lucide-react";
+import { Users, FileText, Shield, Clock, AlertTriangle, WifiOff } from "lucide-react";
 import PersonnelList from "./hr/PersonnelList";
 import LeaveFilingForm from "./hr/LeaveFilingForm";
 import LeaveAdminPanel from "./hr/LeaveAdminPanel";
@@ -51,8 +51,12 @@ export function MobileHRTab({ profile, isOnline = true, hrSync, onPendingItemAdd
             <FileText className="h-3 w-3" />
             <span className="text-[10px]">Leave</span>
           </TabsTrigger>
-          <TabsTrigger value="admin" className="flex flex-col gap-1 p-2 h-auto">
-            <Shield className="h-3 w-3" />
+          <TabsTrigger 
+            value="admin" 
+            className="flex flex-col gap-1 p-2 h-auto"
+            disabled={!isOnline}
+          >
+            {!isOnline ? <WifiOff className="h-3 w-3 text-muted-foreground" /> : <Shield className="h-3 w-3" />}
             <span className="text-[10px]">Admin</span>
           </TabsTrigger>
           <TabsTrigger value="reports" className="flex flex-col gap-1 p-2 h-auto">
@@ -110,7 +114,17 @@ export function MobileHRTab({ profile, isOnline = true, hrSync, onPendingItemAdd
 
         <TabsContent value="admin" className="mt-4">
           <div className="mobile-responsive overflow-x-auto">
-            <LeaveAdminPanel />
+            {isOnline ? (
+              <LeaveAdminPanel />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <WifiOff className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold text-muted-foreground">Admin Panel Unavailable</h3>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Admin functions require an internet connection.
+                </p>
+              </div>
+            )}
           </div>
         </TabsContent>
 

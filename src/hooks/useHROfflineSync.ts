@@ -467,6 +467,7 @@ export function useHROfflineSync({ isOnline, profile }: UseHROfflineSyncProps): 
             location: item.location,
             description: item.description,
             severity: item.severity,
+            photos: item.photos_base64,
           });
 
           if (error) throw error;

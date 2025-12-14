@@ -50,3 +50,18 @@ export interface CachedTruck {
   plate_number?: string | null;
 }
 
+/**
+ * Cached receipt settings for offline receipt generation
+ */
+export interface CachedReceiptSettings {
+  id: string;                    // Always 'receipt_settings'
+  logo_url: string | null;       // Logo URL (may need to be base64 for true offline)
+  logo_base64: string | null;    // Base64 encoded logo for true offline support
+  company_name: string;
+  company_address: string;
+  company_contact: string;
+  header_text: string;
+  footer_text: string;
+  cached_at: Date;
+}
+

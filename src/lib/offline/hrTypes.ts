@@ -199,6 +199,7 @@ export interface PendingIncidentReport extends BasePendingItem {
   description: string;
   severity: Severity;
   reporter_name: string;              // For display
+  photos_base64: string[] | null;     // Base64 encoded photos (stored locally)
 }
 
 // ============================================

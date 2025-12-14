@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, CheckCircle, XCircle, Trash2, CloudUpload, RefreshCw, Trash, FileText, Users, AlertTriangle, Wrench, ChevronDown, ChevronUp } from "lucide-react";
+import { Clock, CheckCircle, XCircle, Trash2, CloudUpload, RefreshCw, Trash, FileText, Users, AlertTriangle, Wrench, ChevronDown, ChevronUp, Eye, Printer } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { offlineDb, type PendingCollection, type PendingLeaveRequest, type PendingTimeIn, type PendingTimeOut, type PendingIncidentReport, type PendingMechanicalReport } from "@/lib/offlineDb";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +25,7 @@ interface PendingTabProps {
 
 const PendingTab = ({ isOnline, profile, onSyncComplete, refreshTrigger, lastSyncResult, lastHRSyncResult }: PendingTabProps) => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [pendingCollections, setPendingCollections] = useState<PendingCollection[]>([]);
   const [pendingLeaveRequests, setPendingLeaveRequests] = useState<PendingLeaveRequest[]>([]);
   const [pendingTimeIns, setPendingTimeIns] = useState<PendingTimeIn[]>([]);
@@ -86,8 +88,25 @@ const PendingTab = ({ isOnline, profile, onSyncComplete, refreshTrigger, lastSyn
     }
   }, [lastHRSyncResult]);
 
+  const handleViewReceipt = (collectionId: string) => {
+    navigate(`/receipt-preview?pendingId=${collectionId}`);
+  };
+
   const handleDelete = async (id: string, type: 'collection' | 'leave' | 'timeIn' | 'timeOut' | 'incident' | 'mechanical') => {
     try {
+      // For collections, check if receipt was printed
+      if (type === 'collection') {
+        const collection = pendingCollections.find(c => c.id === id);
+        if (collection?.receipt_printed && collection?.status !== 'completed') {
+          toast({ 
+            title: "Cannot Delete", 
+            description: "This receipt was printed. Wait for it to sync before deleting.", 
+            variant: "destructive" 
+          });
+          return;
+        }
+      }
+      
       switch (type) {
         case 'collection':
           await offlineDb.pendingCollections.delete(id);
@@ -220,16 +239,23 @@ const PendingTab = ({ isOnline, profile, onSyncComplete, refreshTrigger, lastSyn
     });
   };
 
-  // Generic pending item renderer
+  // Generic pending item renderer with optional custom actions and badges
   const renderPendingItem = (
     item: any,
     type: 'collection' | 'leave' | 'timeIn' | 'timeOut' | 'incident' | 'mechanical',
     title: string,
     subtitle: string,
-    expandableDetails?: React.ReactNode
+    options?: {
+      expandableDetails?: React.ReactNode;
+      extraBadge?: React.ReactNode;
+      customActions?: React.ReactNode;
+      canDelete?: boolean;
+      deleteWarning?: string;
+    }
   ) => {
     const isExpanded = expandedItems.has(item.id);
-    const hasExpandable = !!expandableDetails;
+    const hasExpandable = !!options?.expandableDetails;
+    const canDelete = options?.canDelete !== false; // Default to true
     
     return (
       <div key={item.id} className="border rounded-lg p-3 bg-card">
@@ -247,6 +273,7 @@ const PendingTab = ({ isOnline, profile, onSyncComplete, refreshTrigger, lastSyn
             <div className="flex items-center gap-2 mb-1">
               {getStatusIcon(item.status)}
               <span className="font-medium text-sm">{title}</span>
+              {options?.extraBadge}
               {hasExpandable && (
                 <span className="text-muted-foreground">
                   {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -277,54 +304,60 @@ const PendingTab = ({ isOnline, profile, onSyncComplete, refreshTrigger, lastSyn
               <p className="text-xs text-red-500 mt-1">{item.error_message}</p>
             )}
             {/* Expandable details section */}
-            {isExpanded && expandableDetails && (
+            {isExpanded && options?.expandableDetails && (
               <div className="mt-3 pt-3 border-t border-dashed">
-                {expandableDetails}
+                {options.expandableDetails}
               </div>
             )}
           </div>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent onClick={(e) => e.stopPropagation()} className="duration-0">
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  {item.status === 'completed' 
-                    ? 'Remove from history?' 
-                    : 'Delete pending item?'}
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  {item.status === 'completed' 
-                    ? `This item has already been synced. Remove from local history?`
-                    : `This will permanently delete this unsent item. This action cannot be undone.`}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel onClick={(e) => e.stopPropagation()} className="duration-0">
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(item.id, type);
-                  }}
-                  className={`duration-0 ${item.status === 'completed' 
-                    ? '' 
-                    : 'bg-destructive text-destructive-foreground hover:bg-destructive/90'}`}
+          <div className="flex flex-col gap-1">
+            {/* Custom actions (e.g., View Receipt button) */}
+            {options?.customActions}
+            {/* Delete button */}
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={(e) => e.stopPropagation()}
+                  disabled={!canDelete}
                 >
-                  {item.status === 'completed' ? 'Remove' : 'Delete'}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent onClick={(e) => e.stopPropagation()} className="duration-0">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {item.status === 'completed' 
+                      ? 'Remove from history?' 
+                      : 'Delete pending item?'}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {item.status === 'completed' 
+                      ? `This item has already been synced. Remove from local history?`
+                      : options?.deleteWarning || `This will permanently delete this unsent item. This action cannot be undone.`}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={(e) => e.stopPropagation()} className="duration-0">
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(item.id, type);
+                    }}
+                    className={`duration-0 ${item.status === 'completed' 
+                      ? '' 
+                      : 'bg-destructive text-destructive-foreground hover:bg-destructive/90'}`}
+                  >
+                    {item.status === 'completed' ? 'Remove' : 'Delete'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         </div>
       </div>
     );
@@ -410,7 +443,33 @@ const PendingTab = ({ isOnline, profile, onSyncComplete, refreshTrigger, lastSyn
                       collection,
                       'collection',
                       collection.client_name,
-                      `Truck: ${collection.truck_code} • Driver: ${collection.driver_name} • Items: ${collection.items.length}`
+                      `Truck: ${collection.truck_code} • Driver: ${collection.driver_name} • Items: ${collection.items.length}`,
+                      {
+                        extraBadge: collection.receipt_printed ? (
+                          <span className="flex items-center gap-1 text-green-600 text-xs">
+                            <Printer className="h-3 w-3" />
+                            Printed
+                          </span>
+                        ) : undefined,
+                        customActions: (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewReceipt(collection.id);
+                            }}
+                          >
+                            <Eye className="h-3 w-3 mr-1" />
+                            Receipt
+                          </Button>
+                        ),
+                        canDelete: !collection.receipt_printed || collection.status === 'completed',
+                        deleteWarning: collection.receipt_printed 
+                          ? "This receipt was printed and cannot be deleted until synced."
+                          : undefined,
+                      }
                     )
                   )}
                 </div>
@@ -466,17 +525,20 @@ const PendingTab = ({ isOnline, profile, onSyncComplete, refreshTrigger, lastSyn
                           'timeIn',
                           `Truck: ${timeIn.truck_code}`,
                           `${timeIn.personnel.length} personnel`,
-                          // Expandable personnel list
-                          <div className="space-y-1">
-                            <p className="text-xs font-medium text-muted-foreground mb-2">Personnel:</p>
-                            {timeIn.personnel.map((p, idx) => (
-                              <div key={idx} className="text-xs flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-primary" />
-                                <span>{p.name}</span>
-                                <span className="text-muted-foreground capitalize">({p.type})</span>
+                          {
+                            expandableDetails: (
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground mb-2">Personnel:</p>
+                                {timeIn.personnel.map((p, idx) => (
+                                  <div key={idx} className="text-xs flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-primary" />
+                                    <span>{p.name}</span>
+                                    <span className="text-muted-foreground capitalize">({p.type})</span>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
+                            )
+                          }
                         )
                       )}
                     </div>

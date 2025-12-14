@@ -8,7 +8,8 @@ import Dexie, { type EntityTable } from 'dexie';
 import type { 
   CachedProfile, 
   SyncMetadata, 
-  CachedTruck 
+  CachedTruck,
+  CachedReceiptSettings,
 } from './offline/commonTypes';
 
 // Collection types
@@ -47,6 +48,7 @@ class OfflineDatabase extends Dexie {
   cachedProfile!: EntityTable<CachedProfile, 'id'>;
   syncMetadata!: EntityTable<SyncMetadata, 'id'>;
   trucks!: EntityTable<CachedTruck, 'id'>;
+  receiptSettings!: EntityTable<CachedReceiptSettings, 'id'>;
   
   // Collection tab tables
   clients!: EntityTable<CachedClient, 'id'>;
@@ -94,6 +96,37 @@ class OfflineDatabase extends Dexie {
       helpers: 'id, name',
       pendingCollections: 'id, status, created_at, user_id',
       syncMetadata: 'id',
+      
+      // HR - Additional personnel types
+      mechanics: 'id, name',
+      recyclers: 'id, name',
+      management: 'id, name',
+      
+      // HR - Cached data for viewing
+      cachedTimeLogs: 'id, personnel_id, personnel_type, truck_id, [personnel_type+time_in]',
+      cachedLeaves: 'id, personnel_id, personnel_type, status, [status+created_at]',
+      
+      // HR - Pending queues (offline operations)
+      pendingTimeIns: 'id, status, created_at, user_id',
+      pendingTimeOuts: 'id, status, created_at, user_id',
+      pendingLeaveRequests: 'id, status, created_at, user_id',
+      pendingIncidentReports: 'id, status, created_at, user_id',
+      pendingMechanicalReports: 'id, status, created_at, user_id'
+    });
+
+    // Version 3 - Offline receipt support with signature and printing
+    this.version(3).stores({
+      // Keep all existing tables
+      cachedProfile: 'id, user_id',
+      clients: 'id, name, qr_code',
+      trucks: 'id, code',
+      drivers: 'id, name',
+      helpers: 'id, name',
+      pendingCollections: 'id, status, created_at, user_id, receipt_printed',
+      syncMetadata: 'id',
+      
+      // Receipt settings cache
+      receiptSettings: 'id',
       
       // HR - Additional personnel types
       mechanics: 'id, name',
@@ -224,6 +257,28 @@ export async function hasPendingHRItems(userId?: string): Promise<boolean> {
 }
 
 // ============================================
+// Receipt Settings Cache Functions
+// ============================================
+
+/**
+ * Get cached receipt settings
+ */
+export async function getCachedReceiptSettings(): Promise<CachedReceiptSettings | undefined> {
+  return await offlineDb.receiptSettings.get('receipt_settings');
+}
+
+/**
+ * Save receipt settings to cache
+ */
+export async function setCachedReceiptSettings(settings: Omit<CachedReceiptSettings, 'id' | 'cached_at'>): Promise<void> {
+  await offlineDb.receiptSettings.put({
+    id: 'receipt_settings',
+    ...settings,
+    cached_at: new Date()
+  });
+}
+
+// ============================================
 // Clear Cache Functions
 // ============================================
 
@@ -243,6 +298,9 @@ export async function clearCacheOnLogout(): Promise<void> {
     offlineDb.drivers.clear(),
     offlineDb.helpers.clear(),
     offlineDb.pendingCollections.clear(),
+    
+    // Receipt settings (keep for next user? or clear - clearing for security)
+    offlineDb.receiptSettings.clear(),
     
     // HR tab - personnel
     offlineDb.mechanics.clear(),

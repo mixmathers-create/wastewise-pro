@@ -5,12 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { printerService } from "@/lib/printerService";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, Printer, WifiOff } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
 import { Label } from "@/components/ui/label";
 import ReceiptTemplate, { ReceiptTemplateProps } from "@/components/collection/ReceiptTemplate";
 import QRCode from "qrcode";
 import { useReceiptSettings } from "@/hooks/useReceiptSettings";
+import { 
+  offlineDb, 
+  getCachedReceiptSettings,
+  type PendingCollection,
+  type CachedReceiptSettings,
+} from "@/lib/offlineDb";
 
 const QRCodeDisplay = ({ value, size }: { value: string; size: number }) => {
   const [qrUrl, setQrUrl] = useState<string>("");
@@ -30,7 +36,11 @@ const ReceiptPreview = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const receiptId = searchParams.get("id");
+  const pendingId = searchParams.get("pendingId"); // Offline mode
   const { logoUrl: dbLogoUrl } = useReceiptSettings();
+  
+  // Determine if we're in offline mode
+  const isOfflineMode = !!pendingId;
   
   const [receipt, setReceipt] = useState<any>(null);
   const [client, setClient] = useState<any>(null);
@@ -42,13 +52,79 @@ const ReceiptPreview = () => {
   const [hasSignature, setHasSignature] = useState(false);
   const signatureRef = useRef<SignatureCanvas>(null);
   const printReceiptRef = useRef<HTMLDivElement>(null);
+  
+  // Offline mode specific state
+  const [pendingCollection, setPendingCollection] = useState<PendingCollection | null>(null);
+  const [offlineReceiptSettings, setOfflineReceiptSettings] = useState<CachedReceiptSettings | null>(null);
 
   useEffect(() => {
-    if (receiptId) {
+    if (pendingId) {
+      loadPendingCollection();
+    } else if (receiptId) {
       loadReceipt();
     }
-  }, [receiptId]);
+  }, [receiptId, pendingId]);
 
+  // Load pending collection from Dexie (offline mode)
+  const loadPendingCollection = async () => {
+    try {
+      setLoading(true);
+      
+      const collection = await offlineDb.pendingCollections.get(pendingId!);
+      
+      if (!collection) {
+        toast({ title: "Error", description: "Pending collection not found", variant: "destructive" });
+        navigate(-1);
+        return;
+      }
+
+      setPendingCollection(collection);
+      
+      // Map pending collection data to match online format for unified rendering
+      setReceipt({
+        id: collection.id,
+        qr_code: collection.qr_code,
+        created_at: collection.created_at,
+        items: collection.items,
+        signed_by: collection.signed_by,
+        signature_data: collection.signature_data,
+      });
+      
+      setClient({
+        id: collection.client_id,
+        name: collection.client_name,
+        industry: collection.client_industry,
+        address: collection.client_address,
+        qr_code: collection.client_qr_code,
+        contact_person: collection.client_contact_person,
+        contact_number: collection.client_contact_number,
+      });
+      
+      setTruck({
+        code: collection.truck_code,
+        type: collection.truck_type,
+      });
+      
+      setDriver({
+        name: collection.driver_name,
+      });
+      
+      setHelpers(collection.helper_names.map(name => ({ name })));
+      
+      setHasSignature(!!collection.signature_data);
+      
+      // Load cached receipt settings
+      const settings = await getCachedReceiptSettings();
+      setOfflineReceiptSettings(settings || null);
+      
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load receipt from Supabase (online mode)
   const loadReceipt = async () => {
     try {
       setLoading(true);
@@ -94,12 +170,21 @@ const ReceiptPreview = () => {
     try {
       const signatureData = signatureRef.current.toDataURL();
       
-      const { error } = await supabase
-        .from("collection_receipts")
-        .update({ signature_data: signatureData })
-        .eq("id", receiptId);
+      if (isOfflineMode && pendingCollection) {
+        // Offline mode: save to Dexie
+        await offlineDb.pendingCollections.update(pendingCollection.id, { 
+          signature_data: signatureData 
+        });
+        setPendingCollection({ ...pendingCollection, signature_data: signatureData });
+      } else {
+        // Online mode: save to Supabase
+        const { error } = await supabase
+          .from("collection_receipts")
+          .update({ signature_data: signatureData })
+          .eq("id", receiptId);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
 
       setHasSignature(true);
       setReceipt({ ...receipt, signature_data: signatureData });
@@ -149,6 +234,15 @@ const ReceiptPreview = () => {
       setPrinting(true);
       
       await printerService.printElement(printReceiptRef.current, 1);
+      
+      // In offline mode, mark as printed (prevents deletion until synced)
+      if (isOfflineMode && pendingCollection) {
+        await offlineDb.pendingCollections.update(pendingCollection.id, { 
+          receipt_printed: true 
+        });
+        setPendingCollection({ ...pendingCollection, receipt_printed: true });
+      }
+      
       toast({ title: "Print Successful", description: "Receipt printed successfully" });
     } catch (error: any) {
       toast({ title: "Print Failed", description: error.message, variant: "destructive" });
@@ -157,24 +251,36 @@ const ReceiptPreview = () => {
     }
   };
   
+  // Get receipt settings from cache (offline) or localStorage (online)
+  const getSettings = () => {
+    if (isOfflineMode && offlineReceiptSettings) {
+      return {
+        logoUrl: offlineReceiptSettings.logo_base64 || offlineReceiptSettings.logo_url,
+        companyName: offlineReceiptSettings.company_name,
+        companyAddress: offlineReceiptSettings.company_address,
+        companyContact: offlineReceiptSettings.company_contact,
+        headerText: offlineReceiptSettings.header_text,
+        footerText: offlineReceiptSettings.footer_text,
+      };
+    }
+    return {
+      logoUrl: dbLogoUrl,
+      companyName: localStorage.getItem("receipt_company_name") || "WASTEWISE",
+      companyAddress: localStorage.getItem("receipt_company_address") || "",
+      companyContact: localStorage.getItem("receipt_company_contact") || "",
+      headerText: localStorage.getItem("receipt_header") || "COLLECTION RECEIPT",
+      footerText: localStorage.getItem("receipt_footer") || "Thank you for your cooperation!",
+    };
+  };
+
   // Prepare receipt template props
   const getReceiptProps = (): ReceiptTemplateProps | null => {
     if (!receipt || !client) return null;
     
-    const logoUrl = dbLogoUrl;
-    const companyName = localStorage.getItem("receipt_company_name") || "WASTEWISE";
-    const companyAddress = localStorage.getItem("receipt_company_address") || "";
-    const companyContact = localStorage.getItem("receipt_company_contact") || "";
-    const headerText = localStorage.getItem("receipt_header") || "COLLECTION RECEIPT";
-    const footerText = localStorage.getItem("receipt_footer") || "Thank you for your cooperation!";
+    const settings = getSettings();
     
     return {
-      logoUrl,
-      companyName,
-      companyAddress,
-      companyContact,
-      headerText,
-      footerText,
+      ...settings,
       receiptQR: receipt.qr_code,
       createdAt: new Date(receipt.created_at),
       client: {
@@ -224,7 +330,13 @@ const ReceiptPreview = () => {
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-6 w-6" />
         </Button>
-        <h1 className="text-xl font-semibold">Receipt Preview</h1>
+        <h1 className="text-xl font-semibold flex-1">Receipt Preview</h1>
+        {isOfflineMode && (
+          <div className="flex items-center gap-2 bg-yellow-500/20 text-yellow-200 px-2 py-1 rounded text-sm">
+            <WifiOff className="h-4 w-4" />
+            <span>Pending</span>
+          </div>
+        )}
       </div>
 
       {/* Receipt Content - Scrollable */}
@@ -362,6 +474,11 @@ const ReceiptPreview = () => {
             <Printer className="h-5 w-5 mr-2" />
             {printing ? "Printing..." : "Print Receipt"}
           </Button>
+          {isOfflineMode && pendingCollection?.receipt_printed && (
+            <p className="text-xs text-center text-green-600 mt-2">
+              ✓ Receipt has been printed
+            </p>
+          )}
         </div>
       )}
 
