@@ -201,12 +201,14 @@ useEffect(() => {
 
   const fetchTrucks = async () => {
     try {
+      console.log("Fetching trucks...");
       const { data, error } = await supabase
         .from("trucks")
         .select("id,code,plate_number,type")
         .eq("status", "available")
         .limit(MAX_ITEMS);
 
+      console.log("Trucks query result:", { data, error });
       if (error) throw error;
       setTrucks(data || []);
     } catch (error) {
@@ -1119,10 +1121,29 @@ const startCamera = async () => {
             </Button>
             <Button 
               onClick={handleTimeIn} 
-              disabled={!selectedTruck || (selectedDrivers.size === 0 && selectedHelpers.size === 0 && selectedRecyclers.size === 0)}
+              disabled={
+                !selectedTruck || 
+                (selectedDrivers.size === 0 && selectedHelpers.size === 0 && selectedRecyclers.size === 0) || 
+                submitStatus !== 'idle' ||
+                ((selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size) > 1 && !capturedPhoto)
+              }
             >
-              <Clock className="h-4 w-4 mr-2" />
-              Time In ({selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size} selected)
+              {submitStatus === 'getting-location' ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Getting Location...
+                </>
+              ) : submitStatus === 'saving' ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Clock className="h-4 w-4 mr-2" />
+                  Time In ({selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size} selected)
+                </>
+              )}
             </Button>
           </div>
           {(selectedDrivers.size + selectedHelpers.size + selectedRecyclers.size) > 1 && !capturedPhoto && (

@@ -51,24 +51,23 @@ export default function IncidentReportsAdmin() {
     }
   };
 
-  const loadReportPhotos = async (reportId: string) => {
+  const loadReportPhotos = async (report: any) => {
+    setSelectedReport(report);
     setLoadingPhotos(true);
     try {
       const { data, error } = await supabase
         .from("incident_reports")
         .select("photos, admin_photos")
-        .eq("id", reportId)
+        .eq("id", report.id)
         .single();
 
       if (error) throw error;
       
-      if (selectedReport) {
-        setSelectedReport({
-          ...selectedReport,
-          photos: data.photos || [],
-          admin_photos: data.admin_photos || []
-        });
-      }
+      setSelectedReport(prev => prev ? {
+        ...prev,
+        photos: data.photos || [],
+        admin_photos: data.admin_photos || []
+      } : null);
     } catch (error: any) {
       console.error("Error loading photos:", error);
       toast.error("Failed to load photos");
@@ -214,11 +213,10 @@ export default function IncidentReportsAdmin() {
                           variant="ghost" 
                           size="sm"
                           onClick={() => {
-                            setSelectedReport(report);
                             setNewStatus(report.status);
                             setNewSeverity(report.severity);
                             setShowIncidentDetailsModal(true);
-                            loadReportPhotos(report.id);
+                            loadReportPhotos(report);
                           }}
                         >
                           <MoreHorizontal className="h-4 w-4" />
@@ -258,17 +256,16 @@ export default function IncidentReportsAdmin() {
                               size="sm"
                               variant="outline"
                               onClick={() => {
-                                setSelectedReport(report);
                                 setNewStatus(report.status);
                                 setNewSeverity(report.severity);
-                                loadReportPhotos(report.id);
+                                loadReportPhotos(report);
                               }}
                             >
                               <MessageSquare className="h-4 w-4 mr-1" />
                               Review
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-2xl">
+                          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                             <DialogHeader>
                               <DialogTitle>Review Incident Report</DialogTitle>
                               <DialogDescription>
@@ -453,7 +450,7 @@ export default function IncidentReportsAdmin() {
       
       {/* Mobile Incident Details Modal */}
       <Dialog open={showIncidentDetailsModal} onOpenChange={setShowIncidentDetailsModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Review Incident Report</DialogTitle>
             {selectedReport && (
