@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ImageModal } from "@/components/ui/image-modal";
 import { format } from "date-fns";
 import { AlertCircle, MessageSquare, CheckCircle, XCircle, MoreHorizontal, Camera, X } from "lucide-react";
 
@@ -23,6 +24,10 @@ export default function IncidentReportsAdmin() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showIncidentDetailsModal, setShowIncidentDetailsModal] = useState(false);
   const [adminPhotos, setAdminPhotos] = useState<string[]>([]);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [modalImages, setModalImages] = useState<string[]>([]);
+  const [initialImageIndex, setInitialImageIndex] = useState(0);
+  const [loadingPhotos, setLoadingPhotos] = useState(false);
 
   useEffect(() => {
     fetchReports();
@@ -33,7 +38,7 @@ export default function IncidentReportsAdmin() {
     try {
       const { data, error } = await supabase
         .from("incident_reports")
-        .select("*")
+        .select("id, created_at, reporter_name, incident_type, incident_date, incident_time, location, description, severity, status, reviewed_by, reviewed_at, review_notes, reported_by")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -43,6 +48,32 @@ export default function IncidentReportsAdmin() {
       toast.error("Failed to load incident reports");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadReportPhotos = async (reportId: string) => {
+    setLoadingPhotos(true);
+    try {
+      const { data, error } = await supabase
+        .from("incident_reports")
+        .select("photos, admin_photos")
+        .eq("id", reportId)
+        .single();
+
+      if (error) throw error;
+      
+      if (selectedReport) {
+        setSelectedReport({
+          ...selectedReport,
+          photos: data.photos || [],
+          admin_photos: data.admin_photos || []
+        });
+      }
+    } catch (error: any) {
+      console.error("Error loading photos:", error);
+      toast.error("Failed to load photos");
+    } finally {
+      setLoadingPhotos(false);
     }
   };
 
@@ -187,6 +218,7 @@ export default function IncidentReportsAdmin() {
                             setNewStatus(report.status);
                             setNewSeverity(report.severity);
                             setShowIncidentDetailsModal(true);
+                            loadReportPhotos(report.id);
                           }}
                         >
                           <MoreHorizontal className="h-4 w-4" />
@@ -229,6 +261,7 @@ export default function IncidentReportsAdmin() {
                                 setSelectedReport(report);
                                 setNewStatus(report.status);
                                 setNewSeverity(report.severity);
+                                loadReportPhotos(report.id);
                               }}
                             >
                               <MessageSquare className="h-4 w-4 mr-1" />
@@ -262,39 +295,55 @@ export default function IncidentReportsAdmin() {
                                 </div>
                               )}
 
-                              {report.photos && report.photos.length > 0 && (
-                                <div>
-                                  <h4 className="font-semibold mb-2">Incident Photos:</h4>
+                              <div>
+                                <h4 className="font-semibold mb-2">Incident Photos:</h4>
+                                {loadingPhotos ? (
+                                  <div className="text-sm text-muted-foreground">Loading photos...</div>
+                                ) : selectedReport?.photos && selectedReport.photos.length > 0 ? (
                                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                    {report.photos.map((photo: string, index: number) => (
+                                    {selectedReport.photos.map((photo: string, index: number) => (
                                       <img
                                         key={index}
                                         src={photo}
                                         alt={`Incident photo ${index + 1}`}
-                                        className="w-full h-24 object-cover rounded border cursor-pointer"
-                                        onClick={() => window.open(photo, '_blank')}
+                                        className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
+                                        onClick={() => {
+                                          setModalImages(selectedReport.photos);
+                                          setInitialImageIndex(index);
+                                          setImageModalOpen(true);
+                                        }}
                                       />
                                     ))}
                                   </div>
-                                </div>
-                              )}
+                                ) : (
+                                  <div className="text-sm text-muted-foreground">No photos attached</div>
+                                )}
+                              </div>
 
-                              {report.admin_photos && report.admin_photos.length > 0 && (
-                                <div>
-                                  <h4 className="font-semibold mb-2">Admin Documentation Photos:</h4>
+                              <div>
+                                <h4 className="font-semibold mb-2">Admin Documentation Photos:</h4>
+                                {loadingPhotos ? (
+                                  <div className="text-sm text-muted-foreground">Loading photos...</div>
+                                ) : selectedReport?.admin_photos && selectedReport.admin_photos.length > 0 ? (
                                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                    {report.admin_photos.map((photo: string, index: number) => (
+                                    {selectedReport.admin_photos.map((photo: string, index: number) => (
                                       <img
                                         key={index}
                                         src={photo}
                                         alt={`Admin photo ${index + 1}`}
-                                        className="w-full h-24 object-cover rounded border cursor-pointer"
-                                        onClick={() => window.open(photo, '_blank')}
+                                        className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
+                                        onClick={() => {
+                                          setModalImages(selectedReport.admin_photos);
+                                          setInitialImageIndex(index);
+                                          setImageModalOpen(true);
+                                        }}
                                       />
                                     ))}
                                   </div>
-                                </div>
-                              )}
+                                ) : (
+                                  <div className="text-sm text-muted-foreground">No admin photos</div>
+                                )}
+                              </div>
 
                               {report.review_notes && (
                                 <div>
@@ -444,39 +493,55 @@ export default function IncidentReportsAdmin() {
                 <p className="text-sm text-muted-foreground">{getSeverityBadge(selectedReport.severity)}</p>
               </div>
 
-              {selectedReport.photos && selectedReport.photos.length > 0 && (
-                <div>
-                  <h4 className="font-semibold mb-2">Incident Photos:</h4>
+              <div>
+                <h4 className="font-semibold mb-2">Incident Photos:</h4>
+                {loadingPhotos ? (
+                  <div className="text-sm text-muted-foreground">Loading photos...</div>
+                ) : selectedReport?.photos && selectedReport.photos.length > 0 ? (
                   <div className="grid grid-cols-2 gap-2">
                     {selectedReport.photos.map((photo: string, index: number) => (
                       <img
                         key={index}
                         src={photo}
                         alt={`Incident photo ${index + 1}`}
-                        className="w-full h-24 object-cover rounded border cursor-pointer"
-                        onClick={() => window.open(photo, '_blank')}
+                        className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => {
+                          setModalImages(selectedReport.photos);
+                          setInitialImageIndex(index);
+                          setImageModalOpen(true);
+                        }}
                       />
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="text-sm text-muted-foreground">No photos attached</div>
+                )}
+              </div>
 
-              {selectedReport.admin_photos && selectedReport.admin_photos.length > 0 && (
-                <div>
-                  <h4 className="font-semibold mb-2">Admin Documentation Photos:</h4>
+              <div>
+                <h4 className="font-semibold mb-2">Admin Documentation Photos:</h4>
+                {loadingPhotos ? (
+                  <div className="text-sm text-muted-foreground">Loading photos...</div>
+                ) : selectedReport?.admin_photos && selectedReport.admin_photos.length > 0 ? (
                   <div className="grid grid-cols-2 gap-2">
                     {selectedReport.admin_photos.map((photo: string, index: number) => (
                       <img
                         key={index}
                         src={photo}
                         alt={`Admin photo ${index + 1}`}
-                        className="w-full h-24 object-cover rounded border cursor-pointer"
-                        onClick={() => window.open(photo, '_blank')}
+                        className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => {
+                          setModalImages(selectedReport.admin_photos);
+                          setInitialImageIndex(index);
+                          setImageModalOpen(true);
+                        }}
                       />
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="text-sm text-muted-foreground">No admin photos</div>
+                )}
+              </div>
 
               {selectedReport.review_notes && (
                 <div>
@@ -577,6 +642,13 @@ export default function IncidentReportsAdmin() {
           )}
         </DialogContent>
       </Dialog>
+
+      <ImageModal
+        images={modalImages}
+        isOpen={imageModalOpen}
+        onClose={() => setImageModalOpen(false)}
+        initialIndex={initialImageIndex}
+      />
     </div>
   );
 }

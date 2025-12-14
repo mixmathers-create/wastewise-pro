@@ -22,14 +22,19 @@ export default function EquipmentInventory() {
   const [checkinEquipment, setCheckinEquipment] = useState<any>(null);
   const [inventoryPage, setInventoryPage] = useState(1);
   const [checkoutsPage, setCheckoutsPage] = useState(1);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   
   const ITEMS_PER_PAGE = 5;
   const MAX_ITEMS = 100;
 
   useEffect(() => {
-    fetchEquipment();
-    fetchCheckouts();
+    const fetchAllData = async () => {
+      setLoading(true);
+      await Promise.all([fetchEquipment(), fetchCheckouts()]);
+      setLoading(false);
+    };
+    fetchAllData();
   }, []);
 
   const fetchEquipment = async () => {
@@ -148,6 +153,9 @@ export default function EquipmentInventory() {
             </div>
           </CardHeader>
           <CardContent>
+            {loading ? (
+              <div className="text-center py-8">Loading inventory...</div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -196,7 +204,8 @@ export default function EquipmentInventory() {
                 ))}
               </TableBody>
             </Table>
-            {equipment.length > ITEMS_PER_PAGE && (
+            )}
+            {!loading && equipment.length > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -239,6 +248,9 @@ export default function EquipmentInventory() {
             </div>
           </CardHeader>
           <CardContent>
+            {loading ? (
+              <div className="text-center py-8">Loading checkouts...</div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -297,7 +309,8 @@ export default function EquipmentInventory() {
                 ))}
               </TableBody>
             </Table>
-            {checkouts.length > ITEMS_PER_PAGE && (
+            )}
+            {!loading && checkouts.length > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
