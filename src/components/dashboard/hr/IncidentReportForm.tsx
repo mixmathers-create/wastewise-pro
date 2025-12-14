@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, Send, WifiOff } from "lucide-react";
+import { AlertCircle, Send, WifiOff, Camera, X } from "lucide-react";
 import type { PendingIncidentReport, Severity } from "@/lib/offlineDb";
 
 const incidentReportSchema = z.object({
@@ -73,6 +73,7 @@ export default function IncidentReportForm({
   onOfflineSuccess,
 }: IncidentReportFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [photos, setPhotos] = useState<string[]>([]);
   
   const currentTime = useMemo(() => {
     const now = new Date();
@@ -94,6 +95,26 @@ export default function IncidentReportForm({
       severity: "medium",
     },
   });
+
+  const handlePhotoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const result = e.target?.result as string;
+          setPhotos(prev => [...prev, result]);
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index));
+  };
 
   const onSubmit = async (data: IncidentReportForm) => {
     setIsSubmitting(true);
@@ -124,6 +145,7 @@ export default function IncidentReportForm({
           onOfflineSuccess();
         }
         form.reset();
+        setPhotos([]);
         return;
       }
 
@@ -146,12 +168,14 @@ export default function IncidentReportForm({
         location: data.location,
         description: data.description,
         severity: data.severity,
+        photos: photos.length > 0 ? photos : null,
       });
 
       if (error) throw error;
 
       toast.success("Incident report submitted successfully");
       form.reset();
+      setPhotos([]);
     } catch (error: any) {
       console.error("Error submitting incident report:", error);
       toast.error(error.message || "Failed to submit incident report");
@@ -409,6 +433,41 @@ export default function IncidentReportForm({
                 </FormItem>
               )}
             />
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Photos (Optional)</label>
+              <div className="space-y-2">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handlePhotoUpload}
+                  className="cursor-pointer"
+                />
+                {photos.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {photos.map((photo, index) => (
+                      <div key={index} className="relative">
+                        <img
+                          src={photo}
+                          alt={`Incident photo ${index + 1}`}
+                          className="w-full h-24 object-cover rounded border"
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="absolute top-1 right-1 h-6 w-6 p-0"
+                          onClick={() => removePhoto(index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
 
             <Button type="submit" disabled={isSubmitting} className="w-full md:w-auto">
               <Send className="h-4 w-4 mr-2" />

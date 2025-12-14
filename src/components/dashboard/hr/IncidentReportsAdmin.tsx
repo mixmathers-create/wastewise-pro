@@ -5,12 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
-import { AlertCircle, MessageSquare, CheckCircle, XCircle, MoreHorizontal } from "lucide-react";
+import { AlertCircle, MessageSquare, CheckCircle, XCircle, MoreHorizontal, Camera, X } from "lucide-react";
 
 export default function IncidentReportsAdmin() {
   const [reports, setReports] = useState<any[]>([]);
@@ -21,6 +22,7 @@ export default function IncidentReportsAdmin() {
   const [newSeverity, setNewSeverity] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showIncidentDetailsModal, setShowIncidentDetailsModal] = useState(false);
+  const [adminPhotos, setAdminPhotos] = useState<string[]>([]);
 
   useEffect(() => {
     fetchReports();
@@ -44,9 +46,29 @@ export default function IncidentReportsAdmin() {
     }
   };
 
+  const handleAdminPhotoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const result = e.target?.result as string;
+          setAdminPhotos(prev => [...prev, result]);
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  };
+
+  const removeAdminPhoto = (index: number) => {
+    setAdminPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
   const reviewReport = async () => {
-    if (!selectedReport || (!reviewNotes.trim() && !newStatus && !newSeverity)) {
-      toast.error("Please provide review notes or update status/severity");
+    if (!selectedReport || (!reviewNotes.trim() && !newStatus && !newSeverity && adminPhotos.length === 0)) {
+      toast.error("Please provide review notes, update status/severity, or add documentation photos");
       return;
     }
 
@@ -63,6 +85,10 @@ export default function IncidentReportsAdmin() {
       if (reviewNotes.trim()) updates.review_notes = reviewNotes.trim();
       if (newStatus) updates.status = newStatus;
       if (newSeverity) updates.severity = newSeverity;
+      if (adminPhotos.length > 0) {
+        const existingPhotos = selectedReport.admin_photos || [];
+        updates.admin_photos = [...existingPhotos, ...adminPhotos];
+      }
 
       const { error } = await supabase
         .from("incident_reports")
@@ -75,6 +101,7 @@ export default function IncidentReportsAdmin() {
       setReviewNotes("");
       setNewStatus("");
       setNewSeverity("");
+      setAdminPhotos([]);
       setSelectedReport(null);
       fetchReports();
     } catch (error: any) {
@@ -235,6 +262,40 @@ export default function IncidentReportsAdmin() {
                                 </div>
                               )}
 
+                              {report.photos && report.photos.length > 0 && (
+                                <div>
+                                  <h4 className="font-semibold mb-2">Incident Photos:</h4>
+                                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                    {report.photos.map((photo: string, index: number) => (
+                                      <img
+                                        key={index}
+                                        src={photo}
+                                        alt={`Incident photo ${index + 1}`}
+                                        className="w-full h-24 object-cover rounded border cursor-pointer"
+                                        onClick={() => window.open(photo, '_blank')}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {report.admin_photos && report.admin_photos.length > 0 && (
+                                <div>
+                                  <h4 className="font-semibold mb-2">Admin Documentation Photos:</h4>
+                                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                    {report.admin_photos.map((photo: string, index: number) => (
+                                      <img
+                                        key={index}
+                                        src={photo}
+                                        alt={`Admin photo ${index + 1}`}
+                                        className="w-full h-24 object-cover rounded border cursor-pointer"
+                                        onClick={() => window.open(photo, '_blank')}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
                               {report.review_notes && (
                                 <div>
                                   <h4 className="font-semibold mb-2">Previous Review Notes:</h4>
@@ -284,6 +345,39 @@ export default function IncidentReportsAdmin() {
                                   placeholder="Add your review notes, actions taken, or recommendations..."
                                   className="min-h-[100px]"
                                 />
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label>Add Documentation Photos (Optional)</Label>
+                                <Input
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  onChange={handleAdminPhotoUpload}
+                                  className="cursor-pointer"
+                                />
+                                {adminPhotos.length > 0 && (
+                                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                    {adminPhotos.map((photo, index) => (
+                                      <div key={index} className="relative">
+                                        <img
+                                          src={photo}
+                                          alt={`Admin photo ${index + 1}`}
+                                          className="w-full h-24 object-cover rounded border"
+                                        />
+                                        <Button
+                                          type="button"
+                                          variant="destructive"
+                                          size="sm"
+                                          className="absolute top-1 right-1 h-6 w-6 p-0"
+                                          onClick={() => removeAdminPhoto(index)}
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
 
                               <Button
@@ -350,6 +444,40 @@ export default function IncidentReportsAdmin() {
                 <p className="text-sm text-muted-foreground">{getSeverityBadge(selectedReport.severity)}</p>
               </div>
 
+              {selectedReport.photos && selectedReport.photos.length > 0 && (
+                <div>
+                  <h4 className="font-semibold mb-2">Incident Photos:</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {selectedReport.photos.map((photo: string, index: number) => (
+                      <img
+                        key={index}
+                        src={photo}
+                        alt={`Incident photo ${index + 1}`}
+                        className="w-full h-24 object-cover rounded border cursor-pointer"
+                        onClick={() => window.open(photo, '_blank')}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedReport.admin_photos && selectedReport.admin_photos.length > 0 && (
+                <div>
+                  <h4 className="font-semibold mb-2">Admin Documentation Photos:</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {selectedReport.admin_photos.map((photo: string, index: number) => (
+                      <img
+                        key={index}
+                        src={photo}
+                        alt={`Admin photo ${index + 1}`}
+                        className="w-full h-24 object-cover rounded border cursor-pointer"
+                        onClick={() => window.open(photo, '_blank')}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {selectedReport.review_notes && (
                 <div>
                   <h4 className="font-semibold mb-2">Previous Review Notes:</h4>
@@ -399,6 +527,39 @@ export default function IncidentReportsAdmin() {
                   placeholder="Add your review notes, actions taken, or recommendations..."
                   className="min-h-[100px]"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Add Documentation Photos (Optional)</Label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleAdminPhotoUpload}
+                  className="cursor-pointer"
+                />
+                {adminPhotos.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {adminPhotos.map((photo, index) => (
+                      <div key={index} className="relative">
+                        <img
+                          src={photo}
+                          alt={`Admin photo ${index + 1}`}
+                          className="w-full h-24 object-cover rounded border"
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="absolute top-1 right-1 h-6 w-6 p-0"
+                          onClick={() => removeAdminPhoto(index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <Button
