@@ -13,16 +13,17 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(), 
     mode === "development" && componentTagger(),
-    mode === "production" && viteCompression({
-      algorithm: 'gzip',
-      ext: '.gz',
-      threshold: 10240, // Only compress files > 10kb
-    }),
-    mode === "production" && viteCompression({
-      algorithm: 'brotliCompress',
-      ext: '.br',
-      threshold: 10240,
-    }),
+    // Compression disabled
+    // mode === "production" && viteCompression({
+    //   algorithm: 'gzip',
+    //   ext: '.gz',
+    //   threshold: 10240, // Only compress files > 10kb
+    // }),
+    // mode === "production" && viteCompression({
+    //   algorithm: 'brotliCompress',
+    //   ext: '.br',
+    //   threshold: 10240,
+    // }),
   ].filter(Boolean),
   resolve: {
     alias: {

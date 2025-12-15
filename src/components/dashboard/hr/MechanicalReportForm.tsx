@@ -10,7 +10,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Wrench, Send } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Wrench, Send, WifiOff } from "lucide-react";
+import type { PendingMechanicalReport, Severity } from "@/lib/offlineDb";
 
 const mechanicalReportSchema = z.object({
   truck_id: z.string().min(1, "Truck selection is required"),
@@ -24,11 +26,25 @@ type MechanicalReportForm = z.infer<typeof mechanicalReportSchema>;
 interface Truck {
   id: string;
   code: string;
-  plate_number: string;
+  plate_number?: string | null;
   type: string;
 }
 
-export default function MechanicalReportForm() {
+interface MechanicalReportFormProps {
+  isOnline?: boolean;
+  profile?: any;
+  cachedTrucks?: Truck[];
+  createPendingMechanicalReport?: (data: Omit<PendingMechanicalReport, 'id' | 'created_at' | 'status' | 'user_id'>) => Promise<string>;
+  onOfflineSuccess?: () => void;
+}
+
+export default function MechanicalReportForm({
+  isOnline = true,
+  profile,
+  cachedTrucks = [],
+  createPendingMechanicalReport,
+  onOfflineSuccess,
+}: MechanicalReportFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   
@@ -43,8 +59,13 @@ export default function MechanicalReportForm() {
   });
 
   useEffect(() => {
-    fetchTrucks();
-  }, []);
+    if (isOnline) {
+      fetchTrucks();
+    } else {
+      // Use cached trucks when offline
+      setTrucks(cachedTrucks as Truck[]);
+    }
+  }, [isOnline, cachedTrucks]);
 
   const fetchTrucks = async () => {
     try {
@@ -64,10 +85,38 @@ export default function MechanicalReportForm() {
   const onSubmit = async (data: MechanicalReportForm) => {
     setIsSubmitting(true);
     try {
+      const selectedTruck = trucks.find(t => t.id === data.truck_id);
+      
+      // Handle offline mode
+      if (!isOnline) {
+        if (!createPendingMechanicalReport || !profile) {
+          toast.error("Profile information is required for offline submission");
+          return;
+        }
+
+        await createPendingMechanicalReport({
+          reporter_name: profile.full_name || "Unknown",
+          truck_id: data.truck_id,
+          truck_code: selectedTruck?.code || data.truck_id,
+          issue_description: data.issue_description,
+          severity: data.severity as Severity,
+          truck_operational: data.truck_operational,
+          report_date: new Date().toISOString().split('T')[0],
+        });
+
+        toast.success("Mechanical report saved offline. Will sync when online.");
+        if (onOfflineSuccess) {
+          onOfflineSuccess();
+        }
+        form.reset();
+        return;
+      }
+
+      // Online mode
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { data: profile } = await supabase
+      const { data: userProfile } = await supabase
         .from("profiles")
         .select("full_name")
         .eq("user_id", user.id)
@@ -75,7 +124,7 @@ export default function MechanicalReportForm() {
 
       const { error } = await supabase.from("mechanical_reports").insert({
         reported_by: user.id,
-        reporter_name: profile?.full_name || "Unknown",
+        reporter_name: userProfile?.full_name || "Unknown",
         report_date: new Date().toISOString().split('T')[0],
         ...data,
       });
@@ -95,12 +144,23 @@ export default function MechanicalReportForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Wrench className="h-5 w-5" />
-          Submit Mechanical Report
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Wrench className="h-5 w-5" />
+            Submit Mechanical Report
+          </CardTitle>
+          {!isOnline && (
+            <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+              <WifiOff className="h-3 w-3 mr-1" />
+              Offline
+            </Badge>
+          )}
+        </div>
         <CardDescription>
-          Report vehicle issues for mechanic diagnosis and action
+          {!isOnline
+            ? "Report will be saved locally and submitted when you're back online"
+            : "Report vehicle issues for mechanic diagnosis and action"
+          }
         </CardDescription>
       </CardHeader>
       <CardContent>

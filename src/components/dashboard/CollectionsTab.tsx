@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Plus, Eye, Printer, Download, List } from "lucide-react";
+import { Plus, Eye, Printer, Download, List, WifiOff } from "lucide-react";
 import CreateReceiptForm from "../collection/CreateReceiptForm";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,8 +14,25 @@ import { useToast } from "@/hooks/use-toast";
 import { generateCSV, downloadCSV } from "@/lib/csvUtils";
 import { printerService } from "@/lib/printerService";
 import TallyTemplate, { TallyTemplateProps } from "../collection/TallyTemplate";
+import type { CachedClient, CachedTruck, CachedDriver, CachedHelper } from "@/lib/offlineDb";
 
-const CollectionsTab = ({ profile }: { profile: any }) => {
+interface CollectionsTabProps {
+  profile: any;
+  isOnline?: boolean;
+  cachedClients?: CachedClient[];
+  cachedTrucks?: CachedTruck[];
+  cachedDrivers?: CachedDriver[];
+  cachedHelpers?: CachedHelper[];
+}
+
+const CollectionsTab = ({ 
+  profile, 
+  isOnline = true, 
+  cachedClients = [], 
+  cachedTrucks = [], 
+  cachedDrivers = [], 
+  cachedHelpers = [] 
+}: CollectionsTabProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [receipts, setReceipts] = useState<any[]>([]);
@@ -24,30 +41,49 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedReceipts, setSelectedReceipts] = useState<Set<string>>(new Set());
   const [tallyData, setTallyData] = useState<TallyTemplateProps | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalReceipts, setTotalReceipts] = useState(0);
   const tallyTemplateRef = useRef<HTMLDivElement>(null);
   const isMobile = Capacitor.isNativePlatform();
   const isAdmin = profile?.role === "admin";
+  const ITEMS_PER_PAGE = 10;
 
-  const fetchReceipts = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("collection_receipts")
-      .select("id,created_at,qr_code,signed_by,pdf_url")
-      .order("created_at", { ascending: false })
-      .limit(20);
-    if (error) setError(error.message);
-    setReceipts(data || []);
-    setLoading(false);
-  };
+  const fetchReceipts = async (page = 1) => {
+    if (!isOnline) {
+      setError("Currently offline - cannot fetch collections");
+      setLoading(false);
+      return;
+    }
 
-  useEffect(() => {
-    fetchReceipts();
-  }, []);
+    setLoading(true);
+    setError(null); // Clear previous errors
+    const from = (page - 1) * ITEMS_PER_PAGE; 
+    const to = from + ITEMS_PER_PAGE - 1;
 
-  const handleSuccess = () => {
-    setDialogOpen(false);
-    fetchReceipts();
-  };
+    const { data, error, count } = await supabase
+      .from("collection_receipts")
+      .select("id,created_at,qr_code,signed_by,pdf_url", { count: 'exact' })
+      .order("created_at", { ascending: false })
+      .range(from, to); 
+
+    if (error) setError(error.message);
+    setReceipts(data || []);
+    setTotalReceipts(count || 0);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    // Trigger fetch on isOnline or currentPage change
+    fetchReceipts(currentPage);
+  }, [isOnline, currentPage]);
+
+  const handleSuccess = () => {
+    setDialogOpen(false);
+    // Only fetch if online, otherwise the offline message will remain
+    if (isOnline) {
+      fetchReceipts(currentPage); // Use currentPage to refresh the current page
+    }
+  };
 
   const handleViewReceipt = (receiptId: string) => {
     navigate(`/receipt-preview?id=${receiptId}`);
@@ -86,7 +122,7 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
 
       toast({ title: "Success", description: `Deleted ${selectedReceipts.size} receipts` });
       setSelectedReceipts(new Set());
-      fetchReceipts();
+      fetchReceipts(currentPage);
     } catch (err: any) {
       toast({ title: "Delete Error", description: err.message, variant: "destructive" });
     }
@@ -257,7 +293,15 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
                 <DialogHeader>
                   <DialogTitle>New Collection Receipt</DialogTitle>
                 </DialogHeader>
-                <CreateReceiptForm profile={profile} onSuccess={handleSuccess} />
+                <CreateReceiptForm 
+                  profile={profile} 
+                  onSuccess={handleSuccess} 
+                  isOnline={isOnline}
+                  cachedClients={cachedClients}
+                  cachedTrucks={cachedTrucks}
+                  cachedDrivers={cachedDrivers}
+                  cachedHelpers={cachedHelpers}
+                />
               </DialogContent>
             </Dialog>
           </div>
@@ -267,7 +311,15 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
         {loading ? (
           <div className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
         ) : error ? (
-          <p className="text-destructive">{error}</p>
+          <div className="flex flex-col items-center justify-center py-8 px-4">
+            <div className="rounded-full bg-muted p-3 mb-3">
+              <WifiOff className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <p className="text-muted-foreground text-center font-medium">{error}</p>
+            <p className="text-xs text-muted-foreground text-center mt-1">
+              You can still create new collections offline
+            </p>
+          </div>
         ) : receipts.length === 0 ? (
           <p className="text-muted-foreground">No receipts yet.</p>
         ) : isMobile ? (
@@ -381,6 +433,30 @@ const CollectionsTab = ({ profile }: { profile: any }) => {
               ))}
             </TableBody>
           </Table>
+        )}
+        
+        {!isMobile && totalReceipts > ITEMS_PER_PAGE && (
+          <div className="flex justify-center items-center gap-2 mt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {currentPage} of {Math.ceil(totalReceipts / ITEMS_PER_PAGE)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalReceipts / ITEMS_PER_PAGE), p + 1))}
+              disabled={currentPage >= Math.ceil(totalReceipts / ITEMS_PER_PAGE)}
+            >
+              Next
+            </Button>
+          </div>
         )}
       </CardContent>
 

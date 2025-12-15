@@ -1,12 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Delete, X } from "lucide-react";
+import { Delete, X, Plus } from "lucide-react";
 
 
 interface NumericKeypadProps {
   value: string;
   onChange: (value: string) => void;
   onClose?: () => void;
+  onSubmit?: () => void;
   maxLength?: number;
   allowDecimal?: boolean;
 }
@@ -15,6 +16,7 @@ export const NumericKeypad = ({
   value,
   onChange,
   onClose,
+  onSubmit,
   maxLength = 10,
   allowDecimal = true,
 }: NumericKeypadProps) => {
@@ -109,6 +111,18 @@ export const NumericKeypad = ({
         >
           Clear
         </Button>
+        {onSubmit && (
+          <Button
+            variant="default"
+            size="lg"
+            className="h-16 col-span-3 text-lg font-semibold bg-green-600 hover:bg-green-700"
+            onClick={onSubmit}
+            disabled={!value || value === "0" || parseFloat(value) <= 0}
+          >
+            <Plus className="h-5 w-5 mr-2" />
+            Add Item
+          </Button>
+        )}
       </div>
     </Card>
   );

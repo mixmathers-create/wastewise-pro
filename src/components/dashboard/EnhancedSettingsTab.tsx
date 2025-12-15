@@ -12,10 +12,12 @@ import { printerService } from "@/lib/printerService";
 import { SchedulingParametersSettings } from "./SchedulingParametersSettings";
 import UserManagement from "./UserManagement";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useReceiptSettings } from "@/hooks/useReceiptSettings";
 
 const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
   const { toast } = useToast();
   const roleAccess = useRoleAccess(profile?.user_type || 'admin');
+  const { logoUrl: dbLogoUrl, updateLogo, loading } = useReceiptSettings();
   const [logoUrl, setLogoUrl] = useState("");
   const [companyName, setCompanyName] = useState("WasteWise");
   const [companyAddress, setCompanyAddress] = useState("");
@@ -26,7 +28,8 @@ const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
   const [printerConnected, setPrinterConnected] = useState(false);
 
   useEffect(() => {
-    const savedLogo = localStorage.getItem("receipt_logo");
+    if (dbLogoUrl) setLogoUrl(dbLogoUrl);
+    
     const savedCompanyName = localStorage.getItem("receipt_company_name");
     const savedCompanyAddress = localStorage.getItem("receipt_company_address");
     const savedCompanyContact = localStorage.getItem("receipt_company_contact");
@@ -34,33 +37,40 @@ const EnhancedSettingsTab = ({ profile }: { profile: any }) => {
     const savedFooter = localStorage.getItem("receipt_footer");
     const savedFontSize = localStorage.getItem("receipt_font_size");
 
-    if (savedLogo) setLogoUrl(savedLogo);
     if (savedCompanyName) setCompanyName(savedCompanyName);
     if (savedCompanyAddress) setCompanyAddress(savedCompanyAddress);
     if (savedCompanyContact) setCompanyContact(savedCompanyContact);
     if (savedHeader) setReceiptHeader(savedHeader);
     if (savedFooter) setReceiptFooter(savedFooter);
     if (savedFontSize) setFontSize(savedFontSize);
-  }, []);
+  }, [dbLogoUrl]);
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         const result = reader.result as string;
-        setLogoUrl(result);
-        localStorage.setItem("receipt_logo", result);
-        toast({ title: "Logo Updated", description: "Receipt logo saved successfully" });
+        try {
+          await updateLogo(result);
+          setLogoUrl(result);
+          toast({ title: "Logo Updated", description: "Receipt logo saved successfully" });
+        } catch (error) {
+          toast({ title: "Error", description: "Failed to save logo", variant: "destructive" });
+        }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleRemoveLogo = () => {
-    setLogoUrl("");
-    localStorage.removeItem("receipt_logo");
-    toast({ title: "Logo Removed", description: "Receipt logo has been removed" });
+  const handleRemoveLogo = async () => {
+    try {
+      await updateLogo(null);
+      setLogoUrl("");
+      toast({ title: "Logo Removed", description: "Receipt logo has been removed" });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to remove logo", variant: "destructive" });
+    }
   };
 
   const saveSettings = () => {

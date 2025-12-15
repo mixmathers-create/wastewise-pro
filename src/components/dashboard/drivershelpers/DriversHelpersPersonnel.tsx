@@ -22,6 +22,7 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
   const [recyclers, setRecyclers] = useState<any[]>([]);
   const [management, setManagement] = useState<any[]>([]);
   const [mechanics, setMechanics] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [editingDriver, setEditingDriver] = useState<any>(null);
   const [editingHelper, setEditingHelper] = useState<any>(null);
   const [editingRecycler, setEditingRecycler] = useState<any>(null);
@@ -48,11 +49,18 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
   const MAX_ITEMS = 100;
 
   useEffect(() => {
-    fetchDrivers();
-    fetchHelpers();
-    fetchRecyclers();
-    fetchManagement();
-    fetchMechanics();
+    const fetchAllData = async () => {
+      setLoading(true);
+      await Promise.all([
+        fetchDrivers(),
+        fetchHelpers(),
+        fetchRecyclers(),
+        fetchManagement(),
+        fetchMechanics()
+      ]);
+      setLoading(false);
+    };
+    fetchAllData();
   }, []);
 
   const fetchDrivers = async () => {
@@ -661,6 +669,9 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
             </div>
           </CardHeader>
           <CardContent>
+            {loading ? (
+              <div className="text-center py-8">Loading drivers...</div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -742,7 +753,8 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 ))}
               </TableBody>
             </Table>
-            {drivers.length > ITEMS_PER_PAGE && (
+            )}
+            {!loading && drivers.length > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -813,6 +825,9 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
             </div>
           </CardHeader>
           <CardContent>
+            {loading ? (
+              <div className="text-center py-8">Loading helpers...</div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -887,7 +902,8 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 ))}
               </TableBody>
             </Table>
-            {helpers.length > ITEMS_PER_PAGE && (
+            )}
+            {!loading && helpers.length > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -958,6 +974,9 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
             </div>
           </CardHeader>
           <CardContent>
+            {loading ? (
+              <div className="text-center py-8">Loading recyclers...</div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1032,7 +1051,8 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 ))}
               </TableBody>
             </Table>
-            {recyclers.length > ITEMS_PER_PAGE && (
+            )}
+            {!loading && recyclers.length > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -1103,6 +1123,9 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
             </div>
           </CardHeader>
           <CardContent>
+            {loading ? (
+              <div className="text-center py-8">Loading management...</div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1177,7 +1200,8 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 ))}
               </TableBody>
             </Table>
-            {management.length > ITEMS_PER_PAGE && (
+            )}
+            {!loading && management.length > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -1248,6 +1272,9 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
             </div>
           </CardHeader>
           <CardContent>
+            {loading ? (
+              <div className="text-center py-8">Loading mechanics...</div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1322,7 +1349,8 @@ export default function DriversHelpersPersonnel({ profile }: { profile: any }) {
                 ))}
               </TableBody>
             </Table>
-            {mechanics.length > ITEMS_PER_PAGE && (
+            )}
+            {!loading && mechanics.length > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"

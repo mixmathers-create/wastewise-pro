@@ -12,7 +12,7 @@ export const useRoleAccess = (userType: string) => {
     canAccessPersonnel: isAdmin,
     canAccessMechanics: isAdmin || isMechanic,
     canAccessScheduling: isAdmin,
-    canAccessHR: isAdmin || isHR,
+    canAccessHR: isAdmin || isHR || isCollector,
     canAccessAnalytics: isAdmin,
     canAccessSettings: isAdmin,
 

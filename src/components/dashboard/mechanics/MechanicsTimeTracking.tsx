@@ -24,18 +24,26 @@ export function MechanicsTimeTracking() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activePage, setActivePage] = useState(1);
   const [timedOutPage, setTimedOutPage] = useState(1);
+  const [totalActive, setTotalActive] = useState(0);
+  const [totalTimedOut, setTotalTimedOut] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("active");
+  const [showTimeOutDialog, setShowTimeOutDialog] = useState(false);
+  const [selectedLogForTimeOut, setSelectedLogForTimeOut] = useState<any>(null);
+  const [idInput, setIdInput] = useState("");
+  const [timeOutLoading, setTimeOutLoading] = useState(false);
+  const [mechanicIdNumbers, setMechanicIdNumbers] = useState<Record<string, string>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const { toast } = useToast();
   
-  const ITEMS_PER_PAGE = 5;
-  const MAX_ITEMS = 100;
+  const ITEMS_PER_PAGE = 10;
 
   useEffect(() => {
     fetchMechanics();
     fetchTimeLogs();
-  }, []);
+  }, [activePage, timedOutPage]);
 
   useEffect(() => {
     return () => {
@@ -75,21 +83,88 @@ export function MechanicsTimeTracking() {
   }, [showCamera, capturedPhoto]);
 
   const fetchMechanics = async () => {
-    const { data } = await supabase.from("mechanics").select("id,name").order("name");
-    setMechanics(data || []);
+    try {
+      const { data } = await supabase
+        .from("mechanics")
+        .select("id,name,id_number")
+        .order("name");
+      setMechanics(data || []);
+      
+      // Build ID number lookup map
+      const idMap: Record<string, string> = {};
+      data?.forEach(m => { if (m.id_number) idMap[m.id] = m.id_number; });
+      setMechanicIdNumbers(idMap);
+    } catch (error) {
+      console.error('Error fetching mechanics:', error);
+    }
   };
 
-  const fetchTimeLogs = async () => {
-    const { data } = await supabase
-      .from("mechanic_time_logs")
-      .select("*, mechanics(name)")
-      .order("time_in", { ascending: false })
-      .limit(MAX_ITEMS);
-    setTimeLogs(data || []);
+  const fetchTimeLogs = async (tab = activeTab) => {
+    setLoading(true);
+    setTimeLogs([]);
+    try {
+      // Fetch both counts on initial load for tab badges
+      const [activeCountResult, timedOutCountResult] = await Promise.all([
+        supabase
+          .from("mechanic_time_logs")
+          .select("id", { count: 'exact', head: true })
+          .is("time_out", null),
+        supabase
+          .from("mechanic_time_logs")
+          .select("id", { count: 'exact', head: true })
+          .not("time_out", "is", null)
+      ]);
+      
+      setTotalActive(activeCountResult.count || 0);
+      setTotalTimedOut(timedOutCountResult.count || 0);
+      
+      if (tab === "active") {
+        const { data } = await supabase
+          .from("mechanic_time_logs")
+          .select("id,mechanic_id,time_in,latitude,longitude")
+          .is("time_out", null)
+          .order("time_in", { ascending: false })
+          .range((activePage - 1) * ITEMS_PER_PAGE, activePage * ITEMS_PER_PAGE - 1);
+        
+        if (data?.length) {
+          const mechanicIds = [...new Set(data.map(log => log.mechanic_id))];
+          const { data: mechanics } = await supabase
+            .from("mechanics")
+            .select("id,name")
+            .in("id", mechanicIds);
+          
+          const mechanicsMap = new Map(mechanics?.map(m => [m.id, m]) || []);
+          setTimeLogs(data.map(log => ({ ...log, mechanics: mechanicsMap.get(log.mechanic_id) })));
+        }
+      } else {
+        const { data } = await supabase
+          .from("mechanic_time_logs")
+          .select("id,mechanic_id,time_in,time_out,latitude,longitude")
+          .not("time_out", "is", null)
+          .order("time_in", { ascending: false })
+          .range((timedOutPage - 1) * ITEMS_PER_PAGE, timedOutPage * ITEMS_PER_PAGE - 1);
+        
+        if (data?.length) {
+          const mechanicIds = [...new Set(data.map(log => log.mechanic_id))];
+          const { data: mechanics } = await supabase
+            .from("mechanics")
+            .select("id,name")
+            .in("id", mechanicIds);
+          
+          const mechanicsMap = new Map(mechanics?.map(m => [m.id, m]) || []);
+          setTimeLogs(data.map(log => ({ ...log, mechanics: mechanicsMap.get(log.mechanic_id) })));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching time logs:', error);
+      toast({ title: "Error", description: "Failed to load time logs", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
   
-  const activeLogs = timeLogs.filter(log => !log.time_out);
-  const timedOutLogs = timeLogs.filter(log => log.time_out);
+  const activeLogs = activeTab === "active" ? timeLogs : [];
+  const timedOutLogs = activeTab === "timedout" ? timeLogs : [];
 
   const getCurrentLocation = (): Promise<{ latitude: number; longitude: number }> => {
     return new Promise((resolve, reject) => {
@@ -218,19 +293,44 @@ export function MechanicsTimeTracking() {
     setShowCamera(false);
   };
 
-  const handleTimeOut = async (logId: string) => {
+  const handleTimeOutClick = (log: any) => {
+    setSelectedLogForTimeOut(log);
+    setIdInput("");
+    setShowTimeOutDialog(true);
+  };
+
+  const handleTimeOut = async () => {
+    if (!selectedLogForTimeOut) return;
+    
+    const expectedId = mechanicIdNumbers[selectedLogForTimeOut.mechanic_id];
+    if (!expectedId) {
+      toast({ title: "Error", description: "Could not verify ID - mechanic record not found", variant: "destructive" });
+      return;
+    }
+    
+    if (idInput.trim() !== expectedId) {
+      toast({ title: "Error", description: "ID number does not match. Please enter the correct ID.", variant: "destructive" });
+      return;
+    }
+    
+    setTimeOutLoading(true);
     try {
       const { error } = await supabase
         .from("mechanic_time_logs")
         .update({ time_out: new Date().toISOString() })
-        .eq("id", logId);
+        .eq("id", selectedLogForTimeOut.id);
 
       if (error) throw error;
 
       toast({ title: "Success", description: "Time out recorded" });
+      setShowTimeOutDialog(false);
+      setSelectedLogForTimeOut(null);
+      setIdInput("");
       fetchTimeLogs();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setTimeOutLoading(false);
     }
   };
 
@@ -371,10 +471,10 @@ export function MechanicsTimeTracking() {
           </DialogContent>
         </Dialog>
 
-        <Tabs defaultValue="active" className="mt-6">
+        <Tabs defaultValue="active" className="mt-6" onValueChange={(value) => { setActiveTab(value); fetchTimeLogs(value); }}>
           <TabsList>
-            <TabsTrigger value="active">Active ({activeLogs.length})</TabsTrigger>
-            <TabsTrigger value="timedout">Timed Out ({timedOutLogs.length})</TabsTrigger>
+            <TabsTrigger value="active">Active ({totalActive})</TabsTrigger>
+            <TabsTrigger value="timedout">Timed Out ({totalTimedOut})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="active">
@@ -391,7 +491,22 @@ export function MechanicsTimeTracking() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {activeLogs.slice((activePage - 1) * ITEMS_PER_PAGE, activePage * ITEMS_PER_PAGE).map((log) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        Loading...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : activeLogs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      No active time logs found
+                    </TableCell>
+                  </TableRow>
+                ) : activeLogs.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell className="font-medium">{log.mechanics?.name}</TableCell>
                     <TableCell>{format(new Date(log.time_in), 'MMM dd, yyyy HH:mm')}</TableCell>
@@ -402,22 +517,27 @@ export function MechanicsTimeTracking() {
                       {calculateTotalTime(log.time_in, log.time_out)}
                     </TableCell>
                     <TableCell>
-                      {log.photo_url && (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => setShowPhotoPreview(log.photo_url)}
-                        >
-                          <Camera className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={async () => {
+                          const { data } = await supabase
+                            .from("mechanic_time_logs")
+                            .select("photo_url")
+                            .eq("id", log.id)
+                            .single();
+                          if (data?.photo_url) setShowPhotoPreview(data.photo_url);
+                        }}
+                      >
+                        <Camera className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {log.latitude && log.longitude ? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}` : '-'}
                     </TableCell>
                     <TableCell>
                       {!log.time_out && (
-                        <Button variant="outline" size="sm" onClick={() => handleTimeOut(log.id)}>
+                        <Button variant="outline" size="sm" onClick={() => handleTimeOutClick(log)}>
                           <Clock className="h-4 w-4 mr-2" /> Time Out
                         </Button>
                       )}
@@ -426,7 +546,7 @@ export function MechanicsTimeTracking() {
                 ))}
               </TableBody>
             </Table>
-            {activeLogs.length > ITEMS_PER_PAGE && (
+            {activeLogs.length === ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -437,13 +557,13 @@ export function MechanicsTimeTracking() {
                   Previous
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                  Page {activePage} of {Math.ceil(activeLogs.length / ITEMS_PER_PAGE)}
+                  Page {activePage}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setActivePage(p => Math.min(Math.ceil(activeLogs.length / ITEMS_PER_PAGE), p + 1))}
-                  disabled={activePage >= Math.ceil(activeLogs.length / ITEMS_PER_PAGE)}
+                  onClick={() => setActivePage(p => p + 1)}
+                  disabled={activeLogs.length < ITEMS_PER_PAGE}
                 >
                   Next
                 </Button>
@@ -464,7 +584,22 @@ export function MechanicsTimeTracking() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {timedOutLogs.slice((timedOutPage - 1) * ITEMS_PER_PAGE, timedOutPage * ITEMS_PER_PAGE).map((log) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        Loading...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : timedOutLogs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      No completed time logs found
+                    </TableCell>
+                  </TableRow>
+                ) : timedOutLogs.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell className="font-medium">{log.mechanics?.name}</TableCell>
                     <TableCell>{format(new Date(log.time_in), 'MMM dd, yyyy HH:mm')}</TableCell>
@@ -475,15 +610,20 @@ export function MechanicsTimeTracking() {
                       {calculateTotalTime(log.time_in, log.time_out)}
                     </TableCell>
                     <TableCell>
-                      {log.photo_url && (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => setShowPhotoPreview(log.photo_url)}
-                        >
-                          <Camera className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={async () => {
+                          const { data } = await supabase
+                            .from("mechanic_time_logs")
+                            .select("photo_url")
+                            .eq("id", log.id)
+                            .single();
+                          if (data?.photo_url) setShowPhotoPreview(data.photo_url);
+                        }}
+                      >
+                        <Camera className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {log.latitude && log.longitude ? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}` : '-'}
@@ -492,7 +632,7 @@ export function MechanicsTimeTracking() {
                 ))}
               </TableBody>
             </Table>
-            {timedOutLogs.length > ITEMS_PER_PAGE && (
+            {totalTimedOut > ITEMS_PER_PAGE && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -503,13 +643,13 @@ export function MechanicsTimeTracking() {
                   Previous
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                  Page {timedOutPage} of {Math.ceil(timedOutLogs.length / ITEMS_PER_PAGE)}
+                  Page {timedOutPage} of {Math.ceil(totalTimedOut / ITEMS_PER_PAGE)}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setTimedOutPage(p => Math.min(Math.ceil(timedOutLogs.length / ITEMS_PER_PAGE), p + 1))}
-                  disabled={timedOutPage >= Math.ceil(timedOutLogs.length / ITEMS_PER_PAGE)}
+                  onClick={() => setTimedOutPage(p => p + 1)}
+                  disabled={timedOutPage >= Math.ceil(totalTimedOut / ITEMS_PER_PAGE)}
                 >
                   Next
                 </Button>
@@ -518,6 +658,58 @@ export function MechanicsTimeTracking() {
           </TabsContent>
         </Tabs>
       </CardContent>
+
+      <Dialog open={showTimeOutDialog} onOpenChange={setShowTimeOutDialog}>
+        <DialogContent className="w-[95vw] max-w-sm mx-auto">
+          <DialogHeader>
+            <DialogTitle>Time Out Verification</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {selectedLogForTimeOut && (
+              <div className="bg-muted p-3 rounded">
+                <div className="text-sm font-medium">{selectedLogForTimeOut.mechanics?.name}</div>
+                <div className="text-xs text-muted-foreground">
+                  Time in: {format(new Date(selectedLogForTimeOut.time_in), "MMM dd, yyyy HH:mm")}
+                </div>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium mb-2 block">ID Number</label>
+              <Input
+                type="text"
+                placeholder="Enter your ID number"
+                value={idInput}
+                onChange={(e) => setIdInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleTimeOut();
+                }}
+                className="text-base"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => {
+                  setShowTimeOutDialog(false);
+                  setSelectedLogForTimeOut(null);
+                  setIdInput("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                className="flex-1"
+                onClick={handleTimeOut}
+                disabled={!idInput.trim() || timeOutLoading}
+              >
+                {timeOutLoading ? "Verifying..." : "Confirm Time Out"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!showPhotoPreview} onOpenChange={() => setShowPhotoPreview(null)}>
         <DialogContent className="max-w-2xl">

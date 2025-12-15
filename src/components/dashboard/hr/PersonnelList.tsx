@@ -3,7 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, WifiOff, MoreHorizontal } from "lucide-react";
 
 interface Personnel {
   id: string;
@@ -14,17 +16,109 @@ interface Personnel {
   birthdate: string | null;
 }
 
-const PersonnelList = () => {
+interface CachedPersonnel {
+  id: string;
+  name: string;
+  contact_number?: string | null;
+  status?: string | null;
+  birthdate?: string | null;
+}
+
+interface PersonnelListProps {
+  isOnline?: boolean;
+  cachedDrivers?: CachedPersonnel[];
+  cachedHelpers?: CachedPersonnel[];
+  cachedMechanics?: CachedPersonnel[];
+  cachedRecyclers?: CachedPersonnel[];
+  cachedManagement?: CachedPersonnel[];
+}
+
+const PersonnelList = ({ 
+  isOnline = true,
+  cachedDrivers = [],
+  cachedHelpers = [],
+  cachedMechanics = [],
+  cachedRecyclers = [],
+  cachedManagement = [],
+}: PersonnelListProps) => {
   const [personnel, setPersonnel] = useState<Personnel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [usingCachedData, setUsingCachedData] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState<Personnel | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   useEffect(() => {
-    fetchPersonnel();
-  }, []);
+    if (isOnline) {
+      fetchPersonnel();
+    }
+  }, [isOnline]);
+
+  useEffect(() => {
+    if (!isOnline) {
+      loadCachedPersonnel();
+    }
+  }, [isOnline, cachedDrivers.length, cachedHelpers.length, cachedMechanics.length, cachedRecyclers.length, cachedManagement.length]);
+
+  const loadCachedPersonnel = () => {
+    const allCached: Personnel[] = [
+      ...cachedDrivers.map(d => ({ 
+        id: d.id, 
+        name: d.name, 
+        type: "Driver", 
+        contact_number: d.contact_number || null,
+        status: d.status || null,
+        birthdate: d.birthdate || null,
+      })),
+      ...cachedHelpers.map(h => ({ 
+        id: h.id, 
+        name: h.name, 
+        type: "Helper",
+        contact_number: h.contact_number || null,
+        status: h.status || null,
+        birthdate: h.birthdate || null,
+      })),
+      ...cachedMechanics.map(m => ({ 
+        id: m.id, 
+        name: m.name, 
+        type: "Mechanic",
+        contact_number: m.contact_number || null,
+        status: m.status || null,
+        birthdate: m.birthdate || null,
+      })),
+      ...cachedRecyclers.map(r => ({ 
+        id: r.id, 
+        name: r.name, 
+        type: "Recycler",
+        contact_number: r.contact_number || null,
+        status: r.status || null,
+        birthdate: r.birthdate || null,
+      })),
+      ...cachedManagement.map(mg => ({ 
+        id: mg.id, 
+        name: mg.name, 
+        type: "Management",
+        contact_number: mg.contact_number || null,
+        status: mg.status || null,
+        birthdate: mg.birthdate || null,
+      })),
+    ];
+
+    if (allCached.length > 0) {
+      setPersonnel(allCached);
+      setUsingCachedData(true);
+      setError(null);
+    } else {
+      setError("No cached data available. Go online to sync personnel data.");
+    }
+    setLoading(false);
+  };
 
   const fetchPersonnel = async () => {
     try {
       setLoading(true);
+      setError(null);
+      setUsingCachedData(false);
       
       // Fetch drivers
       const { data: drivers } = await supabase
@@ -67,6 +161,7 @@ const PersonnelList = () => {
       setPersonnel(allPersonnel);
     } catch (error) {
       console.error("Error fetching personnel:", error);
+      setError("Failed to load personnel");
     } finally {
       setLoading(false);
     }
@@ -83,38 +178,140 @@ const PersonnelList = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>All Personnel</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle>All Personnel</CardTitle>
+          {usingCachedData && (
+            <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+              <WifiOff className="h-3 w-3 mr-1" />
+              Offline
+            </Badge>
+          )}
+        </div>
+        {usingCachedData && (
+          <p className="text-xs text-muted-foreground">
+            Showing cached data. Go online to get latest updates.
+          </p>
+        )}
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Contact</TableHead>
-              <TableHead>Birthdate</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {personnel.map((person) => (
-              <TableRow key={`${person.type}-${person.id}`}>
-                <TableCell className="font-medium">{person.name}</TableCell>
-                <TableCell>
-                  <Badge variant="outline">{person.type}</Badge>
-                </TableCell>
-                <TableCell>{person.contact_number || "N/A"}</TableCell>
-                <TableCell>{person.birthdate || "N/A"}</TableCell>
-                <TableCell>
-                  <Badge variant={person.status === "available" ? "default" : "secondary"}>
-                    {person.status || "N/A"}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        {error ? (
+          <div className="flex flex-col items-center justify-center py-8 px-4">
+            <div className="rounded-full bg-muted p-3 mb-3">
+              <WifiOff className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <p className="text-muted-foreground text-center font-medium">{error}</p>
+            <p className="text-xs text-muted-foreground text-center mt-1">
+              Connect to internet to sync personnel data first.
+            </p>
+          </div>
+        ) : personnel.length === 0 ? (
+          <p className="text-muted-foreground">No personnel found.</p>
+        ) : (
+          <>
+          <div className="block md:hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {personnel.map((person) => (
+                  <TableRow key={`${person.type}-${person.id}`}>
+                    <TableCell className="font-medium">{person.name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{person.type}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => {
+                          setSelectedPerson(person);
+                          setShowDetailsModal(true);
+                        }}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Birthdate</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {personnel.map((person) => (
+                  <TableRow key={`${person.type}-${person.id}`}>
+                    <TableCell className="font-medium">{person.name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{person.type}</Badge>
+                    </TableCell>
+                    <TableCell>{person.contact_number || "N/A"}</TableCell>
+                    <TableCell>{person.birthdate || "N/A"}</TableCell>
+                    <TableCell>
+                      <Badge variant={person.status === "available" ? "default" : "secondary"}>
+                        {person.status || "N/A"}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          </>
+        )}
       </CardContent>
+      
+      <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Personnel Details</DialogTitle>
+          </DialogHeader>
+          {selectedPerson && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Name</label>
+                <p className="text-sm text-muted-foreground">{selectedPerson.name}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Type</label>
+                <p className="text-sm text-muted-foreground">
+                  <Badge variant="outline">{selectedPerson.type}</Badge>
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Contact</label>
+                <p className="text-sm text-muted-foreground">{selectedPerson.contact_number || "N/A"}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Birthdate</label>
+                <p className="text-sm text-muted-foreground">{selectedPerson.birthdate || "N/A"}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Status</label>
+                <p className="text-sm text-muted-foreground">
+                  <Badge variant={selectedPerson.status === "available" ? "default" : "secondary"}>
+                    {selectedPerson.status || "N/A"}
+                  </Badge>
+                </p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

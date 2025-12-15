@@ -10,7 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2, Upload, WifiOff } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import type { PendingLeaveRequest } from "@/lib/offlineDb";
 
 const leaveFormSchema = z.object({
   personnel_type: z.enum(["driver", "helper", "mechanic", "recycler", "management"]),
@@ -24,7 +27,35 @@ const leaveFormSchema = z.object({
 
 type LeaveFormValues = z.infer<typeof leaveFormSchema>;
 
-const LeaveFilingForm = () => {
+interface LeaveFilingFormProps {
+  profile?: any;
+  isOnline?: boolean;
+  // Cached personnel data passed from parent (like Collections form pattern)
+  cachedDrivers?: any[];
+  cachedHelpers?: any[];
+  cachedMechanics?: any[];
+  cachedRecyclers?: any[];
+  cachedManagement?: any[];
+  createPendingLeaveRequest?: (data: Omit<PendingLeaveRequest, 'id' | 'created_at' | 'status' | 'user_id'>) => Promise<string>;
+  refreshPendingItems?: () => Promise<void>;
+  onOfflineSuccess?: () => void; // Callback when offline submission completes
+}
+
+const LeaveFilingForm = ({ 
+  profile, 
+  isOnline: propIsOnline,
+  cachedDrivers = [],
+  cachedHelpers = [],
+  cachedMechanics = [],
+  cachedRecyclers = [],
+  cachedManagement = [],
+  createPendingLeaveRequest,
+  refreshPendingItems,
+  onOfflineSuccess,
+}: LeaveFilingFormProps) => {
+  const { isOnline: hookIsOnline } = useOnlineStatus();
+  const isOnline = propIsOnline ?? hookIsOnline;
+  
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [personnel, setPersonnel] = useState<any[]>([]);
@@ -52,15 +83,25 @@ const LeaveFilingForm = () => {
   const startDate = form.watch("start_date");
   const endDate = form.watch("end_date");
 
+  // Load personnel based on online/offline status and type
   useEffect(() => {
-    fetchPersonnel();
-  }, [personnelType]);
+    if (isOnline) {
+      // Online: fetch from Supabase
+      fetchPersonnelFromSupabase();
+    } else {
+      // Offline: use cached data passed as props
+      loadCachedPersonnel();
+    }
+    // Reset personnel selection when type changes
+    form.setValue("personnel_id", "");
+    form.setValue("personnel_id_number", "");
+  }, [personnelType, isOnline, cachedDrivers, cachedHelpers, cachedMechanics, cachedRecyclers, cachedManagement]);
 
   useEffect(() => {
     if (personnelId) {
       checkAvailableLeaves();
     }
-  }, [personnelId]);
+  }, [personnelId, personnel]);
 
   useEffect(() => {
     if (startDate && endDate) {
@@ -79,7 +120,30 @@ const LeaveFilingForm = () => {
     }
   }, [startDate, endDate, availableLeaves]);
 
-  const fetchPersonnel = async () => {
+  const loadCachedPersonnel = () => {
+    // Use cached data passed from parent based on personnel type
+    let cachedData: any[] = [];
+    switch (personnelType) {
+      case 'driver':
+        cachedData = cachedDrivers;
+        break;
+      case 'helper':
+        cachedData = cachedHelpers;
+        break;
+      case 'mechanic':
+        cachedData = cachedMechanics;
+        break;
+      case 'recycler':
+        cachedData = cachedRecyclers;
+        break;
+      case 'management':
+        cachedData = cachedManagement;
+        break;
+    }
+    setPersonnel(cachedData);
+  };
+
+  const fetchPersonnelFromSupabase = async () => {
     const { data } = await supabase
       .from(`${personnelType}s`)
       .select("id, name, id_number, leaves_available")
@@ -107,6 +171,16 @@ const LeaveFilingForm = () => {
     if (e.target.files && e.target.files[0]) {
       setMedicalFile(e.target.files[0]);
     }
+  };
+
+  // Convert file to base64 for offline storage
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
   };
 
   const uploadMedicalCertificate = async () => {
@@ -176,14 +250,65 @@ const LeaveFilingForm = () => {
         return;
       }
 
+      const leaveDays = calculateLeaveDays(values.start_date, values.end_date);
+      const isPaid = values.leave_type !== "unpaid" && leaveDays <= availableLeaves;
+
+      // Handle offline mode
+      if (!isOnline) {
+        if (!createPendingLeaveRequest || !profile) {
+          toast({
+            title: "Offline Mode Unavailable",
+            description: "Profile information is required for offline submission",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Convert medical file to base64 if exists
+        let medicalCertBase64 = null;
+        if (medicalFile) {
+          medicalCertBase64 = await fileToBase64(medicalFile);
+        }
+
+        // Save to pending queue
+        await createPendingLeaveRequest({
+          personnel_type: values.personnel_type,
+          personnel_id: values.personnel_id,
+          personnel_name: selectedPerson.name,
+          personnel_id_number: values.personnel_id_number,
+          leave_type: values.leave_type,
+          start_date: values.start_date,
+          end_date: values.end_date,
+          reason: values.reason,
+          leave_days: leaveDays,
+          is_paid: isPaid,
+          medical_certificate_base64: medicalCertBase64,
+        });
+
+        // Refresh pending items count and notify parent
+        if (refreshPendingItems) {
+          await refreshPendingItems();
+        }
+        if (onOfflineSuccess) {
+          onOfflineSuccess();
+        }
+
+        toast({
+          title: "Leave Request Saved Offline",
+          description: "Your leave request will be submitted when you're back online. Check the Pending tab to view it.",
+        });
+
+        form.reset();
+        setMedicalFile(null);
+        return;
+      }
+
+      // Online mode - submit directly to Supabase
       let medicalCertUrl = null;
       if (medicalFile) {
         medicalCertUrl = await uploadMedicalCertificate();
         if (!medicalCertUrl) return;
       }
-
-      const leaveDays = calculateLeaveDays(values.start_date, values.end_date);
-      const isPaid = values.leave_type !== "unpaid" && leaveDays <= availableLeaves;
 
       const { error } = await supabase.from("leaves").insert({
         personnel_type: values.personnel_type,
@@ -223,7 +348,22 @@ const LeaveFilingForm = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>File Leave Request</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            File Leave Request
+            {!isOnline && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <WifiOff className="h-3 w-3" />
+                Offline
+              </Badge>
+            )}
+          </CardTitle>
+        </div>
+        {!isOnline && (
+          <p className="text-xs text-muted-foreground mt-2">
+            Your leave request will be saved locally and submitted when you're back online
+          </p>
+        )}
       </CardHeader>
       <CardContent>
         <Form {...form}>

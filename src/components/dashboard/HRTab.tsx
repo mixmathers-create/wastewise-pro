@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, FileText, Shield, Clock, AlertTriangle } from "lucide-react";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { supabase } from "@/integrations/supabase/client";
 import PersonnelList from "./hr/PersonnelList";
 import LeaveFilingForm from "./hr/LeaveFilingForm";
 import LeaveAdminPanel from "./hr/LeaveAdminPanel";
@@ -8,6 +10,24 @@ import DriversHelpersTimeTracking from "./hr/DriversHelpersTimeTracking";
 import ReportsTab from "./hr/ReportsTab";
 
 export const HRTab = () => {
+  const [profile, setProfile] = useState<any>(null);
+  
+  useEffect(() => {
+    const getProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("user_id", user.id)
+          .single();
+        setProfile(data);
+      }
+    };
+    getProfile();
+  }, []);
+  
+  const roleAccess = useRoleAccess(profile?.user_type || 'admin');
   return (
     <div className="space-y-6">
       <div>
@@ -29,10 +49,12 @@ export const HRTab = () => {
             <FileText className="h-4 w-4" />
             File Leave
           </TabsTrigger>
-          <TabsTrigger value="admin" className="gap-2">
-            <Shield className="h-4 w-4" />
-            Admin Panel
-          </TabsTrigger>
+          {roleAccess.canAccessHRAdmin && (
+            <TabsTrigger value="admin" className="gap-2">
+              <Shield className="h-4 w-4" />
+              Admin Panel
+            </TabsTrigger>
+          )}
           <TabsTrigger value="reports" className="gap-2">
             <AlertTriangle className="h-4 w-4" />
             Reports
@@ -51,9 +73,11 @@ export const HRTab = () => {
           <LeaveFilingForm />
         </TabsContent>
 
-        <TabsContent value="admin">
-          <LeaveAdminPanel />
-        </TabsContent>
+        {roleAccess.canAccessHRAdmin && (
+          <TabsContent value="admin">
+            <LeaveAdminPanel />
+          </TabsContent>
+        )}
 
         <TabsContent value="reports">
           <ReportsTab />

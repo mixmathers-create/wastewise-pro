@@ -15,9 +15,18 @@ import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { MobileInput } from "@/components/mobile/MobileInput";
-import { printerService } from "@/lib/printerService";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { 
+  offlineDb, 
+  generateLocalId,
+  type CachedClient,
+  type CachedTruck,
+  type CachedDriver,
+  type CachedHelper,
+  type PendingCollection,
+} from "@/lib/offlineDb";
+import { useReceiptSettings } from "@/hooks/useReceiptSettings";
 
 const wasteTypes = ["Municipal Solid Waste", "Food Waste", "Construction Waste", "Special Hauling"];
 const units = ["kg", "cbm", "truck load"];
@@ -25,11 +34,25 @@ const units = ["kg", "cbm", "truck load"];
 interface CreateReceiptFormProps {
   profile: any;
   onSuccess: () => void;
+  isOnline: boolean;
+  cachedClients: CachedClient[];
+  cachedTrucks: CachedTruck[];
+  cachedDrivers: CachedDriver[];
+  cachedHelpers: CachedHelper[];
 }
 
-const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
+const CreateReceiptForm = ({ 
+  profile, 
+  onSuccess, 
+  isOnline, 
+  cachedClients, 
+  cachedTrucks, 
+  cachedDrivers, 
+  cachedHelpers 
+}: CreateReceiptFormProps) => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { logoUrl: dbLogoUrl } = useReceiptSettings();
   const [loading, setLoading] = useState(false);
   const [qrInput, setQrInput] = useState("");
   const [clientData, setClientData] = useState<any>(null);
@@ -49,8 +72,21 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingEntry, setEditingEntry] = useState<{ waste_type: string; quantity: number; unit: string } | null>(null);
 
+  // Load data based on online/offline status
   useEffect(() => {
-    loadClients();
+    if (isOnline) {
+      // Online: fetch fresh data from Supabase
+      loadClients();
+    } else {
+      // Offline: use cached data
+      setAllClients(cachedClients);
+      setTrucks(cachedTrucks);
+      setDrivers(cachedDrivers);
+      setHelpers(cachedHelpers);
+    }
+  }, [isOnline, cachedClients, cachedTrucks, cachedDrivers, cachedHelpers]);
+
+  useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
     let listenerHandle: PluginListenerHandle | null = null;
@@ -95,18 +131,31 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     setIsScanning(false);
     toast({ title: "QR Code Scanned", description: "Looking up client..." });
     
-    await loadResources();
-    const { data, error } = await supabase
-      .from("clients")
-      .select("*")
-      .eq("qr_code", decodedText)
-      .single();
-      
-    if (error || !data) {
-      toast({ title: "Client not found", description: "No client matches this QR code.", variant: "destructive" });
+    if (isOnline) {
+      // Online: fetch from Supabase
+      await loadResources();
+      const { data, error } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("qr_code", decodedText)
+        .single();
+        
+      if (error || !data) {
+        toast({ title: "Client not found", description: "No client matches this QR code.", variant: "destructive" });
+      } else {
+        setClientData(data);
+        toast({ title: "Client Found", description: `Loaded: ${data.name}` });
+      }
     } else {
-      setClientData(data);
-      toast({ title: "Client Found", description: `Loaded: ${data.name}` });
+      // Offline: look up from cached data
+      const client = allClients.find(c => c.qr_code === decodedText);
+        
+      if (!client) {
+        toast({ title: "Client not found", description: "No client matches this QR code.", variant: "destructive" });
+      } else {
+        setClientData(client);
+        toast({ title: "Client Found", description: `Loaded: ${client.name}` });
+      }
     }
   };
 
@@ -203,46 +252,70 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
   };
 
   const handleClientSelect = async (clientId: string) => {
-    setLoading(true);
-    try {
-      await loadResources();
-      const { data, error } = await supabase
-        .from("clients")
-        .select("*")
-        .eq("id", clientId)
-        .single();
-      if (error) throw error;
-      setClientData(data);
-      setQrInput(data.qr_code);
-      toast({ title: "Client Selected", description: data.name });
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } finally {
-      setLoading(false);
+    if (isOnline) {
+      // Online: fetch from Supabase
+      setLoading(true);
+      try {
+        await loadResources();
+        const { data, error } = await supabase
+          .from("clients")
+          .select("*")
+          .eq("id", clientId)
+          .single();
+        if (error) throw error;
+        setClientData(data);
+        setQrInput(data.qr_code);
+        toast({ title: "Client Selected", description: data.name });
+      } catch (error: any) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      // Offline: find from cached data
+      const client = allClients.find(c => c.id === clientId);
+      if (client) {
+        setClientData(client);
+        setQrInput(client.qr_code);
+        toast({ title: "Client Selected", description: client.name });
+      }
     }
   };
 
   const lookupClient = async () => {
     if (!qrInput) return;
-    setLoading(true);
-    try {
-      await loadResources();
-      const { data, error } = await supabase
-        .from("clients")
-        .select("*")
-        .eq("qr_code", qrInput)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) {
+    
+    if (isOnline) {
+      // Online: fetch from Supabase
+      setLoading(true);
+      try {
+        await loadResources();
+        const { data, error } = await supabase
+          .from("clients")
+          .select("*")
+          .eq("qr_code", qrInput)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) {
+          toast({ title: "Not Found", description: "No client with this QR code", variant: "destructive" });
+        } else {
+          setClientData(data);
+          toast({ title: "Client Found", description: data.name });
+        }
+      } catch (error: any) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      // Offline: find from cached data
+      const client = allClients.find(c => c.qr_code === qrInput);
+      if (!client) {
         toast({ title: "Not Found", description: "No client with this QR code", variant: "destructive" });
       } else {
-        setClientData(data);
-        toast({ title: "Client Found", description: data.name });
+        setClientData(client);
+        toast({ title: "Client Found", description: client.name });
       }
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -286,7 +359,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
       setItems([...items, item]);
     }
 
-    setNewItem({ quantity: 0, unit: "kg" });
+    setNewItem({ quantity: 0, unit: newItem.unit });
     toast({ title: "Item Added", description: `${newItem.quantity} ${newItem.unit} added` });
   };
 
@@ -348,49 +421,88 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
     setLoading(true);
     try {
-      // Get authenticated user - for mobile app, use profile's user_id
-      let userId: string;
-      
-      if (Capacitor.isNativePlatform()) {
-        // Use the profile's user_id which should be set from login
-        userId = profile.user_id;
-      } else {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          throw new Error('User not authenticated');
+      const userId = profile.user_id;
+
+      if (isOnline) {
+        // ONLINE: Save directly to Supabase
+        const receiptQR = `RECEIPT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        const { data: insertedReceipt, error } = await supabase
+          .from("collection_receipts")
+          .insert({
+            client_id: clientData.id,
+            truck_id: selectedTruck,
+            driver_id: selectedDriver,
+            helper_ids: selectedHelpers,
+            items,
+            tally_entries: tallyEntries,
+            waste_types: items.map((i) => i.waste_type),
+            qr_code: receiptQR,
+            signed_by: signedBy,
+            signature_data: null,
+            created_by: userId,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        toast({ title: "Receipt Created", description: "Collection receipt saved successfully" });
+        
+        if (Capacitor.isNativePlatform()) {
+          navigate(`/receipt-preview?id=${insertedReceipt.id}`);
+        } else {
+          await generatePDF(receiptQR, clientData, null);
         }
-        userId = user.id;
-      }
+      } else {
+        // OFFLINE: Save to Dexie pending queue
+        const truckData = trucks.find(t => t.id === selectedTruck);
+        const driverData = drivers.find(d => d.id === selectedDriver);
+        const helperData = selectedHelpers.map(hid => helpers.find(h => h.id === hid));
+        
+        // Generate receipt QR code for offline use
+        const receiptQR = `RECEIPT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const pendingId = generateLocalId();
 
-      const receiptQR = `RECEIPT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-      const { data: insertedReceipt, error } = await supabase
-        .from("collection_receipts")
-        .insert({
+        const pendingCollection: PendingCollection = {
+          id: pendingId,
           client_id: clientData.id,
+          client_name: clientData.name,
+          client_industry: clientData.industry,
+          client_address: clientData.address || null,
+          client_qr_code: clientData.qr_code,
+          client_contact_person: clientData.contact_person || null,
+          client_contact_number: clientData.contact_number || null,
           truck_id: selectedTruck,
+          truck_code: truckData?.code || selectedTruck,
+          truck_type: truckData?.type || null,
           driver_id: selectedDriver,
+          driver_name: driverData?.name || selectedDriver,
           helper_ids: selectedHelpers,
+          helper_names: helperData.map(h => h?.name || 'Unknown'),
           items,
           tally_entries: tallyEntries,
           waste_types: items.map((i) => i.waste_type),
-          qr_code: receiptQR,
           signed_by: signedBy,
+          qr_code: receiptQR,
           signature_data: null,
-          created_by: userId,
-        })
-        .select()
-        .single();
+          receipt_printed: false,
+          created_at: new Date(),
+          status: 'pending',
+          user_id: userId,
+        };
 
-      if (error) throw error;
+        await offlineDb.pendingCollections.add(pendingCollection);
 
-      toast({ title: "Receipt Created", description: "Collection receipt saved successfully" });
-      
-      // Navigate to receipt preview on mobile
-      if (Capacitor.isNativePlatform()) {
-        navigate(`/receipt-preview?id=${insertedReceipt.id}`);
-      } else {
-        await generatePDF(receiptQR, clientData, null);
+        toast({ 
+          title: "Saved Offline", 
+          description: "Collection saved. Proceeding to receipt preview...",
+        });
+        
+        // Navigate to receipt preview for signature and printing
+        if (Capacitor.isNativePlatform()) {
+          navigate(`/receipt-preview?pendingId=${pendingId}`);
+        }
       }
 
       resetForm();
@@ -404,7 +516,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
 
   const generatePDF = async (receiptQR: string, client: any, signature: string) => {
     const now = new Date();
-    const logoUrl = localStorage.getItem("receipt_logo");
+    const logoUrl = dbLogoUrl;
     const companyName = localStorage.getItem("receipt_company_name") || "WASTEWISE";
     const companyAddress = localStorage.getItem("receipt_company_address") || "";
     const companyContact = localStorage.getItem("receipt_company_contact") || "";
@@ -511,12 +623,13 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
     y += 4;
     doc.setFontSize(baseFontSize - 1);
     items.forEach((item) => {
-      doc.text(item.waste_type, 5, y);
-      y += 3;
+      doc.text(`${item.waste_type}: ${item.quantity} ${item.unit}`, 5, y, { maxWidth: 48 });
+      y += 4;
     });
     y += 2;
     doc.setFontSize(baseFontSize);
-    doc.text(`TOTAL: ${totalQuantity} (mixed units)`, 5, y);
+    const displayUnit = items.length > 0 ? items[0].unit : "units";
+    doc.text(`TOTAL: ${totalQuantity} ${displayUnit}`, 5, y);
     y += 6;
 
     // Signature
@@ -672,6 +785,7 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
                       setSelectedWasteType("");
                       setNewItem({ quantity: 0, unit: "kg" });
                     }}
+                    disabled={tallyEntries.length > 0}
                   >
                     Change
                   </Button>
@@ -688,11 +802,16 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
                         placeholder="0"
                         allowDecimal={true}
                         maxLength={8}
+                        onSubmit={handleAddItem}
                       />
                     </div>
                     <div>
                       <Label className="text-xs">Unit</Label>
-                      <Select value={newItem.unit} onValueChange={(v) => setNewItem({ ...newItem, unit: v })}>
+                      <Select 
+                        value={newItem.unit} 
+                        onValueChange={(v) => setNewItem({ ...newItem, unit: v })}
+                        disabled={tallyEntries.length > 0}
+                      >
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>{units.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                       </Select>
@@ -738,7 +857,11 @@ const CreateReceiptForm = ({ profile, onSuccess }: CreateReceiptFormProps) => {
                           </div>
                           <div>
                             <Label className="text-xs">Unit</Label>
-                            <Select value={editingEntry?.unit} onValueChange={(v) => setEditingEntry(prev => prev ? { ...prev, unit: v } : null)}>
+                            <Select 
+                              value={editingEntry?.unit} 
+                              onValueChange={(v) => setEditingEntry(prev => prev ? { ...prev, unit: v } : null)}
+                              disabled={true}
+                            >
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>{units.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                             </Select>
