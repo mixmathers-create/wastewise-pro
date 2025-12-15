@@ -23,6 +23,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
   const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [totalClients, setTotalClients] = useState(0);
+  const [allClientIds, setAllClientIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const roleAccess = useRoleAccess(profile?.user_type || 'admin');
   const isMobile = Capacitor.isNativePlatform();
@@ -48,6 +49,16 @@ const ClientsTab = ({ profile }: { profile: any }) => {
 
   useEffect(() => {
     fetchClients(currentPage);
+    // Also fetch all client IDs for select all functionality
+    const fetchAllIds = async () => {
+      const { data } = await supabase
+        .from("clients")
+        .select("id");
+      setAllClientIds(data?.map(c => c.id) || []);
+    };
+    if (allClientIds.length === 0) {
+      fetchAllIds();
+    }
   }, [currentPage]);
 
   const downloadQR = async (qrCode: string, clientName: string) => {
@@ -135,11 +146,21 @@ const ClientsTab = ({ profile }: { profile: any }) => {
     });
   };
 
-  const toggleSelectAll = () => {
-    if (selectedClients.size === clients.length) {
+  const toggleSelectAll = async () => {
+    if (selectedClients.size === allClientIds.length) {
       setSelectedClients(new Set());
     } else {
-      setSelectedClients(new Set(clients.map(c => c.id)));
+      // Fetch all client IDs if not already loaded
+      if (allClientIds.length === 0) {
+        const { data } = await supabase
+          .from("clients")
+          .select("id");
+        const ids = data?.map(c => c.id) || [];
+        setAllClientIds(ids);
+        setSelectedClients(new Set(ids));
+      } else {
+        setSelectedClients(new Set(allClientIds));
+      }
     }
   };
 
@@ -222,7 +243,7 @@ const ClientsTab = ({ profile }: { profile: any }) => {
                   {roleAccess.canEditClients && (
                     <TableHead className="w-12">
                       <Checkbox
-                        checked={selectedClients.size === clients.length && clients.length > 0}
+                        checked={selectedClients.size === allClientIds.length && allClientIds.length > 0}
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
