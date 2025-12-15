@@ -119,7 +119,7 @@ const AddClientDialog = ({ profile, onAdded }: { profile: any; onAdded: () => vo
       <DialogTrigger asChild>
         <Button><Plus className="mr-2 h-4 w-4" />Add Client</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add New Client</DialogTitle>
         </DialogHeader>
