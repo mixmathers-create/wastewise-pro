@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -83,42 +83,8 @@ const LeaveFilingForm = ({
   const startDate = form.watch("start_date");
   const endDate = form.watch("end_date");
 
-  // Load personnel based on online/offline status and type
-  useEffect(() => {
-    if (isOnline) {
-      // Online: fetch from Supabase
-      fetchPersonnelFromSupabase();
-    } else {
-      // Offline: use cached data passed as props
-      loadCachedPersonnel();
-    }
-    // Reset personnel selection when type changes
-    form.setValue("personnel_id", "");
-    form.setValue("personnel_id_number", "");
-  }, [personnelType, isOnline, cachedDrivers, cachedHelpers, cachedMechanics, cachedRecyclers, cachedManagement]);
-
-  useEffect(() => {
-    if (personnelId) {
-      checkAvailableLeaves();
-    }
-  }, [personnelId, personnel]);
-
-  useEffect(() => {
-    if (startDate && endDate) {
-      const days = calculateLeaveDays(startDate, endDate);
-      if (days > availableLeaves && leaveType !== "unpaid") {
-        setInsufficientCredits(true);
-        form.setValue("leave_type", "unpaid");
-        toast({
-          title: "Insufficient Leave Credits",
-          description: `You only have ${availableLeaves} leave days available. This leave has been set to unpaid.`,
-          variant: "destructive",
-        });
-      } else {
-        setInsufficientCredits(false);
-      }
-    }
-  }, [startDate, endDate, availableLeaves]);
+  // Ref to track request ID and prevent stale responses
+  const requestIdRef = useRef(0);
 
   const loadCachedPersonnel = () => {
     // Use cached data passed from parent based on personnel type
@@ -144,13 +110,63 @@ const LeaveFilingForm = ({
   };
 
   const fetchPersonnelFromSupabase = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from(`${personnelType}s`)
       .select("id, name, id_number, leaves_available")
       .order("name");
     
-    setPersonnel(data || []);
+    if (error) {
+      console.error("Error fetching personnel:", error);
+      return null;
+    }
+    
+    return data || [];
   };
+
+  useEffect(() => {
+    form.setValue("personnel_id", "");
+    form.setValue("personnel_id_number", "");
+
+    if (isOnline) {
+      requestIdRef.current++;
+      const currentRequestId = requestIdRef.current;
+      
+      fetchPersonnelFromSupabase().then((data) => {
+        if (currentRequestId === requestIdRef.current && data) {
+          setPersonnel(data);
+        }
+      }).catch((error) => {
+        if (currentRequestId === requestIdRef.current) {
+          console.error("Error fetching personnel:", error);
+        }
+      });
+    } else {
+      loadCachedPersonnel();
+    }
+  }, [personnelType, isOnline]);
+
+  useEffect(() => {
+    if (personnelId) {
+      checkAvailableLeaves();
+    }
+  }, [personnelId, personnel]);
+
+  useEffect(() => {
+    if (startDate && endDate) {
+      const days = calculateLeaveDays(startDate, endDate);
+      if (days > availableLeaves && leaveType !== "unpaid") {
+        setInsufficientCredits(true);
+        form.setValue("leave_type", "unpaid");
+        toast({
+          title: "Insufficient Leave Credits",
+          description: `You only have ${availableLeaves} leave days available. This leave has been set to unpaid.`,
+          variant: "destructive",
+        });
+      } else {
+        setInsufficientCredits(false);
+      }
+    }
+  }, [startDate, endDate, availableLeaves]);
 
   const checkAvailableLeaves = async () => {
     const selectedPerson = personnel.find(p => p.id === personnelId);
