@@ -1,5 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, FileText, Shield, Clock, AlertTriangle, WifiOff } from "lucide-react";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import PersonnelList from "./hr/PersonnelList";
 import LeaveFilingForm from "./hr/LeaveFilingForm";
 import LeaveAdminPanel from "./hr/LeaveAdminPanel";
@@ -15,6 +16,8 @@ interface MobileHRTabProps {
 }
 
 export function MobileHRTab({ profile, isOnline = true, hrSync, onPendingItemAdded }: MobileHRTabProps) {
+  const roleAccess = useRoleAccess(profile?.user_type || 'admin');
+  
   // Use hrSync data passed from parent (synced at app level in MobileDashboard)
   const trucks = hrSync?.trucks || [];
   const drivers = hrSync?.drivers || [];
@@ -38,7 +41,7 @@ export function MobileHRTab({ profile, isOnline = true, hrSync, onPendingItemAdd
       </div>
 
       <Tabs defaultValue="personnel" className="w-full">
-        <TabsList className="grid w-full grid-cols-5 text-xs h-auto">
+        <TabsList className={`grid w-full text-xs h-auto ${roleAccess.canAccessHRAdmin ? 'grid-cols-5' : 'grid-cols-4'}`}>
           <TabsTrigger value="personnel" className="flex flex-col gap-1 p-2 h-auto">
             <Users className="h-3 w-3" />
             <span className="text-[10px]">Personnel</span>
@@ -51,14 +54,16 @@ export function MobileHRTab({ profile, isOnline = true, hrSync, onPendingItemAdd
             <FileText className="h-3 w-3" />
             <span className="text-[10px]">Leave</span>
           </TabsTrigger>
-          <TabsTrigger 
-            value="admin" 
-            className="flex flex-col gap-1 p-2 h-auto"
-            disabled={!isOnline}
-          >
-            {!isOnline ? <WifiOff className="h-3 w-3 text-muted-foreground" /> : <Shield className="h-3 w-3" />}
-            <span className="text-[10px]">Admin</span>
-          </TabsTrigger>
+          {roleAccess.canAccessHRAdmin && (
+            <TabsTrigger 
+              value="admin" 
+              className="flex flex-col gap-1 p-2 h-auto"
+              disabled={!isOnline}
+            >
+              {!isOnline ? <WifiOff className="h-3 w-3 text-muted-foreground" /> : <Shield className="h-3 w-3" />}
+              <span className="text-[10px]">Admin</span>
+            </TabsTrigger>
+          )}
           <TabsTrigger value="reports" className="flex flex-col gap-1 p-2 h-auto">
             <AlertTriangle className="h-3 w-3" />
             <span className="text-[10px]">Reports</span>
@@ -112,21 +117,23 @@ export function MobileHRTab({ profile, isOnline = true, hrSync, onPendingItemAdd
           </div>
         </TabsContent>
 
-        <TabsContent value="admin" className="mt-4">
-          <div className="mobile-responsive overflow-x-auto">
-            {isOnline ? (
-              <LeaveAdminPanel />
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <WifiOff className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold text-muted-foreground">Admin Panel Unavailable</h3>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Admin functions require an internet connection.
-                </p>
-              </div>
-            )}
-          </div>
-        </TabsContent>
+        {roleAccess.canAccessHRAdmin && (
+          <TabsContent value="admin" className="mt-4">
+            <div className="mobile-responsive overflow-x-auto">
+              {isOnline ? (
+                <LeaveAdminPanel />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <WifiOff className="h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold text-muted-foreground">Admin Panel Unavailable</h3>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Admin functions require an internet connection.
+                  </p>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        )}
 
         <TabsContent value="reports" className="mt-4">
           <div className="mobile-responsive overflow-x-auto">
