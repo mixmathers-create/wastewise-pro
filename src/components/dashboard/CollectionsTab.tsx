@@ -128,16 +128,86 @@ const CollectionsTab = ({
     }
   };
 
-  const handleExport = () => {
-    const data = receipts.map(r => ({
-      date: new Date(r.created_at).toLocaleString(),
-      qr_code: r.qr_code,
-      signed_by: r.signed_by || '-',
-      pdf_url: r.pdf_url || '-'
-    }));
-    const csv = generateCSV(data, ["date", "qr_code", "signed_by", "pdf_url"]);
-    downloadCSV(csv, "collections-export.csv");
-    toast({ title: "Success", description: "Collections exported successfully" });
+  const handleExport = async () => {
+    if (!isOnline) {
+      toast({ 
+        title: "Export Error", 
+        description: "Cannot export while offline", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    try {
+      const { data: allReceipts, error } = await supabase
+        .from("collection_receipts")
+        .select(`
+          id,
+          created_at,
+          qr_code,
+          client_id,
+          items,
+          waste_types,
+          clients(name)
+        `)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      if (!allReceipts || allReceipts.length === 0) {
+        toast({ 
+          title: "Export", 
+          description: "No receipts to export" 
+        });
+        return;
+      }
+
+      const data = allReceipts.map(r => {
+        const items = (r.items as any[]) || [];
+        const totalWeight = items.reduce((sum, item) => {
+          return sum + (item.quantity || 0);
+        }, 0);
+        
+        const unit = items.length > 0 && items[0].unit ? items[0].unit : 'kg';
+        
+        const wasteTypes = Array.isArray(r.waste_types) 
+          ? r.waste_types.join(', ') 
+          : '-';
+        
+        const clientName = (r.clients as any)?.name || '-';
+
+        return {
+          date: new Date(r.created_at).toLocaleString(),
+          receipt: r.qr_code,
+          client_name: clientName,
+          total_weight: `${totalWeight} ${unit}`,
+          waste_type: wasteTypes
+        };
+      });
+      
+      const csv = generateCSV(data, ["date", "receipt", "client_name", "total_weight", "waste_type"]);
+      
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const dateTime = `${year}-${month}-${day}T${hours}${minutes}`;
+      const filename = `collectionsExport-${dateTime}.csv`;
+      
+      downloadCSV(csv, filename);
+      toast({ 
+        title: "Success", 
+        description: `Exported ${allReceipts.length} collection(s) successfully` 
+      });
+    } catch (err: any) {
+      toast({ 
+        title: "Export Error", 
+        description: err.message || "Failed to export collections", 
+        variant: "destructive" 
+      });
+    }
   };
 
   const handlePrintTally = async (receiptId: string) => {
