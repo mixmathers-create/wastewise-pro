@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Plus, Eye, Printer, Download, List, WifiOff } from "lucide-react";
+import { Plus, Eye, Printer, Download, List, WifiOff, Loader2 } from "lucide-react";
 import CreateReceiptForm from "../collection/CreateReceiptForm";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,6 +12,7 @@ import { Capacitor } from '@capacitor/core';
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { generateCSV, downloadCSV } from "@/lib/csvUtils";
+import { Input } from "@/components/ui/input";
 import { printerService } from "@/lib/printerService";
 import TallyTemplate, { TallyTemplateProps } from "../collection/TallyTemplate";
 import type { CachedClient, CachedTruck, CachedDriver, CachedHelper } from "@/lib/offlineDb";
@@ -43,6 +44,9 @@ const CollectionsTab = ({
   const [tallyData, setTallyData] = useState<TallyTemplateProps | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalReceipts, setTotalReceipts] = useState(0);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [exporting, setExporting] = useState(false);
   const tallyTemplateRef = useRef<HTMLDivElement>(null);
   const isMobile = Capacitor.isNativePlatform();
   const isAdmin = profile?.role === "admin";
@@ -72,10 +76,10 @@ const CollectionsTab = ({
     setLoading(false);
   };
 
-  useEffect(() => {
-    // Trigger fetch on isOnline or currentPage change
-    fetchReceipts(currentPage);
-  }, [isOnline, currentPage]);
+ useEffect(() => {
+    // Trigger fetch on isOnline or currentPage change
+    fetchReceipts(currentPage);
+  }, [isOnline, currentPage]);
 
   const handleSuccess = () => {
     setDialogOpen(false);
@@ -130,16 +134,26 @@ const CollectionsTab = ({
 
   const handleExport = async () => {
     if (!isOnline) {
-      toast({ 
-        title: "Export Error", 
-        description: "Cannot export while offline", 
-        variant: "destructive" 
+      toast({
+        title: "Export Error",
+        description: "Cannot export while offline",
+        variant: "destructive"
+      });
+      return;
+    }
+    if (!startDate || !endDate) {
+      toast({
+        title: "Export Error",
+        description: "Please select both start and end dates",
+        variant: "destructive"
       });
       return;
     }
 
     try {
-      const { data: allReceipts, error } = await supabase
+      setExporting(true);
+
+      let query = supabase
         .from("collection_receipts")
         .select(`
           id,
@@ -150,14 +164,33 @@ const CollectionsTab = ({
           waste_types,
           clients(name)
         `)
+        .gte("created_at", startDate)
+        .lte("created_at", `${endDate}T23:59:59`)
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      // Batch fetch to bypass Supabase 1000-row limit
+      let allReceipts: any[] = [];
+      let page = 0;
+      const batchSize = 1000;
+      let hasMore = true;
 
-      if (!allReceipts || allReceipts.length === 0) {
-        toast({ 
-          title: "Export", 
-          description: "No receipts to export" 
+      while (hasMore) {
+        const from = page * batchSize;
+        const to = from + batchSize - 1;
+        const { data, error } = await query.range(from, to);
+
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+
+        allReceipts = allReceipts.concat(data);
+        hasMore = data.length === batchSize;
+        page++;
+      }
+
+      if (allReceipts.length === 0) {
+        toast({
+          title: "Export",
+          description: "No receipts found for selected date range"
         });
         return;
       }
@@ -167,13 +200,13 @@ const CollectionsTab = ({
         const totalWeight = items.reduce((sum, item) => {
           return sum + (item.quantity || 0);
         }, 0);
-        
+
         const unit = items.length > 0 && items[0].unit ? items[0].unit : 'kg';
-        
-        const wasteTypes = Array.isArray(r.waste_types) 
-          ? r.waste_types.join(', ') 
+
+        const wasteTypes = Array.isArray(r.waste_types)
+          ? r.waste_types.join(', ')
           : '-';
-        
+
         const clientName = (r.clients as any)?.name || '-';
 
         return {
@@ -184,9 +217,9 @@ const CollectionsTab = ({
           waste_type: wasteTypes
         };
       });
-      
+
       const csv = generateCSV(data, ["date", "receipt", "client_name", "total_weight", "waste_type"]);
-      
+
       const now = new Date();
       const year = now.getFullYear();
       const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -194,19 +227,22 @@ const CollectionsTab = ({
       const hours = String(now.getHours()).padStart(2, '0');
       const minutes = String(now.getMinutes()).padStart(2, '0');
       const dateTime = `${year}-${month}-${day}T${hours}${minutes}`;
-      const filename = `collectionsExport-${dateTime}.csv`;
-      
+      const rangeSuffix = `-dates-${startDate}-to-${endDate}`;
+      const filename = `collectionsExport-${dateTime}${rangeSuffix}.csv`;
+
       downloadCSV(csv, filename);
-      toast({ 
-        title: "Success", 
-        description: `Exported ${allReceipts.length} collection(s) successfully` 
+      toast({
+        title: "Success",
+        description: `Exported ${allReceipts.length} collection(s) successfully`
       });
     } catch (err: any) {
-      toast({ 
-        title: "Export Error", 
-        description: err.message || "Failed to export collections", 
-        variant: "destructive" 
+      toast({
+        title: "Export Error",
+        description: err.message || "Failed to export collections",
+        variant: "destructive"
       });
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -338,10 +374,34 @@ const CollectionsTab = ({
           </div>
           <div className="flex gap-2 items-center">
             {!isMobile && (
-              <Button variant="outline" size="sm" onClick={handleExport}>
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
+              <>
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-48 pr-9"
+                />
+                <span className="text-muted-foreground">to</span>
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-48 pr-9"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!startDate || !endDate || exporting}
+                  onClick={handleExport}
+                >
+                  {exporting ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  {exporting ? "Exporting..." : "Export"}
+                </Button>
+              </>
             )}
             {!isMobile && isAdmin && selectedReceipts.size > 0 && (
               <Button 
