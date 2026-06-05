@@ -15,6 +15,7 @@ import { generateCSV, downloadCSV } from "@/lib/csvUtils";
 import { Input } from "@/components/ui/input";
 import { printerService } from "@/lib/printerService";
 import TallyTemplate, { TallyTemplateProps } from "../collection/TallyTemplate";
+import { downloadReceiptPdf, downloadMultipleReceiptPdfs } from "@/lib/pdfUtils";
 import type { CachedClient, CachedTruck, CachedDriver, CachedHelper } from "@/lib/offlineDb";
 
 interface CollectionsTabProps {
@@ -47,6 +48,7 @@ const CollectionsTab = ({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
   const tallyTemplateRef = useRef<HTMLDivElement>(null);
   const isMobile = Capacitor.isNativePlatform();
   const isAdmin = profile?.role === "admin";
@@ -66,9 +68,7 @@ const CollectionsTab = ({
 
     const { data, error, count } = await supabase
       .from("collection_receipts")
-      .select("id,created_at,qr_code,signed_by,pdf_url", { count: 'exact' })
-      .order("created_at", { ascending: false })
-      .range(from, to); 
+      .select("id,created_at,qr_code,signed_by", { count: 'exact' })
 
     if (error) setError(error.message);
     setReceipts(data || []);
@@ -88,6 +88,111 @@ const CollectionsTab = ({
       fetchReceipts(currentPage); // Use currentPage to refresh the current page
     }
   };
+
+  const fetchReceiptDetails = async (receiptId: string) => {
+    const { data, error } = await supabase
+      .from("collection_receipts")
+      .select("*")
+      .eq("id", receiptId)
+      .single();
+
+    if (error || !data) {
+      throw error || new Error("Receipt not found");
+    }
+
+    const [clientRes, truckRes, driverRes, helpersRes] = await Promise.all([
+      supabase.from("clients").select("*").eq("id", data.client_id).single(),
+      supabase.from("trucks").select("*").eq("id", data.truck_id).maybeSingle(),
+      supabase.from("drivers").select("*").eq("id", data.driver_id).single(),
+      data.helper_ids && data.helper_ids.length > 0
+        ? supabase.from("helpers").select("*").in("id", data.helper_ids)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (clientRes.error) throw clientRes.error;
+    if (driverRes.error) throw driverRes.error;
+    if (helpersRes.error) throw helpersRes.error;
+
+    return {
+      receipt: data,
+      client: clientRes.data,
+      truck: truckRes.data || {},
+      driver: driverRes.data,
+      helpers: helpersRes.data || [],
+    };
+  };
+
+  const downloadReceiptPdfById = async (receiptId: string) => {
+    const { receipt, client, truck, driver, helpers } = await fetchReceiptDetails(receiptId);
+
+    await downloadReceiptPdf({
+      receiptQR: receipt.qr_code,
+      createdAt: receipt.created_at,
+      client,
+      truck,
+      driver,
+      helpers,
+      items: receipt.items || [],
+      signedBy: receipt.signed_by,
+      signatureData: receipt.signature_data,
+    });
+  };
+
+  const handleDownloadReceiptPdf = async (receiptId: string) => {
+    if (!isOnline) {
+      toast({ title: "Download Error", description: "Cannot download while offline", variant: "destructive" });
+      return;
+    }
+
+    try {
+      setPdfDownloading(true);
+      await downloadReceiptPdfById(receiptId);
+      toast({ title: "PDF Downloaded", description: "Receipt PDF downloaded successfully" });
+    } catch (error: any) {
+      toast({ title: "Download Error", description: error.message || "Failed to download receipt PDF", variant: "destructive" });
+    } finally {
+      setPdfDownloading(false);
+    }
+  };
+
+  const handleBulkDownloadPdfs = async () => {
+    if (!isOnline) {
+      toast({ title: "Download Error", description: "Cannot download while offline", variant: "destructive" });
+      return;
+    }
+
+    if (selectedReceipts.size === 0) {
+      toast({ title: "No Receipts Selected", description: "Select receipts to download PDFs", variant: "destructive" });
+      return;
+    }
+
+    try {
+      setPdfDownloading(true);
+      const payloads = [];
+
+      for (const receiptId of selectedReceipts) {
+        const { receipt, client, truck, driver, helpers } = await fetchReceiptDetails(receiptId);
+        payloads.push({
+          receiptQR: receipt.qr_code,
+          createdAt: receipt.created_at,
+          client,
+          truck,
+          driver,
+          helpers,
+          items: receipt.items || [],
+          signedBy: receipt.signed_by,
+          signatureData: receipt.signature_data,
+        });
+      }
+
+      await downloadMultipleReceiptPdfs(payloads);
+      toast({ title: "Bulk PDF Download", description: `Downloaded ${payloads.length} receipt PDFs` });
+    } catch (error: any) {
+      toast({ title: "Download Error", description: error.message || "Failed to download PDFs", variant: "destructive" });
+    } finally {
+      setPdfDownloading(false);
+    }
+  };
 
   const handleViewReceipt = (receiptId: string) => {
     navigate(`/receipt-preview?id=${receiptId}`);
@@ -403,6 +508,17 @@ const CollectionsTab = ({
                 </Button>
               </>
             )}
+            {!isMobile && selectedReceipts.size > 0 && (
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={handleBulkDownloadPdfs}
+                disabled={pdfDownloading}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                {pdfDownloading ? "Downloading..." : `Download PDFs (${selectedReceipts.size})`}
+              </Button>
+            )}
             {!isMobile && isAdmin && selectedReceipts.size > 0 && (
               <Button 
                 variant="destructive" 
@@ -489,6 +605,16 @@ const CollectionsTab = ({
                     size="sm" 
                     variant="secondary" 
                     className="flex-1"
+                    onClick={() => handleDownloadReceiptPdf(r.id)}
+                    disabled={pdfDownloading}
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Download
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="secondary" 
+                    className="flex-1"
                     onClick={() => handlePrintTally(r.id)}
                   >
                     <List className="h-4 w-4 mr-1" />
@@ -548,6 +674,15 @@ const CollectionsTab = ({
                         onClick={() => handleViewReceipt(r.id)}
                       >
                         <Printer className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="secondary"
+                        onClick={() => handleDownloadReceiptPdf(r.id)}
+                        disabled={pdfDownloading}
+                      >
+                        <Download className="h-4 w-4 mr-1" />
+                        Download
                       </Button>
                       <Button 
                         size="sm" 
