@@ -237,6 +237,92 @@ const CollectionsTab = ({
     }
   };
 
+  const handleBulkDownloadPdfsByDateRange = async () => {
+    if (!isOnline) {
+      toast({ title: "Download Error", description: "Cannot download while offline", variant: "destructive" });
+      return;
+    }
+    if (!startDate || !endDate) {
+      toast({ title: "Download Error", description: "Please select both start and end dates", variant: "destructive" });
+      return;
+    }
+
+    try {
+      setPdfDownloading(true);
+
+      // 1. Fetch all receipts in date range in one batched query
+      let allReceipts: any[] = [];
+      let page = 0;
+      const batchSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const from = page * batchSize;
+        const { data, error } = await supabase
+          .from("collection_receipts")
+          .select("id,qr_code,created_at,client_id,truck_id,driver_id,helper_ids,items,signed_by,signature_data")
+          .gte("created_at", startDate)
+          .lte("created_at", `${endDate}T23:59:59`)
+          .order("created_at", { ascending: false })
+          .range(from, from + batchSize - 1);
+
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allReceipts = allReceipts.concat(data);
+        hasMore = data.length === batchSize;
+        page++;
+      }
+
+      if (allReceipts.length === 0) {
+        toast({ title: "No Receipts", description: "No receipts found for selected date range" });
+        return;
+      }
+
+      // 2. Collect unique IDs for bulk lookup
+      const clientIds = [...new Set(allReceipts.map(r => r.client_id).filter(Boolean))];
+      const truckIds = [...new Set(allReceipts.map(r => r.truck_id).filter(Boolean))];
+      const driverIds = [...new Set(allReceipts.map(r => r.driver_id).filter(Boolean))];
+      const helperIds = [...new Set(allReceipts.flatMap(r => r.helper_ids || []).filter(Boolean))];
+
+      // 3. Bulk fetch all related records in 4 queries total
+      const [clientsRes, trucksRes, driversRes, helpersRes] = await Promise.all([
+        clientIds.length > 0 ? supabase.from("clients").select("*").in("id", clientIds) : Promise.resolve({ data: [], error: null }),
+        truckIds.length > 0 ? supabase.from("trucks").select("*").in("id", truckIds) : Promise.resolve({ data: [], error: null }),
+        driverIds.length > 0 ? supabase.from("drivers").select("*").in("id", driverIds) : Promise.resolve({ data: [], error: null }),
+        helperIds.length > 0 ? supabase.from("helpers").select("*").in("id", helperIds) : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (clientsRes.error) throw clientsRes.error;
+      if (driversRes.error) throw driversRes.error;
+
+      // 4. Build lookup maps
+      const clientMap = Object.fromEntries((clientsRes.data || []).map(c => [c.id, c]));
+      const truckMap = Object.fromEntries((trucksRes.data || []).map(t => [t.id, t]));
+      const driverMap = Object.fromEntries((driversRes.data || []).map(d => [d.id, d]));
+      const helperMap = Object.fromEntries((helpersRes.data || []).map(h => [h.id, h]));
+
+      // 5. Assemble payloads from maps — no extra queries needed
+      const payloads = allReceipts.map(receipt => ({
+        receiptQR: receipt.qr_code,
+        createdAt: receipt.created_at,
+        client: clientMap[receipt.client_id] || {},
+        truck: truckMap[receipt.truck_id] || {},
+        driver: driverMap[receipt.driver_id] || {},
+        helpers: (receipt.helper_ids || []).map((id: string) => helperMap[id]).filter(Boolean),
+        items: receipt.items || [],
+        signedBy: receipt.signed_by,
+        signatureData: receipt.signature_data,
+      }));
+
+      await downloadMultipleReceiptPdfs(payloads);
+      toast({ title: "Bulk PDF Download", description: `Downloaded ${payloads.length} receipt PDFs` });
+    } catch (error: any) {
+      toast({ title: "Download Error", description: error.message || "Failed to download PDFs", variant: "destructive" });
+    } finally {
+      setPdfDownloading(false);
+    }
+  };
+
   const handleExport = async () => {
     if (!isOnline) {
       toast({
@@ -504,7 +590,20 @@ const CollectionsTab = ({
                   ) : (
                     <Download className="h-4 w-4 mr-2" />
                   )}
-                  {exporting ? "Exporting..." : "Export"}
+                  {exporting ? "Exporting..." : "Export CSV"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!startDate || !endDate || pdfDownloading}
+                  onClick={handleBulkDownloadPdfsByDateRange}
+                >
+                  {pdfDownloading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  {pdfDownloading ? "Downloading..." : "Download PDFs"}
                 </Button>
               </>
             )}
