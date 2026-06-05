@@ -83,7 +83,6 @@ export type Database = {
           helper_ids: string[]
           id: string
           items: Json
-          pdf_url: string | null
           qr_code: string
           signature_data: string | null
           signed_by: string | null
@@ -99,7 +98,6 @@ export type Database = {
           helper_ids: string[]
           id?: string
           items: Json
-          pdf_url?: string | null
           qr_code: string
           signature_data?: string | null
           signed_by?: string | null
@@ -115,7 +113,6 @@ export type Database = {
           helper_ids?: string[]
           id?: string
           items?: Json
-          pdf_url?: string | null
           qr_code?: string
           signature_data?: string | null
           signed_by?: string | null

@@ -419,6 +419,12 @@ const CreateReceiptForm = ({
       return;
     }
 
+    const hasValidWasteItems = items.length > 0 && items.every(item => item.waste_type && item.quantity > 0);
+    if (!hasValidWasteItems) {
+      toast({ title: "Missing waste data", description: "Add at least one waste item with a valid type and quantity", variant: "destructive" });
+      return;
+    }
+
     setLoading(true);
     try {
       const userId = profile.user_id;
@@ -514,7 +520,7 @@ const CreateReceiptForm = ({
     }
   };
 
-  const generatePDF = async (receiptQR: string, client: any, signature: string) => {
+  const createReceiptPdfDocument = async (receiptQR: string, client: any, signature: string | null) => {
     const now = new Date();
     const logoUrl = dbLogoUrl;
     const companyName = localStorage.getItem("receipt_company_name") || "WASTEWISE";
@@ -653,6 +659,11 @@ const CreateReceiptForm = ({
     doc.setFontSize(baseFontSize - 3);
     doc.text(footerText, 29, y, { align: "center", maxWidth: 50 });
 
+    return doc;
+  };
+
+  const generatePDF = async (receiptQR: string, client: any, signature: string | null) => {
+    const doc = await createReceiptPdfDocument(receiptQR, client, signature);
     doc.save(`receipt-${receiptQR}.pdf`);
     toast({ title: "PDF Generated", description: "Receipt downloaded" });
   };
