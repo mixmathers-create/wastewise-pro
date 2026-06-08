@@ -193,7 +193,7 @@ export const downloadReceiptPdf = async (payload: ReceiptPdfPayload) => {
   doc.save(filename);
 };
 
-export const downloadMultipleReceiptPdfs = async (payloads: ReceiptPdfPayload[]) => {
+export const downloadMultipleReceiptPdfs = async (payloads: ReceiptPdfPayload[], filename?: string) => {
   if (payloads.length === 0) return;
   if (payloads.length === 1) {
     await downloadReceiptPdf(payloads[0]);
@@ -270,5 +270,5 @@ export const downloadMultipleReceiptPdfs = async (payloads: ReceiptPdfPayload[])
     doc.setFontSize(fontSize - 3); doc.text(footerText, 29, y, { align: "center", maxWidth: 50 });
   }
 
-  doc.save(`receipts-bulk-${Date.now()}.pdf`);
+  doc.save(filename ?? `receipts-bulk-${Date.now()}.pdf`);
 };
