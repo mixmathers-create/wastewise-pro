@@ -318,16 +318,8 @@ const CollectionsTab = ({
         signatureData: receipt.signature_data,
       }));
 
-      await downloadMultipleReceiptPdfs(payloads);
-      toast({ title: "Bulk PDF Download", description: `Downloaded ${payloads.length} receipt PDFs` });
-    } catch (error: any) {
-      toast({ title: "Download Error", description: error.message || "Failed to download PDFs", variant: "destructive" });
-    } finally {
-      setPdfDownloading(false);
-    }
-  };
-
-  const handleExport = async () => {
+      await downloadMultipleReceiptPdfs(payloads, `receipts-${startDate}-to-${endDate}.pdf`);
+      toast({ title: "Bulk PDF Download", description: `Downloaded ${payloads.length} receipt PDFs` }); = async () => {
     if (!isOnline) {
       toast({
         title: "Export Error",
