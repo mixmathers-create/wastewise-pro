@@ -247,6 +247,10 @@ const CollectionsTab = ({
       return;
     }
 
+    // Convert local date strings to UTC ISO strings
+    const startUTC = new Date(`${startDate}T00:00:00`).toISOString();
+    const endUTC = new Date(`${endDate}T23:59:59`).toISOString();
+
     try {
       setPdfDownloading(true);
 
@@ -261,8 +265,8 @@ const CollectionsTab = ({
         const { data, error } = await supabase
           .from("collection_receipts")
           .select("id,qr_code,created_at,client_id,truck_id,driver_id,helper_ids,items,signed_by,signature_data")
-          .gte("created_at", `${startDate}T00:00:00`)
-          .lte("created_at", `${endDate}T23:59:59`)
+          .gte("created_at", startUTC)
+          .lte("created_at", endUTC)
           .order("created_at", { ascending: false })
           .range(from, from + batchSize - 1);
 
@@ -341,6 +345,10 @@ const CollectionsTab = ({
       return;
     }
 
+    // Convert local date strings to UTC ISO strings
+    const startUTC = new Date(`${startDate}T00:00:00`).toISOString();
+    const endUTC = new Date(`${endDate}T23:59:59`).toISOString();
+
     try {
       setExporting(true);
 
@@ -355,8 +363,8 @@ const CollectionsTab = ({
           waste_types,
           clients(name)
         `)
-        .gte("created_at", startDate)
-        .lte("created_at", `${endDate}T23:59:59`)
+        .gte("created_at", startUTC)
+        .lte("created_at", endUTC)
         .order("created_at", { ascending: false });
 
       // Batch fetch to bypass Supabase 1000-row limit
