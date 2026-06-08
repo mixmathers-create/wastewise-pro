@@ -194,7 +194,81 @@ export const downloadReceiptPdf = async (payload: ReceiptPdfPayload) => {
 };
 
 export const downloadMultipleReceiptPdfs = async (payloads: ReceiptPdfPayload[]) => {
-  for (const payload of payloads) {
-    await downloadReceiptPdf(payload);
+  if (payloads.length === 0) return;
+  if (payloads.length === 1) {
+    await downloadReceiptPdf(payloads[0]);
+    return;
   }
+
+  const doc = new jsPDF({ format: [58, 200], unit: "mm" });
+
+  for (let i = 0; i < payloads.length; i++) {
+    if (i > 0) doc.addPage([58, 200]);
+
+    const payload = payloads[i];
+    const now = new Date(payload.createdAt);
+    const { logoUrl, companyName, companyAddress, companyContact, headerText, footerText, fontSize } = getReceiptSettings(payload.settings);
+
+    const truckName = payload.truck?.code || payload.truck?.name || "";
+    const driverName = payload.driver?.name || payload.driver?.full_name || "";
+    const helperNames = (payload.helpers || []).map((h) => h?.name || h?.full_name || "Unknown");
+    const totalQuantity = (payload.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0);
+
+    const clientQrUrl = await QRCode.toDataURL(payload.client.qr_code || payload.client.id || payload.receiptQR, { width: 150 });
+    const receiptQrUrl = await QRCode.toDataURL(payload.receiptQR, { width: 150 });
+
+    let y = 10;
+
+    if (logoUrl) {
+      try { doc.addImage(logoUrl, "PNG", 14, y, 30, 15); y += 18; }
+      catch { doc.setFontSize(fontSize + 4); doc.text(companyName, 29, y, { align: "center" }); y += 8; }
+    } else {
+      doc.setFontSize(fontSize + 4);
+      doc.text(companyName, 29, y, { align: "center" });
+      y += 8;
+    }
+
+    if (companyAddress || companyContact) {
+      doc.setFontSize(fontSize - 2);
+      if (companyAddress) { doc.text(companyAddress, 29, y, { align: "center", maxWidth: 48 }); y += 4; }
+      if (companyContact) { doc.text(companyContact, 29, y, { align: "center" }); y += 4; }
+    }
+
+    doc.setFontSize(fontSize + 1); doc.text(headerText, 29, y, { align: "center" }); y += 5;
+    doc.setFontSize(fontSize - 1); doc.text(`Serial: ${payload.receiptQR}`, 29, y, { align: "center" }); y += 4;
+    doc.text(`${now.toLocaleDateString()} • ${now.toLocaleTimeString()}`, 29, y, { align: "center" }); y += 8;
+
+    doc.setFontSize(fontSize - 2); doc.text("CLIENT INFORMATION", 5, y); y += 4;
+    doc.setFontSize(fontSize - 1); doc.text(payload.client.name || "", 5, y); y += 3;
+    doc.setFontSize(fontSize - 2);
+    if (payload.client.id) { doc.text(`ID: ${String(payload.client.id).slice(0, 8)}`, 5, y); y += 3; }
+    if (payload.client.address) { doc.text(payload.client.address, 5, y, { maxWidth: 48 }); y += 3; }
+    if (payload.client.industry) { doc.text(`Industry: ${payload.client.industry}`, 5, y); y += 3; }
+    if (payload.client.contact_person) { doc.text(`Contact: ${payload.client.contact_person}`, 5, y); y += 3; }
+    if (payload.client.contact_number) { doc.text(`Tel: ${payload.client.contact_number}`, 5, y); y += 3; }
+    doc.addImage(clientQrUrl, "PNG", 40, y - 15, 15, 15); y += 5;
+
+    doc.setFontSize(fontSize - 2); doc.text("COLLECTION DETAILS", 5, y); y += 4;
+    doc.setFontSize(fontSize - 1);
+    if (truckName) { doc.text(`Truck: ${truckName}`, 5, y); y += 3; }
+    if (driverName) { doc.text(`Driver: ${driverName}`, 5, y); y += 3; }
+    if (helperNames.length > 0) { doc.text(`Helpers: ${helperNames.join(", ")}`, 5, y, { maxWidth: 48 }); y += 6; }
+
+    doc.setFontSize(fontSize - 2); doc.text("WASTE COLLECTED", 5, y); y += 4;
+    doc.setFontSize(fontSize - 1);
+    (payload.items || []).forEach((item) => { doc.text(`${item.waste_type}: ${item.quantity} ${item.unit}`, 5, y, { maxWidth: 48 }); y += 4; });
+    y += 2;
+    const displayUnit = payload.items.length > 0 ? payload.items[0].unit : "units";
+    doc.setFontSize(fontSize); doc.text(`TOTAL: ${totalQuantity} ${displayUnit}`, 5, y); y += 6;
+
+    doc.setFontSize(6); doc.text("CLIENT SIGNATURE", 5, y); y += 4;
+    if (payload.signatureData) { doc.addImage(payload.signatureData, "PNG", 5, y, 48, 12); y += 14; }
+    doc.setFontSize(7); doc.text(`Signed by: ${payload.signedBy || ""}`, 5, y); y += 8;
+
+    doc.addImage(receiptQrUrl, "PNG", 19, y, 20, 20); y += 22;
+    doc.setFontSize(fontSize - 2); doc.text("Scan to verify receipt", 29, y, { align: "center" }); y += 5;
+    doc.setFontSize(fontSize - 3); doc.text(footerText, 29, y, { align: "center", maxWidth: 50 });
+  }
+
+  doc.save(`receipts-bulk-${Date.now()}.pdf`);
 };

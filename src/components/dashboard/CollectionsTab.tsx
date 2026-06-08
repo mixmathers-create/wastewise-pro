@@ -261,7 +261,7 @@ const CollectionsTab = ({
         const { data, error } = await supabase
           .from("collection_receipts")
           .select("id,qr_code,created_at,client_id,truck_id,driver_id,helper_ids,items,signed_by,signature_data")
-          .gte("created_at", startDate)
+          .gte("created_at", `${startDate}T00:00:00`)
           .lte("created_at", `${endDate}T23:59:59`)
           .order("created_at", { ascending: false })
           .range(from, from + batchSize - 1);
