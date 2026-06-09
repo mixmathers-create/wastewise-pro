@@ -69,6 +69,8 @@ const CollectionsTab = ({
     const { data, error, count } = await supabase
       .from("collection_receipts")
       .select("id,created_at,qr_code,signed_by", { count: 'exact' })
+      .order("created_at", { ascending: false })
+      .range(from, to);
 
     if (error) setError(error.message);
     setReceipts(data || []);
