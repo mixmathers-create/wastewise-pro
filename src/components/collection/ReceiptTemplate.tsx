@@ -36,6 +36,7 @@ export interface ReceiptTemplateProps {
     waste_type: string;
     quantity: number;
     unit: string;
+    bin_size?: string;
   }>;
   
   signedBy: string;
@@ -198,7 +199,7 @@ const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
             >
               <div style={{ marginBottom: "0.5mm" }}>{item.waste_type}</div>
               <div style={{ fontWeight: "bold", paddingLeft: "3mm" }}>
-                Qty: {item.quantity} {item.unit}
+                Qty: {item.quantity} {item.unit}{item.bin_size ? ` (${item.bin_size})` : ""}
               </div>
             </div>
           ))}

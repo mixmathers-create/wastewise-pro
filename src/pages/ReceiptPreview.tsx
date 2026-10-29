@@ -300,7 +300,7 @@ const ReceiptPreview = () => {
         name: driver?.name || "N/A",
       },
       helpers: helpers.map((h) => ({ name: h.name })),
-      items: receipt.items as Array<{ waste_type: string; quantity: number; unit: string }>,
+      items: receipt.items as Array<{ waste_type: string; quantity: number; unit: string; bin_size?: string }>,
       signedBy: receipt.signed_by,
       signatureData: receipt.signature_data,
     };
@@ -399,7 +399,9 @@ const ReceiptPreview = () => {
                 {(receipt.items as any[]).map((item, idx) => (
                   <div key={idx} className="flex justify-between text-sm p-2 bg-gray-50 rounded">
                     <span>{item.waste_type}</span>
-                    <span className="font-medium">{item.quantity} {item.unit}</span>
+                    <span className="font-medium">
+                      {item.quantity} {item.unit}{item.bin_size ? ` (${item.bin_size})` : ""}
+                    </span>
                   </div>
                 ))}
               </div>

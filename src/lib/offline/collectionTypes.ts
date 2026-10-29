@@ -41,6 +41,7 @@ export interface WasteItem {
   waste_type: string;
   quantity: number;
   unit: string;
+  bin_size?: string;
 }
 
 /**

@@ -9,10 +9,11 @@ export interface TallyTemplateProps {
     waste_type: string;
     quantity: number;
     unit: string;
+    bin_size?: string;
   }>;
   
   // Totals by waste type
-  totals: { [key: string]: { quantity: number; unit: string } };
+  totals: { [key: string]: { quantity: number; unit: string; bin_size?: string } };
 }
 
 const TallyTemplate = forwardRef<HTMLDivElement, TallyTemplateProps>(
@@ -100,7 +101,7 @@ const TallyTemplate = forwardRef<HTMLDivElement, TallyTemplateProps>(
             >
               <div style={{ marginBottom: "0.5mm" }}>{idx + 1}. {entry.waste_type}</div>
               <div style={{ fontWeight: "bold", paddingLeft: "3mm" }}>
-                Qty: {entry.quantity} {entry.unit ? entry.unit : 'pcs'}
+                Qty: {entry.quantity} {entry.unit ? entry.unit : 'pcs'}{entry.bin_size ? ` (${entry.bin_size})` : ""}
               </div>
             </div>
           ))}
@@ -130,7 +131,7 @@ const TallyTemplate = forwardRef<HTMLDivElement, TallyTemplateProps>(
               >
                 <div style={{ marginBottom: "0.5mm" }}>{wasteType}</div>
                 <div style={{ paddingLeft: "3mm" }}>
-                  Total: {total.quantity} {total.unit ? total.unit : 'pcs'}
+                  Total: {total.quantity} {total.unit ? total.unit : 'pcs'}{total.bin_size ? ` (${total.bin_size})` : ""}
                 </div>
               </div>
             );
