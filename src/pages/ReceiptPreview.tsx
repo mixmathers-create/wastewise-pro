@@ -9,6 +9,7 @@ import { ArrowLeft, Printer, WifiOff } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
 import { Label } from "@/components/ui/label";
 import ReceiptTemplate, { ReceiptTemplateProps } from "@/components/collection/ReceiptTemplate";
+import { formatWasteQuantity } from "@/lib/wasteFormatting";
 import QRCode from "qrcode";
 import { useReceiptSettings } from "@/hooks/useReceiptSettings";
 import { 
@@ -400,7 +401,7 @@ const ReceiptPreview = () => {
                   <div key={idx} className="flex justify-between text-sm p-2 bg-gray-50 rounded">
                     <span>{item.waste_type}</span>
                     <span className="font-medium">
-                      {item.quantity} {item.unit}{item.bin_size ? ` (${item.bin_size})` : ""}
+                      {formatWasteQuantity(item.quantity, item.unit)}{item.bin_size ? ` (${item.bin_size})` : ""}
                     </span>
                   </div>
                 ))}

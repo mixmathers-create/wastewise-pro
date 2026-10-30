@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useState } from "react";
 import QRCode from "qrcode";
+import { formatWasteQuantity } from "@/lib/wasteFormatting";
 
 export interface TallyTemplateProps {
   receiptQR: string;
@@ -101,7 +102,7 @@ const TallyTemplate = forwardRef<HTMLDivElement, TallyTemplateProps>(
             >
               <div style={{ marginBottom: "0.5mm" }}>{idx + 1}. {entry.waste_type}</div>
               <div style={{ fontWeight: "bold", paddingLeft: "3mm" }}>
-                Qty: {entry.quantity} {entry.unit ? entry.unit : 'pcs'}{entry.bin_size ? ` (${entry.bin_size})` : ""}
+                Qty: {formatWasteQuantity(entry.quantity, entry.unit)}{entry.bin_size ? ` (${entry.bin_size})` : ""}
               </div>
             </div>
           ))}
@@ -131,7 +132,7 @@ const TallyTemplate = forwardRef<HTMLDivElement, TallyTemplateProps>(
               >
                 <div style={{ marginBottom: "0.5mm" }}>{wasteType}</div>
                 <div style={{ paddingLeft: "3mm" }}>
-                  Total: {total.quantity} {total.unit ? total.unit : 'pcs'}{total.bin_size ? ` (${total.bin_size})` : ""}
+                  Total: {formatWasteQuantity(total.quantity, total.unit)}{total.bin_size ? ` (${total.bin_size})` : ""}
                 </div>
               </div>
             );

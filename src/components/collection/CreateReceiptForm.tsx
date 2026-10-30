@@ -27,6 +27,7 @@ import {
   type PendingCollection,
 } from "@/lib/offlineDb";
 import { useReceiptSettings } from "@/hooks/useReceiptSettings";
+import { formatWasteQuantity } from "@/lib/wasteFormatting";
 
 const wasteTypes = [
   "Dry Waste",
@@ -383,7 +384,7 @@ const CreateReceiptForm = ({
     }
 
     setNewItem({ quantity: 0, unit: newItem.unit, bin_size: newItem.unit === "bin" ? newItem.bin_size : "" });
-    toast({ title: "Item Added", description: `${newItem.quantity} ${newItem.unit}${binSize ? ` (${binSize})` : ""} added` });
+    toast({ title: "Item Added", description: `${formatWasteQuantity(newItem.quantity, newItem.unit)}${binSize ? ` (${binSize})` : ""} added` });
   };
 
   const handleEditEntry = (idx: number) => {
@@ -533,10 +534,10 @@ const CreateReceiptForm = ({
           description: "Collection saved. Proceeding to receipt preview...",
         });
         
-        // Navigate to receipt preview for signature and printing
-        if (Capacitor.isNativePlatform()) {
-          navigate(`/receipt-preview?pendingId=${pendingId}`);
-        }
+        // Open the locally saved receipt for signature and printing on both
+        // desktop and native clients. This also lets the dev harness exercise
+        // the complete receipt flow without writing test data to Supabase.
+        navigate(`/receipt-preview?pendingId=${pendingId}`);
       }
 
       resetForm();
@@ -658,7 +659,7 @@ const CreateReceiptForm = ({
     doc.setFontSize(baseFontSize - 1);
     items.forEach((item) => {
       const binLabel = item.bin_size ? ` (${item.bin_size})` : "";
-      doc.text(`${item.waste_type}: ${item.quantity} ${item.unit}${binLabel}`, 5, y, { maxWidth: 48 });
+      doc.text(`${item.waste_type}: ${formatWasteQuantity(item.quantity, item.unit)}${binLabel}`, 5, y, { maxWidth: 48 });
       y += 4;
     });
     y += 2;
@@ -947,7 +948,7 @@ const CreateReceiptForm = ({
                         <div className="flex-1">
                           <p className="text-sm font-medium">{entry.waste_type || "Not specified"}</p>
                           <p className="text-xs text-muted-foreground">
-                            {entry.quantity} {entry.unit}{entry.bin_size ? ` (${entry.bin_size})` : ""}
+                            {formatWasteQuantity(entry.quantity, entry.unit)}{entry.bin_size ? ` (${entry.bin_size})` : ""}
                           </p>
                         </div>
                         <div className="flex gap-1">

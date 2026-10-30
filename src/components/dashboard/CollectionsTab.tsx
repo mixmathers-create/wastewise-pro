@@ -17,6 +17,7 @@ import { printerService } from "@/lib/printerService";
 import TallyTemplate, { TallyTemplateProps } from "../collection/TallyTemplate";
 import { downloadReceiptPdf, downloadMultipleReceiptPdfs } from "@/lib/pdfUtils";
 import type { CachedClient, CachedTruck, CachedDriver, CachedHelper } from "@/lib/offlineDb";
+import { formatWasteQuantity } from "@/lib/wasteFormatting";
 
 interface CollectionsTabProps {
   profile: any;
@@ -535,7 +536,7 @@ const CollectionsTab = ({
                 <div class="tally-entry">
                   <span class="entry-number">#${idx + 1}</span>
                   <span class="entry-type">${entry.waste_type}</span>
-                  <span class="entry-qty">${entry.quantity} ${entry.unit || 'pcs'}${entry.bin_size ? ` (${entry.bin_size})` : ''}</span>
+                  <span class="entry-qty">${formatWasteQuantity(entry.quantity, entry.unit)}${entry.bin_size ? ` (${entry.bin_size})` : ''}</span>
                 </div>
               `).join('')}
               
@@ -546,7 +547,7 @@ const CollectionsTab = ({
                   return `
                     <div class="total-item">
                       <span class="total-label">${wasteType}</span>
-                      <span class="total-value">${total.quantity} ${total.unit || 'pcs'}${total.bin_size ? ` (${total.bin_size})` : ''}</span>
+                      <span class="total-value">${formatWasteQuantity(total.quantity, total.unit)}${total.bin_size ? ` (${total.bin_size})` : ''}</span>
                     </div>
                   `;
                 }).join('')}

@@ -1,7 +1,14 @@
 import CreateReceiptForm from "@/components/collection/CreateReceiptForm";
 
 const DevReceiptHarness = () => (
-  <div className="mx-auto max-w-md p-4">
+  <div className="mx-auto max-w-md space-y-4 p-4">
+    <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+      <p className="font-semibold">Receipt test mode</p>
+      <p>
+        This page uses mock client and personnel data. Receipts are stored only
+        in this browser and are not written to Supabase.
+      </p>
+    </div>
     <CreateReceiptForm
       profile={{ user_id: "dev-user" }}
       onSuccess={() => {}}
