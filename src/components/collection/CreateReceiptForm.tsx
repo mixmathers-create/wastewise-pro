@@ -27,9 +27,25 @@ import {
   type PendingCollection,
 } from "@/lib/offlineDb";
 import { useReceiptSettings } from "@/hooks/useReceiptSettings";
+import { formatWasteQuantity } from "@/lib/wasteFormatting";
 
-const wasteTypes = ["Municipal Solid Waste", "Food Waste", "Construction Waste", "Special Hauling"];
-const units = ["kg", "cbm", "truck load"];
+const wasteTypes = [
+  "Dry Waste",
+  "Mixed Waste (Wet and Dry)",
+  "Recyclables",
+  "Food Waste",
+  "Construction Waste",
+  "Special Hauling",
+];
+const units = ["kg", "cbm", "truck load", "bin"];
+const binSizes = ["1100L", "660L", "360L", "120L"];
+
+interface WasteItemEntry {
+  waste_type: string;
+  quantity: number;
+  unit: string;
+  bin_size?: string;
+}
 
 interface CreateReceiptFormProps {
   profile: any;
@@ -63,14 +79,14 @@ const CreateReceiptForm = ({
   const [selectedTruck, setSelectedTruck] = useState("");
   const [selectedDriver, setSelectedDriver] = useState("");
   const [selectedHelpers, setSelectedHelpers] = useState<string[]>([]);
-  const [items, setItems] = useState<{ waste_type: string; quantity: number; unit: string }[]>([]);
-  const [tallyEntries, setTallyEntries] = useState<{ waste_type: string; quantity: number; unit: string }[]>([]);
+  const [items, setItems] = useState<WasteItemEntry[]>([]);
+  const [tallyEntries, setTallyEntries] = useState<WasteItemEntry[]>([]);
   const [selectedWasteType, setSelectedWasteType] = useState<string>("");
-  const [newItem, setNewItem] = useState({ quantity: 0, unit: "kg" });
+  const [newItem, setNewItem] = useState<{ quantity: number; unit: string; bin_size: string }>({ quantity: 0, unit: "kg", bin_size: "" });
   const [signedBy, setSignedBy] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editingEntry, setEditingEntry] = useState<{ waste_type: string; quantity: number; unit: string } | null>(null);
+  const [editingEntry, setEditingEntry] = useState<WasteItemEntry | null>(null);
 
   // Load data based on online/offline status
   useEffect(() => {
@@ -329,19 +345,26 @@ const CreateReceiptForm = ({
       toast({ title: "Invalid Quantity", description: "Please enter a valid quantity", variant: "destructive" });
       return;
     }
-    
+
+    if (newItem.unit === "bin" && !newItem.bin_size) {
+      toast({ title: "No Bin Size", description: "Please select a bin size", variant: "destructive" });
+      return;
+    }
+
+    const binSize = newItem.unit === "bin" ? newItem.bin_size : undefined;
 
     // Add to tally entries (individual records)
-    const newTallyEntry = {
+    const newTallyEntry: WasteItemEntry = {
       waste_type: selectedWasteType,
       quantity: newItem.quantity,
       unit: newItem.unit,
+      ...(binSize ? { bin_size: binSize } : {}),
     };
     setTallyEntries([...tallyEntries, newTallyEntry]);
     
-    // Check if item with same waste_type and unit already exists for aggregated display
+    // Check if item with same waste_type, unit and bin size already exists for aggregated display
     const existingItemIndex = items.findIndex(
-      item => item.waste_type === selectedWasteType && item.unit === newItem.unit
+      item => item.waste_type === selectedWasteType && item.unit === newItem.unit && item.bin_size === binSize
     );
 
     if (existingItemIndex !== -1) {
@@ -351,16 +374,17 @@ const CreateReceiptForm = ({
       setItems(updatedItems);
     } else {
       // Add new item
-      const item = {
+      const item: WasteItemEntry = {
         waste_type: selectedWasteType,
         quantity: newItem.quantity,
         unit: newItem.unit,
+        ...(binSize ? { bin_size: binSize } : {}),
       };
       setItems([...items, item]);
     }
 
-    setNewItem({ quantity: 0, unit: newItem.unit });
-    toast({ title: "Item Added", description: `${newItem.quantity} ${newItem.unit} added` });
+    setNewItem({ quantity: 0, unit: newItem.unit, bin_size: newItem.unit === "bin" ? newItem.bin_size : "" });
+    toast({ title: "Item Added", description: `${formatWasteQuantity(newItem.quantity, newItem.unit)}${binSize ? ` (${binSize})` : ""} added` });
   };
 
   const handleEditEntry = (idx: number) => {
@@ -373,6 +397,11 @@ const CreateReceiptForm = ({
 
     if (!editingEntry.quantity || editingEntry.quantity <= 0) {
       toast({ title: "Invalid Quantity", description: "Please enter a valid quantity", variant: "destructive" });
+      return;
+    }
+
+    if (editingEntry.unit === "bin" && !editingEntry.bin_size) {
+      toast({ title: "No Bin Size", description: "Please select a bin size", variant: "destructive" });
       return;
     }
 
@@ -399,10 +428,10 @@ const CreateReceiptForm = ({
   };
 
   const recalculateItems = (entries: typeof tallyEntries) => {
-    const aggregated: { [key: string]: { waste_type: string; quantity: number; unit: string } } = {};
+    const aggregated: { [key: string]: WasteItemEntry } = {};
 
     entries.forEach(entry => {
-      const key = `${entry.waste_type}-${entry.unit}`;
+      const key = `${entry.waste_type}-${entry.unit}-${entry.bin_size || ""}`;
       if (aggregated[key]) {
         aggregated[key].quantity += entry.quantity;
       } else {
@@ -505,10 +534,10 @@ const CreateReceiptForm = ({
           description: "Collection saved. Proceeding to receipt preview...",
         });
         
-        // Navigate to receipt preview for signature and printing
-        if (Capacitor.isNativePlatform()) {
-          navigate(`/receipt-preview?pendingId=${pendingId}`);
-        }
+        // Open the locally saved receipt for signature and printing on both
+        // desktop and native clients. This also lets the dev harness exercise
+        // the complete receipt flow without writing test data to Supabase.
+        navigate(`/receipt-preview?pendingId=${pendingId}`);
       }
 
       resetForm();
@@ -629,7 +658,8 @@ const CreateReceiptForm = ({
     y += 4;
     doc.setFontSize(baseFontSize - 1);
     items.forEach((item) => {
-      doc.text(`${item.waste_type}: ${item.quantity} ${item.unit}`, 5, y, { maxWidth: 48 });
+      const binLabel = item.bin_size ? ` (${item.bin_size})` : "";
+      doc.text(`${item.waste_type}: ${formatWasteQuantity(item.quantity, item.unit)}${binLabel}`, 5, y, { maxWidth: 48 });
       y += 4;
     });
     y += 2;
@@ -677,7 +707,7 @@ const CreateReceiptForm = ({
     setItems([]);
     setTallyEntries([]);
     setSelectedWasteType("");
-    setNewItem({ quantity: 0, unit: "kg" });
+    setNewItem({ quantity: 0, unit: "kg", bin_size: "" });
     setSignedBy("");
   };
 
@@ -794,7 +824,7 @@ const CreateReceiptForm = ({
                     size="sm"
                     onClick={() => {
                       setSelectedWasteType("");
-                      setNewItem({ quantity: 0, unit: "kg" });
+                      setNewItem({ quantity: 0, unit: "kg", bin_size: "" });
                     }}
                     disabled={tallyEntries.length > 0}
                   >
@@ -811,7 +841,7 @@ const CreateReceiptForm = ({
                         value={newItem.quantity.toString()}
                         onChange={(v) => setNewItem({ ...newItem, quantity: parseFloat(v) || 0 })}
                         placeholder="0"
-                        allowDecimal={true}
+                        allowDecimal={newItem.unit !== "bin"}
                         maxLength={8}
                         onSubmit={handleAddItem}
                       />
@@ -820,7 +850,7 @@ const CreateReceiptForm = ({
                       <Label className="text-xs">Unit</Label>
                       <Select 
                         value={newItem.unit} 
-                        onValueChange={(v) => setNewItem({ ...newItem, unit: v })}
+                        onValueChange={(v) => setNewItem({ ...newItem, unit: v, bin_size: v === "bin" ? newItem.bin_size : "" })}
                         disabled={tallyEntries.length > 0}
                       >
                         <SelectTrigger><SelectValue /></SelectTrigger>
@@ -828,13 +858,26 @@ const CreateReceiptForm = ({
                       </Select>
                     </div>
                   </div>
+                  {newItem.unit === "bin" && (
+                    <div>
+                      <Label className="text-xs">Bin Size</Label>
+                      <Select
+                        value={newItem.bin_size}
+                        onValueChange={(v) => setNewItem({ ...newItem, bin_size: v })}
+                        disabled={tallyEntries.length > 0}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Select bin size..." /></SelectTrigger>
+                        <SelectContent>{binSizes.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <Button 
                     type="button" 
                     variant="default" 
                     size="sm" 
                     onClick={handleAddItem} 
                     className="w-full"
-                    disabled={!newItem.quantity || newItem.quantity <= 0}
+                    disabled={!newItem.quantity || newItem.quantity <= 0 || (newItem.unit === "bin" && !newItem.bin_size)}
                   >
                     + Add Item
                   </Button>
@@ -878,6 +921,18 @@ const CreateReceiptForm = ({
                             </Select>
                           </div>
                         </div>
+                        {editingEntry?.unit === "bin" && (
+                          <div>
+                            <Label className="text-xs">Bin Size</Label>
+                            <Select
+                              value={editingEntry?.bin_size || ""}
+                              onValueChange={(v) => setEditingEntry(prev => prev ? { ...prev, bin_size: v } : null)}
+                            >
+                              <SelectTrigger><SelectValue placeholder="Select bin size..." /></SelectTrigger>
+                              <SelectContent>{binSizes.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </div>
+                        )}
                         <div className="flex gap-2">
                           <Button type="button" variant="default" size="sm" onClick={handleSaveEdit} className="flex-1">
                             <Check className="h-4 w-4 mr-1" />
@@ -892,7 +947,9 @@ const CreateReceiptForm = ({
                       <div className="flex justify-between items-center">
                         <div className="flex-1">
                           <p className="text-sm font-medium">{entry.waste_type || "Not specified"}</p>
-                          <p className="text-xs text-muted-foreground">{entry.quantity} {entry.unit}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatWasteQuantity(entry.quantity, entry.unit)}{entry.bin_size ? ` (${entry.bin_size})` : ""}
+                          </p>
                         </div>
                         <div className="flex gap-1">
                           <Button type="button" variant="ghost" size="sm" onClick={() => handleEditEntry(idx)}>

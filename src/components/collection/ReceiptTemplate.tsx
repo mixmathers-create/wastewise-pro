@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useState } from "react";
 import QRCode from "qrcode";
+import { formatWasteQuantity } from "@/lib/wasteFormatting";
 
 export interface ReceiptTemplateProps {
   
@@ -36,6 +37,7 @@ export interface ReceiptTemplateProps {
     waste_type: string;
     quantity: number;
     unit: string;
+    bin_size?: string;
   }>;
   
   signedBy: string;
@@ -198,7 +200,7 @@ const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
             >
               <div style={{ marginBottom: "0.5mm" }}>{item.waste_type}</div>
               <div style={{ fontWeight: "bold", paddingLeft: "3mm" }}>
-                Qty: {item.quantity} {item.unit}
+                Qty: {formatWasteQuantity(item.quantity, item.unit)}{item.bin_size ? ` (${item.bin_size})` : ""}
               </div>
             </div>
           ))}
@@ -211,7 +213,8 @@ const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
               fontWeight: "bold",
             }}
           >
-            TOTAL: {totalQuantity} {items[0]?.unit || ""}
+            TOTAL: {formatWasteQuantity(totalQuantity, items[0]?.unit)}
+            {items[0]?.bin_size ? ` (${items[0].bin_size})` : ""}
           </div>
         </div>
 

@@ -18,7 +18,7 @@ export interface ReceiptPdfPayload {
   truck?: any;
   driver?: any;
   helpers?: any[];
-  items: Array<{ waste_type: string; quantity: number; unit: string }>;
+  items: Array<{ waste_type: string; quantity: number; unit: string; bin_size?: string }>;
   signedBy?: string;
   signatureData?: string | null;
   settings?: ReceiptPdfSettings;
@@ -96,7 +96,8 @@ const renderReceiptToDoc = (doc: jsPDF, payload: ReceiptPdfPayload, clientQrUrl:
   doc.setFontSize(fontSize - 2); safeText(doc, "WASTE COLLECTED", 5, y); y += 4;
   doc.setFontSize(fontSize - 1);
   (payload.items || []).forEach((item) => {
-    safeText(doc, `${item.waste_type || "-"}: ${item.quantity} ${item.unit || ""}`, 5, y, { maxWidth: 48 });
+    const binLabel = item.bin_size ? ` (${item.bin_size})` : "";
+    safeText(doc, `${item.waste_type || "-"}: ${item.quantity} ${item.unit || ""}${binLabel}`, 5, y, { maxWidth: 48 });
     y += 4;
   });
   y += 2;

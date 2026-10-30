@@ -17,6 +17,7 @@ import { printerService } from "@/lib/printerService";
 import TallyTemplate, { TallyTemplateProps } from "../collection/TallyTemplate";
 import { downloadReceiptPdf, downloadMultipleReceiptPdfs } from "@/lib/pdfUtils";
 import type { CachedClient, CachedTruck, CachedDriver, CachedHelper } from "@/lib/offlineDb";
+import { formatWasteQuantity } from "@/lib/wasteFormatting";
 
 interface CollectionsTabProps {
   profile: any;
@@ -460,12 +461,12 @@ const CollectionsTab = ({
 
       const tallyEntries = (data.tally_entries || []) as any[];
       
-      // Calculate totals by waste type and unit
-      const totals: { [key: string]: { quantity: number; unit: string } } = {};
+      // Calculate totals by waste type, unit and bin size
+      const totals: { [key: string]: { quantity: number; unit: string; bin_size?: string } } = {};
       tallyEntries.forEach(entry => {
-        const key = `${entry.waste_type}-${entry.unit}`;
+        const key = `${entry.waste_type}-${entry.unit}-${entry.bin_size || ""}`;
         if (!totals[key]) {
-          totals[key] = { quantity: 0, unit: entry.unit };
+          totals[key] = { quantity: 0, unit: entry.unit, bin_size: entry.bin_size };
         }
         totals[key].quantity += entry.quantity;
       });
@@ -535,7 +536,7 @@ const CollectionsTab = ({
                 <div class="tally-entry">
                   <span class="entry-number">#${idx + 1}</span>
                   <span class="entry-type">${entry.waste_type}</span>
-                  <span class="entry-qty">${entry.quantity} ${entry.unit || 'pcs'}</span>
+                  <span class="entry-qty">${formatWasteQuantity(entry.quantity, entry.unit)}${entry.bin_size ? ` (${entry.bin_size})` : ''}</span>
                 </div>
               `).join('')}
               
@@ -546,7 +547,7 @@ const CollectionsTab = ({
                   return `
                     <div class="total-item">
                       <span class="total-label">${wasteType}</span>
-                      <span class="total-value">${total.quantity} ${total.unit || 'pcs'}</span>
+                      <span class="total-value">${formatWasteQuantity(total.quantity, total.unit)}${total.bin_size ? ` (${total.bin_size})` : ''}</span>
                     </div>
                   `;
                 }).join('')}

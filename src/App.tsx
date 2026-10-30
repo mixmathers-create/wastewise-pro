@@ -16,6 +16,7 @@ const MobileDashboard = lazy(() => import("./pages/MobileDashboard"));
 const ReceiptPreview = lazy(() => import("./pages/ReceiptPreview"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const PastSchedules = lazy(() => import("./pages/PastSchedules"));
+const DevReceiptHarness = lazy(() => import("./pages/DevReceiptHarness"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -66,6 +67,7 @@ const App = () => {
               <Route path="/mobile" element={<MobileDashboard />} />
               <Route path="/receipt-preview" element={<ReceiptPreview />} />
               <Route path="/past-schedules" element={<PastSchedules />} />
+              <Route path="/dev-receipt" element={<DevReceiptHarness />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
