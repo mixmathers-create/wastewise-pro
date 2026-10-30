@@ -214,6 +214,7 @@ const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
             }}
           >
             TOTAL: {formatWasteQuantity(totalQuantity, items[0]?.unit)}
+            {items[0]?.bin_size ? ` (${items[0].bin_size})` : ""}
           </div>
         </div>
 
